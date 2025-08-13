@@ -347,14 +347,103 @@ class FurlServer {
     try {
       print('📁 Proxying file download: $fileUrl');
 
-      // Use curl to download the file as binary data
+      // According to filebin API, GET /{bin}/{filename} should return 301 redirect to S3
+      // But we're getting HTML. Let's try the proper API approach first.
+
+      final httpClient = HttpClient();
+
+      try {
+        final uri = Uri.parse(fileUrl);
+        final apiRequest = await httpClient.getUrl(uri);
+
+        // Set proper API headers to get 301 redirect instead of HTML page
+        apiRequest.headers.set('Accept', 'application/json, application/octet-stream, */*');
+        apiRequest.headers.set('User-Agent', 'FurlProxy/1.0 (API Client)');
+
+        // Explicitly disable following redirects so we can handle the 301 ourselves
+        apiRequest.followRedirects = false;
+
+        final response = await apiRequest.close();
+
+        print('🔍 Filebin API response: ${response.statusCode}');
+
+        if (response.statusCode == 301 || response.statusCode == 302) {
+          // This is the expected behavior! Get the S3 signed URL
+          final s3Url = response.headers.value('location');
+          if (s3Url != null) {
+            print('✅ Got S3 redirect: $s3Url');
+
+            // Now download directly from S3 using efficient streaming
+            final s3Request = await httpClient.getUrl(Uri.parse(s3Url));
+            final s3Response = await s3Request.close();
+
+            if (s3Response.statusCode == 200) {
+              print('📦 Streaming binary data from S3...');
+              request.response.statusCode = 200;
+              request.response.headers.contentType = ContentType.binary;
+
+              if (s3Response.contentLength >= 0) {
+                request.response.headers.contentLength = s3Response.contentLength;
+                print('📊 Content-Length: ${s3Response.contentLength} bytes');
+              }
+
+              // Efficient streaming without loading into memory
+              await s3Response.pipe(request.response);
+              print('✅ Successfully streamed file from S3');
+
+              httpClient.close();
+              return;
+            } else {
+              print('❌ S3 download failed: ${s3Response.statusCode}');
+            }
+          } else {
+            print('⚠️ 301 response but no Location header');
+          }
+        } else if (response.statusCode == 200) {
+          // Check if we got binary data directly (fallback case)
+          final contentType = response.headers.contentType;
+          if (contentType?.mimeType != 'text/html') {
+            print('📦 Got binary data directly (no redirect)');
+            request.response.statusCode = 200;
+            request.response.headers.contentType = ContentType.binary;
+
+            if (response.contentLength >= 0) {
+              request.response.headers.contentLength = response.contentLength;
+            }
+
+            await response.pipe(request.response);
+            print('✅ Successfully streamed direct binary response');
+
+            httpClient.close();
+            return;
+          } else {
+            print('⚠️ Got HTML instead of expected 301 redirect or binary data');
+            // Fall through to curl fallback
+          }
+        } else if (response.statusCode == 404) {
+          throw Exception('File not found (404)');
+        } else {
+          print('⚠️ Unexpected response code: ${response.statusCode}');
+          // Fall through to curl fallback
+        }
+      } finally {
+        httpClient.close();
+      }
+
+      // Fallback: Use curl if the API approach didn't work
+      print('🔄 Falling back to curl download...');
       final result = await Process.run('curl', ['-s', '-L', fileUrl], stdoutEncoding: null);
 
       if (result.exitCode == 0) {
+        final bytes = result.stdout as List<int>;
+        print('📦 Downloaded ${bytes.length} bytes via curl');
+
         request.response.statusCode = 200;
         request.response.headers.contentType = ContentType.binary;
-        // result.stdout is now List<int> when stdoutEncoding is null
-        request.response.add(result.stdout as List<int>);
+        request.response.headers.contentLength = bytes.length;
+        request.response.add(bytes);
+
+        print('✅ Successfully proxied file via curl fallback');
       } else {
         throw Exception('Curl failed with exit code ${result.exitCode}: ${result.stderr}');
       }
