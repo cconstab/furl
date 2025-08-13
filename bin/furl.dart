@@ -199,7 +199,7 @@ Future<void> main(List<String> arguments) async {
     print('Arguments:');
     print('  atSign                Your atSign (e.g., @alice)');
     print('  file_path             Path to the file to encrypt and share');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
+    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
     print('');
     print('Options:');
     print('  -v, --verbose         Enable verbose logging');
@@ -212,7 +212,7 @@ Future<void> main(List<String> arguments) async {
     print('  10m                   10 minutes');
     print('  2h                    2 hours');
     print('  1d                    1 day');
-    print('  7d                    7 days (maximum)');
+    print('  6d                    6 days (maximum)');
     print('  3600                  3600 seconds (1 hour)');
     print('');
     print('Examples:');
@@ -236,7 +236,7 @@ Future<void> main(List<String> arguments) async {
     print('Usage: furl <atSign> <file_path> <ttl> [options]');
     print('');
     print('Arguments:');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
+    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
     print('');
     print('Examples:');
     print('  furl @alice document.pdf 1h');
