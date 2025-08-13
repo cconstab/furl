@@ -10,18 +10,155 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 
+/// Parse TTL string format like "10s", "5m", "2h", "1d" into seconds
+int parseTtl(String ttlString) {
+  const int maxTtl = 7 * 86400; // 7 days in seconds
+
+  if (ttlString.isEmpty) return 3600; // Default 1 hour
+
+  // Check if it's already just a number (seconds)
+  final numOnly = int.tryParse(ttlString);
+  if (numOnly != null) {
+    if (numOnly > maxTtl) {
+      print('TTL too long: ${formatDuration(numOnly)}');
+      print('Maximum allowed TTL is 7 days (${formatDuration(maxTtl)})');
+      exit(1);
+    }
+    return numOnly;
+  }
+
+  // Extract number and unit
+  final regex = RegExp(r'^(\d+)([smhd])$');
+  final match = regex.firstMatch(ttlString.toLowerCase());
+
+  if (match == null) {
+    print('Invalid TTL format: $ttlString');
+    print('Use format like: 30s (seconds), 10m (minutes), 2h (hours), 1d (days)');
+    print('Or just a number for seconds: 3600');
+    exit(1);
+  }
+
+  final number = int.parse(match.group(1)!);
+  final unit = match.group(2)!;
+
+  int ttlSeconds;
+  switch (unit) {
+    case 's':
+      ttlSeconds = number;
+      break;
+    case 'm':
+      ttlSeconds = number * 60;
+      break;
+    case 'h':
+      ttlSeconds = number * 3600;
+      break;
+    case 'd':
+      ttlSeconds = number * 86400;
+      break;
+    default:
+      ttlSeconds = 3600;
+  }
+
+  if (ttlSeconds > maxTtl) {
+    print('TTL too long: ${formatDuration(ttlSeconds)}');
+    print('Maximum allowed TTL is 7 days (${formatDuration(maxTtl)})');
+    exit(1);
+  }
+
+  return ttlSeconds;
+}
+
+/// Format seconds into a human-readable duration
+String formatDuration(int seconds) {
+  if (seconds < 60) {
+    return '${seconds}s';
+  } else if (seconds < 3600) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return remainingSeconds == 0 ? '${minutes}m' : '${minutes}m ${remainingSeconds}s';
+  } else if (seconds < 86400) {
+    final hours = seconds ~/ 3600;
+    final remainingMinutes = (seconds % 3600) ~/ 60;
+    return remainingMinutes == 0 ? '${hours}h' : '${hours}h ${remainingMinutes}m';
+  } else {
+    final days = seconds ~/ 86400;
+    final remainingHours = (seconds % 86400) ~/ 3600;
+    return remainingHours == 0 ? '${days}d' : '${days}d ${remainingHours}h';
+  }
+}
+
 Future<void> main(List<String> arguments) async {
+  // Check for help flag first
+  if (arguments.contains('-h') || arguments.contains('--help')) {
+    print('Furl - Secure File Sharing with atPlatform');
+    print('');
+    print('Usage: dart run bin/furl.dart <atSign> <file_path> <ttl> [options]');
+    print('');
+    print('Arguments:');
+    print('  atSign                Your atSign (e.g., @alice)');
+    print('  file_path             Path to the file to encrypt and share');
+    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
+    print('');
+    print('Options:');
+    print('  -v, --verbose         Enable verbose logging');
+    print('  -s, --server <url>    Furl server URL (default: https://furl.host)');
+    print('  -h, --help            Show this help message');
+    print('');
+    print('TTL Examples:');
+    print('  30s                   30 seconds');
+    print('  10m                   10 minutes');
+    print('  2h                    2 hours');
+    print('  1d                    1 day');
+    print('  7d                    7 days (maximum)');
+    print('  3600                  3600 seconds (1 hour)');
+    print('');
+    print('Examples:');
+    print('  dart run bin/furl.dart @alice document.pdf 1h');
+    print('  dart run bin/furl.dart @alice document.pdf 30m -v');
+    print('  dart run bin/furl.dart @alice document.pdf 2d --server http://localhost:8080');
+    print('  dart run bin/furl.dart @alice document.pdf 12h --server https://my-furl-server.com -v');
+    print('');
+    print('The program will:');
+    print('  1. Encrypt your file with AES-256');
+    print('  2. Upload the encrypted file to filebin.net');
+    print('  3. Store decryption metadata securely on the atPlatform');
+    print('  4. Generate a secure URL for the recipient');
+    print('  5. Generate a PIN for additional security');
+    print('  6. Display the expiration time based on TTL');
+    exit(0);
+  }
+
   if (arguments.length < 3) {
-    print('Usage: dart run bin/furl.dart <atSign> <file_path> <ttl_seconds> [-v]');
-    print('Example: dart run bin/furl.dart @alice document.pdf 3600');
-    print('         dart run bin/furl.dart @alice document.pdf 3600 -v  (verbose)');
+    print('Usage: dart run bin/furl.dart <atSign> <file_path> <ttl> [options]');
+    print('');
+    print('Arguments:');
+    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
+    print('');
+    print('Examples:');
+    print('  dart run bin/furl.dart @alice document.pdf 1h');
+    print('  dart run bin/furl.dart @alice document.pdf 30m -v');
+    print('  dart run bin/furl.dart @alice document.pdf 2d --server http://localhost:8080');
+    print('');
+    print('Use --help for detailed information.');
     exit(1);
   }
 
   final atSign = arguments[0];
   final filePath = arguments[1];
-  final ttl = int.tryParse(arguments[2]) ?? 3600;
-  final verbose = arguments.contains('-v');
+  final ttl = parseTtl(arguments[2]);
+
+  // Parse optional arguments
+  bool verbose = false;
+  String serverUrl = 'https://furl.host';
+
+  for (int i = 3; i < arguments.length; i++) {
+    if (arguments[i] == '-v' || arguments[i] == '--verbose') {
+      verbose = true;
+    } else if ((arguments[i] == '-s' || arguments[i] == '--server') && i + 1 < arguments.length) {
+      serverUrl = arguments[i + 1];
+      i++; // Skip the next argument as it's the server URL
+    }
+  }
 
   // Set logging level based on verbose flag
   if (!verbose) {
@@ -129,11 +266,10 @@ Future<void> main(List<String> arguments) async {
     while (retryCount < maxRetries && !dataVerified) {
       try {
         final atKey = AtKey()
-        ..namespace = 'furl'
-        ..sharedBy = atSign
-        ..metadata = (Metadata()
-          ..isPublic = true)
-        ..key = atKeyName;
+          ..namespace = 'furl'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true)
+          ..key = atKeyName;
 
         // Force a fresh lookup from the atServer (not cached)
         final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
@@ -149,7 +285,7 @@ Future<void> main(List<String> arguments) async {
         retryCount++;
         print('⏳ Attempt $retryCount/$maxRetries - waiting for remote sync... ($e)');
       }
-        await Future.delayed(Duration(seconds: 2)); // Wait 2 seconds between attempts
+      await Future.delayed(Duration(seconds: 2)); // Wait 2 seconds between attempts
     }
 
     if (!dataVerified) {
@@ -159,8 +295,14 @@ Future<void> main(List<String> arguments) async {
 
     // 8. Print retrieval URL
     print('\nSend this URL to the recipient:');
-    print('http://localhost:8080/furl.html?atSign=$atSign&key=$atKeyName');
+    print('$serverUrl/furl.html?atSign=$atSign&key=$atKeyName');
     print('They will need the PIN: $pin');
+
+    // Calculate and display expiration time
+    final expirationTime = DateTime.now().add(Duration(seconds: ttl));
+    final formattedExpiration = expirationTime.toLocal().toString().split('.')[0]; // Remove microseconds
+    print('Link expires: $formattedExpiration (TTL: ${formatDuration(ttl)})');
+
     // print('\nNote: Make sure the server is running:');
     // print('  Unified Server: dart run bin/furl_server.dart');
 

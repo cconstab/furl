@@ -11,12 +11,27 @@ class FurlServer {
   HttpServer? _server;
   final String webRoot;
   final int port;
+  final String? sslCertPath;
+  final String? sslKeyPath;
+  final bool useHttps;
 
-  FurlServer({this.port = 8080, this.webRoot = 'web'});
+  FurlServer({this.port = 8080, this.webRoot = 'web', this.sslCertPath, this.sslKeyPath})
+    : useHttps = sslCertPath != null && sslKeyPath != null;
 
   Future<void> start() async {
-    _server = await HttpServer.bind('localhost', port);
-    print('🚀 Furl Server started on http://localhost:$port');
+    if (useHttps) {
+      // Create SSL context for HTTPS
+      final context = SecurityContext();
+      context.useCertificateChain(sslCertPath!);
+      context.usePrivateKey(sslKeyPath!);
+
+      _server = await HttpServer.bindSecure('localhost', port, context);
+      print('🔒 Furl HTTPS Server started on https://localhost:$port');
+    } else {
+      _server = await HttpServer.bind('localhost', port);
+      print('🚀 Furl Server started on http://localhost:$port');
+    }
+
     print('📊 API Endpoints:');
     print('   GET /api/atsign/{atSign} - Get FQDN:PORT for an atSign');
     print('   GET /api/fetch/{atSign}/{keyName} - Fetch public atKey data');
@@ -233,11 +248,33 @@ class FurlServer {
       final result = await Process.run('curl', ['-s', atServerUrl]);
 
       if (result.exitCode == 0) {
+        String responseBody = result.stdout.toString().trim();
+
+        // Check if the response indicates the key doesn't exist or has expired
+        if (responseBody.contains('error:no such key') ||
+            responseBody.contains('Key not found') ||
+            responseBody.isEmpty ||
+            responseBody.startsWith('error:')) {
+          print('⏰ Key not found or expired: $keyName for $normalizedAtSign');
+          request.response.statusCode = 404;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode({
+              'error': 'File is no longer available',
+              'message': 'The shared file has expired or been removed',
+              'atSign': atSign,
+              'keyName': keyName,
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          );
+          await request.response.close();
+          return;
+        }
+
         request.response.statusCode = 200;
         request.response.headers.contentType = ContentType.json;
 
         // Remove "data:" prefix if present
-        String responseBody = result.stdout.toString().trim();
         if (responseBody.startsWith('data:')) {
           responseBody = responseBody.substring(5);
         }
@@ -245,21 +282,63 @@ class FurlServer {
         print('✅ Response body after removing data: prefix: $responseBody');
         request.response.write(responseBody);
       } else {
+        // Check if stderr contains "no such key" error
+        String errorOutput = result.stderr.toString().toLowerCase();
+        if (errorOutput.contains('no such key') ||
+            errorOutput.contains('key not found') ||
+            errorOutput.contains('not found')) {
+          print('⏰ Key not found or expired: $keyName for $normalizedAtSign');
+          request.response.statusCode = 404;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode({
+              'error': 'File is no longer available',
+              'message': 'The shared file has expired or been removed',
+              'atSign': atSign,
+              'keyName': keyName,
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          );
+          await request.response.close();
+          return;
+        }
+
         throw Exception('Curl failed with exit code ${result.exitCode}: ${result.stderr}');
       }
     } catch (e) {
       print('❌ Error fetching data for $atSign/$keyName: $e');
-      request.response.statusCode = 404;
-      request.response.headers.contentType = ContentType.json;
-      request.response.write(
-        jsonEncode({
-          'error': 'Could not fetch data from atServer',
-          'atSign': atSign,
-          'keyName': keyName,
-          'details': e.toString(),
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
-      );
+
+      // Check if it's likely a file expiration/not found error
+      String errorMsg = e.toString().toLowerCase();
+      if (errorMsg.contains('no such key') ||
+          errorMsg.contains('key not found') ||
+          errorMsg.contains('not found') ||
+          errorMsg.contains('404')) {
+        request.response.statusCode = 404;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode({
+            'error': 'File is no longer available',
+            'message': 'The shared file has expired or been removed',
+            'atSign': atSign,
+            'keyName': keyName,
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+        );
+      } else {
+        // General server error
+        request.response.statusCode = 500;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode({
+            'error': 'Server error',
+            'message': 'Unable to retrieve file data at this time',
+            'atSign': atSign,
+            'keyName': keyName,
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+        );
+      }
     }
     await request.response.close();
   }
@@ -435,6 +514,8 @@ class FurlServer {
 Future<void> main(List<String> arguments) async {
   int port = 8080;
   String webRoot = 'web';
+  String? sslCertPath;
+  String? sslKeyPath;
 
   // Parse command line arguments
   for (int i = 0; i < arguments.length; i++) {
@@ -445,6 +526,10 @@ Future<void> main(List<String> arguments) async {
       }
     } else if (arguments[i] == '--web-root' && i + 1 < arguments.length) {
       webRoot = arguments[i + 1];
+    } else if (arguments[i] == '--ssl-cert' && i + 1 < arguments.length) {
+      sslCertPath = arguments[i + 1];
+    } else if (arguments[i] == '--ssl-key' && i + 1 < arguments.length) {
+      sslKeyPath = arguments[i + 1];
     } else if (arguments[i] == '--help' || arguments[i] == '-h') {
       print('Furl Unified Server');
       print('');
@@ -453,12 +538,21 @@ Future<void> main(List<String> arguments) async {
       print('Options:');
       print('  --port <port>        Server port (default: 8080)');
       print('  --web-root <path>    Web root directory (default: web)');
+      print('  --ssl-cert <path>    SSL certificate file for HTTPS');
+      print('  --ssl-key <path>     SSL private key file for HTTPS');
       print('  --help, -h           Show this help message');
       print('');
       print('Examples:');
       print('  dart run bin/furl_server.dart');
       print('  dart run bin/furl_server.dart --port 8085');
       print('  dart run bin/furl_server.dart --port 3000 --web-root public');
+      print('  dart run bin/furl_server.dart --port 443 --ssl-cert server.crt --ssl-key server.key');
+      print('');
+      print('HTTPS Notes:');
+      print('  - Both --ssl-cert and --ssl-key must be provided for HTTPS');
+      print('  - Certificate file should be in PEM format');
+      print('  - Private key file should be in PEM format');
+      print('  - Default HTTPS port is typically 443 (requires admin privileges)');
       exit(0);
     } else if (!arguments[i].startsWith('--')) {
       // If it's just a number, treat it as port
@@ -469,7 +563,26 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
-  final server = FurlServer(port: port, webRoot: webRoot);
+  // Validate SSL configuration
+  if ((sslCertPath != null) != (sslKeyPath != null)) {
+    print('❌ Error: Both --ssl-cert and --ssl-key must be provided for HTTPS');
+    print('   Use --help for usage information');
+    exit(1);
+  }
+
+  if (sslCertPath != null && sslKeyPath != null) {
+    // Verify SSL files exist
+    if (!File(sslCertPath).existsSync()) {
+      print('❌ Error: SSL certificate file not found: $sslCertPath');
+      exit(1);
+    }
+    if (!File(sslKeyPath).existsSync()) {
+      print('❌ Error: SSL private key file not found: $sslKeyPath');
+      exit(1);
+    }
+  }
+
+  final server = FurlServer(port: port, webRoot: webRoot, sslCertPath: sslCertPath, sslKeyPath: sslKeyPath);
 
   // Handle Ctrl+C gracefully
   ProcessSignal.sigint.watch().listen((signal) async {
