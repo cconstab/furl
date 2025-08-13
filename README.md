@@ -4,6 +4,21 @@ A secure file sharing system that uses multi-layer encryption and client-side de
 
 ## 🚀 Quick Start
 
+### For Compiled Binary Users
+
+```bash
+# 1. Start the server
+furl_server
+
+# 2. Share a file
+furl @youratsign document.pdf 1h
+
+# 3. Share the generated URL and PIN with recipient
+# Recipient enters PIN in web interface to decrypt and download
+```
+
+### For Dart Developers
+
 ```bash
 # 1. Install dependencies
 dart pub get
@@ -12,7 +27,7 @@ dart pub get
 dart run bin/furl_server.dart
 
 # 3. Share a file
-dart run bin/furl.dart @youratsign document.pdf 3600
+dart run bin/furl.dart @youratsign document.pdf 1h
 
 # 4. Share the generated URL and PIN with recipient
 # Recipient enters PIN in web interface to decrypt and download
@@ -30,6 +45,19 @@ dart run bin/furl.dart @youratsign document.pdf 3600
 
 ### 1. Start the Server
 
+#### Using Compiled Binary
+```bash
+# Start the unified server (default port 8080)
+furl_server
+
+# Or specify a custom port
+furl_server --port 8090
+
+# Or use command line options
+furl_server --port 3000 --web-root public
+```
+
+#### Using Dart
 ```bash
 # Start the unified server (default port 8080)
 dart run bin/furl_server.dart
@@ -43,8 +71,14 @@ dart run bin/furl_server.dart --port 3000 --web-root public
 
 ### 2. Upload a File
 
+#### Using Compiled Binary
 ```bash
-dart run bin/furl.dart @youratSign path/to/file.txt 3600
+furl @youratSign path/to/file.txt 1h
+```
+
+#### Using Dart
+```bash
+dart run bin/furl.dart @youratSign path/to/file.txt 1h
 ```
 
 This will:
@@ -100,17 +134,27 @@ filebin.net → Get Encrypted File → AES Decrypt → Original File
 ## Command Line Usage
 
 ```bash
-# Basic usage
-dart run bin/furl.dart @alice document.pdf 3600
+# Using compiled binary
+furl @alice document.pdf 1h
+
+# With verbose output  
+furl @alice document.pdf 1h -v
+
+# With quiet mode (no progress bars)
+furl @alice document.pdf 1h -q
+
+# Using Dart (for development)
+dart run bin/furl.dart @alice document.pdf 1h
 
 # With verbose output
-dart run bin/furl.dart @alice document.pdf 3600 -v
+dart run bin/furl.dart @alice document.pdf 1h -v
 
 # Parameters:
-# @alice    - Your atSign
+# @alice       - Your atSign
 # document.pdf - File to encrypt and share
-# 3600      - TTL in seconds (1 hour)
-# -v        - Verbose output (optional)
+# 1h           - TTL (1 hour, can use: 30s, 10m, 2h, 7d, or seconds)
+# -v           - Verbose output (optional)
+# -q           - Quiet mode - no progress bars (optional)
 ```
 
 ## Server Configuration
@@ -207,7 +251,11 @@ SECURITY_DESIGN.md   # Detailed security analysis
 
 Run with `-v` flag for verbose output:
 ```bash
-dart run bin/furl.dart @alice file.txt 3600 -v
+# Using compiled binary
+furl @alice file.txt 1h -v
+
+# Using Dart
+dart run bin/furl.dart @alice file.txt 1h -v
 ```
 
 ### Check Server Status
@@ -268,18 +316,27 @@ furl/
 This project is provided as-is for educational and research purposes.
 
 ```bash
-dart run bin/furl.dart <file_path> <ttl_seconds>
+# Using compiled binary
+furl @youratSign <file_path> <ttl>
+
+# Using Dart
+dart run bin/furl.dart @youratSign <file_path> <ttl>
 ```
 
 Example:
 ```bash
-dart run bin/furl.dart document.pdf 3600
+# Using compiled binary
+furl @alice document.pdf 1h
+
+# Using Dart
+dart run bin/furl.dart @alice document.pdf 1h
 ```
 
 This will:
-- Generate a 9-character PIN (share this with recipient)
-- Encrypt and upload the file
-- Store secrets in atPlatform for 1 hour (3600 seconds)
+- Encrypt the file with AES-256
+- Generate a 9-character PIN
+- Upload the encrypted file
+- Store secrets in atPlatform for 1 hour
 - Print a URL for the recipient
 
 ### Receiving a File
@@ -320,7 +377,11 @@ The current implementation includes example code for uploading to file hosting s
 The application includes a test mode that simulates file upload and atPlatform storage locally:
 
 ```bash
-dart run bin/furl.dart test_file.txt 600
+# Using compiled binary
+furl @alice test_file.txt 10m
+
+# Using Dart
+dart run bin/furl.dart @alice test_file.txt 10m
 ```
 
 Test the web interface:

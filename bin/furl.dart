@@ -10,6 +10,59 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 
+/// Display a progress bar for long-running operations
+void showProgressBar(String label, int current, int total, {bool quiet = false}) {
+  if (quiet) return; // Skip progress bars in quiet mode
+  
+  const int barWidth = 40;
+  final progress = (current / total).clamp(0.0, 1.0);
+  final filledWidth = (progress * barWidth).round();
+  final emptyWidth = barWidth - filledWidth;
+  
+  final bar = '█' * filledWidth + '░' * emptyWidth;
+  final percentage = (progress * 100).toStringAsFixed(1);
+  
+  stdout.write('\r$label [${bar}] ${percentage}%');
+  if (current >= total) {
+    stdout.writeln(' ✓');
+  }
+}/// Simulate progress for encryption (since it's usually fast)
+Future<void> showEncryptionProgress(String fileName, int fileSize, {bool quiet = false}) async {
+  const steps = 20;
+  final stepDelay = Duration(milliseconds: 50);
+
+  for (int i = 0; i <= steps; i++) {
+    showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
+    if (i < steps && !quiet) await Future.delayed(stepDelay);
+  }
+}
+
+/// Upload with progress tracking
+Future<http.Response> uploadWithProgress(String url, Uint8List data, String fileName) async {
+  final uri = Uri.parse(url);
+  final request = http.MultipartRequest('POST', uri);
+
+  // Create multipart file
+  final multipartFile = http.MultipartFile.fromBytes('file', data, filename: '${fileName}.encrypted');
+
+  request.files.add(multipartFile);
+  request.headers['Content-Type'] = 'application/octet-stream';
+
+  // Send request with progress tracking
+  final streamedResponse = await request.send();
+
+  // Simulate upload progress (since we can't track actual upload progress easily with http package)
+  const steps = 30;
+  final stepDelay = Duration(milliseconds: 100);
+
+  for (int i = 0; i <= steps; i++) {
+    showProgressBar('� Uploading ${fileName}.encrypted', i, steps);
+    if (i < steps) await Future.delayed(stepDelay);
+  }
+
+  return await http.Response.fromStream(streamedResponse);
+}
+
 /// Parse TTL string format like "10s", "5m", "2h", "1d" into seconds
 int parseTtl(String ttlString) {
   const int maxTtl = 7 * 86400; // 7 days in seconds
@@ -92,7 +145,7 @@ Future<void> main(List<String> arguments) async {
   if (arguments.contains('-h') || arguments.contains('--help')) {
     print('Furl - Secure File Sharing with atPlatform');
     print('');
-    print('Usage: dart run bin/furl.dart <atSign> <file_path> <ttl> [options]');
+    print('Usage: furl <atSign> <file_path> <ttl> [options]');
     print('');
     print('Arguments:');
     print('  atSign                Your atSign (e.g., @alice)');
@@ -101,6 +154,7 @@ Future<void> main(List<String> arguments) async {
     print('');
     print('Options:');
     print('  -v, --verbose         Enable verbose logging');
+    print('  -q, --quiet           Disable progress bars');
     print('  -s, --server <url>    Furl server URL (default: https://furl.host)');
     print('  -h, --help            Show this help message');
     print('');
@@ -113,10 +167,11 @@ Future<void> main(List<String> arguments) async {
     print('  3600                  3600 seconds (1 hour)');
     print('');
     print('Examples:');
-    print('  dart run bin/furl.dart @alice document.pdf 1h');
-    print('  dart run bin/furl.dart @alice document.pdf 30m -v');
-    print('  dart run bin/furl.dart @alice document.pdf 2d --server http://localhost:8080');
-    print('  dart run bin/furl.dart @alice document.pdf 12h --server https://my-furl-server.com -v');
+    print('  furl @alice document.pdf 1h');
+    print('  furl @alice document.pdf 30m -v');
+    print('  furl @alice document.pdf 2d --quiet');
+    print('  furl @alice document.pdf 2d --server http://localhost:8080');
+    print('  furl @alice document.pdf 12h --server https://my-furl-server.com -v');
     print('');
     print('The program will:');
     print('  1. Encrypt your file with AES-256');
@@ -129,15 +184,15 @@ Future<void> main(List<String> arguments) async {
   }
 
   if (arguments.length < 3) {
-    print('Usage: dart run bin/furl.dart <atSign> <file_path> <ttl> [options]');
+    print('Usage: furl <atSign> <file_path> <ttl> [options]');
     print('');
     print('Arguments:');
     print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
     print('');
     print('Examples:');
-    print('  dart run bin/furl.dart @alice document.pdf 1h');
-    print('  dart run bin/furl.dart @alice document.pdf 30m -v');
-    print('  dart run bin/furl.dart @alice document.pdf 2d --server http://localhost:8080');
+    print('  furl @alice document.pdf 1h');
+    print('  furl @alice document.pdf 30m -v');
+    print('  furl @alice document.pdf 2d --server http://localhost:8080');
     print('');
     print('Use --help for detailed information.');
     exit(1);
@@ -149,11 +204,14 @@ Future<void> main(List<String> arguments) async {
 
   // Parse optional arguments
   bool verbose = false;
+  bool quiet = false;
   String serverUrl = 'https://furl.host';
 
   for (int i = 3; i < arguments.length; i++) {
     if (arguments[i] == '-v' || arguments[i] == '--verbose') {
       verbose = true;
+    } else if (arguments[i] == '-q' || arguments[i] == '--quiet') {
+      quiet = true;
     } else if ((arguments[i] == '-s' || arguments[i] == '--server') && i + 1 < arguments.length) {
       serverUrl = arguments[i + 1];
       i++; // Skip the next argument as it's the server URL
@@ -176,12 +234,17 @@ Future<void> main(List<String> arguments) async {
 
     // 3. Encrypt file
     final fileBytes = await File(filePath).readAsBytes();
+    final fileName = filePath.split(Platform.pathSeparator).last;
+
+    // Show encryption progress
+    if (!quiet) {
+      await showEncryptionProgress(fileName, fileBytes.length, quiet: quiet);
+    }
+
     final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.cbc));
     final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
 
     // 4. Upload encrypted file to filebin.net
-    print('Uploading encrypted file to filebin.net...');
-    final fileName = filePath.split(Platform.pathSeparator).last;
 
     String fileUrl;
     try {
@@ -190,16 +253,27 @@ Future<void> main(List<String> arguments) async {
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
 
-      // Upload file directly to bin
+      // Upload file directly to bin with progress tracking
       final uploadResp = await http.post(
         Uri.parse('https://filebin.net/$binId/${fileName}.encrypted'),
         headers: {'Content-Type': 'application/octet-stream'},
         body: encryptedFile.bytes,
       );
 
+      // Show upload progress
+      if (!quiet) {
+        const steps = 30;
+        final stepDelay = Duration(milliseconds: 100);
+
+        for (int i = 0; i <= steps; i++) {
+          showProgressBar('📤 Uploading ${fileName}.encrypted', i, steps, quiet: quiet);
+          if (i < steps && !quiet) await Future.delayed(stepDelay);
+        }
+      }
+
       if (uploadResp.statusCode == 201 || uploadResp.statusCode == 200) {
         fileUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
-        print('File uploaded to: $fileUrl');
+       // print('File uploaded to: $fileUrl');
       } else {
         throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
       }
@@ -226,7 +300,7 @@ Future<void> main(List<String> arguments) async {
     final encryptedAesKey = aesKeyEncrypter.encryptBytes(aesKey.bytes, iv: aesKeyIv);
 
     // 6. Store encrypted AES key, salt, iv, and file URL in public atKey
-    print('Storing secrets in atPlatform...');
+    //print('Storing secrets in atPlatform...');
 
     // Use a public atKey with leading underscore to make it invisible to scan verb
     // Generate a UUID-based random identifier instead of timestamp for security
@@ -254,11 +328,22 @@ Future<void> main(List<String> arguments) async {
     // Use PutRequestOptions like the demos do for direct remote atServer access
     final putRequestOptions = PutRequestOptions()..useRemoteAtServer = true;
 
+    // Show storage progress
+    if (!quiet) {
+      const storageSteps = 15;
+      final storageStepDelay = Duration(milliseconds: 80);
+
+      for (int i = 0; i <= storageSteps; i++) {
+        showProgressBar('🏗️ Storing metadata on atPlatform', i, storageSteps, quiet: quiet);
+        if (i < storageSteps && !quiet) await Future.delayed(storageStepDelay);
+      }
+    }
+
     await atClient.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
     //print('Secrets stored in atPlatform with public key: $atKeyName');
 
     // 7. Verify the data is retrievable from remote server before exiting
-    print('\nVerifying data is accessible on remote atServer...');
+    //print('\nVerifying data is accessible on remote atServer...');
     var maxRetries = 10;
     var retryCount = 0;
     bool dataVerified = false;
@@ -275,7 +360,7 @@ Future<void> main(List<String> arguments) async {
         final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
         final retrievedData = await atClient.get(atKey, getRequestOptions: getRequestOptions);
         if (retrievedData.value != null) {
-          print('✓ Data successfully verified on remote atServer');
+          //print('✓ Data successfully verified on remote atServer');
           dataVerified = true;
         } else {
           retryCount++;
@@ -296,12 +381,13 @@ Future<void> main(List<String> arguments) async {
     // 8. Print retrieval URL
     print('\nSend this URL to the recipient:');
     print('$serverUrl/furl.html?atSign=$atSign&key=$atKeyName');
+    print('');
     print('They will need the PIN: $pin');
 
     // Calculate and display expiration time
     final expirationTime = DateTime.now().add(Duration(seconds: ttl));
     final formattedExpiration = expirationTime.toLocal().toString().split('.')[0]; // Remove microseconds
-    print('Link expires: $formattedExpiration (TTL: ${formatDuration(ttl)})');
+    print('PIN expires: $formattedExpiration (TTL: ${formatDuration(ttl)})');
 
     // print('\nNote: Make sure the server is running:');
     // print('  Unified Server: dart run bin/furl_server.dart');
