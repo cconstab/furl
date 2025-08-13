@@ -10,13 +10,19 @@ class FurlServer {
 
   HttpServer? _server;
   final String webRoot;
+  final String bindAddress;
   final int port;
   final String? sslCertPath;
   final String? sslKeyPath;
   final bool useHttps;
 
-  FurlServer({this.port = 8080, this.webRoot = 'web', this.sslCertPath, this.sslKeyPath})
-    : useHttps = sslCertPath != null && sslKeyPath != null;
+  FurlServer({
+    this.port = 8080, 
+    this.webRoot = 'web', 
+    this.bindAddress = '0.0.0.0',
+    this.sslCertPath, 
+    this.sslKeyPath
+  }) : useHttps = sslCertPath != null && sslKeyPath != null;
 
   Future<void> start() async {
     if (useHttps) {
@@ -25,11 +31,11 @@ class FurlServer {
       context.useCertificateChain(sslCertPath!);
       context.usePrivateKey(sslKeyPath!);
 
-      _server = await HttpServer.bindSecure('localhost', port, context);
-      print('🔒 Furl HTTPS Server started on https://localhost:$port');
+      _server = await HttpServer.bindSecure(bindAddress, port, context);
+      print('🔒 Furl HTTPS Server started on https://$bindAddress:$port');
     } else {
-      _server = await HttpServer.bind('localhost', port);
-      print('🚀 Furl Server started on http://localhost:$port');
+      _server = await HttpServer.bind(bindAddress, port);
+      print('🚀 Furl Server started on http://$bindAddress:$port');
     }
 
     print('📊 API Endpoints:');
@@ -41,6 +47,7 @@ class FurlServer {
     print('   GET / - Redirect to furl.html');
     print('   GET /furl.html - File decryption interface');
     print('   Static files served from: $webRoot/');
+    print('   Binding to all interfaces: $bindAddress (use --bind 127.0.0.1 for localhost only)');
     print('');
 
     await for (HttpRequest request in _server!) {
@@ -603,6 +610,7 @@ class FurlServer {
 Future<void> main(List<String> arguments) async {
   int port = 8080;
   String webRoot = 'web';
+  String bindAddress = '0.0.0.0'; // Default to all interfaces
   String? sslCertPath;
   String? sslKeyPath;
 
@@ -615,6 +623,8 @@ Future<void> main(List<String> arguments) async {
       }
     } else if (arguments[i] == '--web-root' && i + 1 < arguments.length) {
       webRoot = arguments[i + 1];
+    } else if ((arguments[i] == '--bind' || arguments[i] == '--host') && i + 1 < arguments.length) {
+      bindAddress = arguments[i + 1];
     } else if (arguments[i] == '--ssl-cert' && i + 1 < arguments.length) {
       sslCertPath = arguments[i + 1];
     } else if (arguments[i] == '--ssl-key' && i + 1 < arguments.length) {
@@ -626,14 +636,22 @@ Future<void> main(List<String> arguments) async {
       print('');
       print('Options:');
       print('  --port <port>        Server port (default: 8080)');
+      print('  --bind <address>     Bind address (default: 0.0.0.0 - all interfaces)');
+      print('  --host <address>     Alias for --bind');
       print('  --web-root <path>    Web root directory (default: web)');
       print('  --ssl-cert <path>    SSL certificate file for HTTPS');
       print('  --ssl-key <path>     SSL private key file for HTTPS');
       print('  --help, -h           Show this help message');
       print('');
+      print('Bind Address Examples:');
+      print('  0.0.0.0              Bind to all interfaces (default, accessible externally)');
+      print('  127.0.0.1            Bind to localhost only (local access only)');
+      print('  192.168.1.100        Bind to specific IP address');
+      print('');
       print('Examples:');
       print('  dart run bin/furl_server.dart');
       print('  dart run bin/furl_server.dart --port 8085');
+      print('  dart run bin/furl_server.dart --port 3000 --bind 127.0.0.1');
       print('  dart run bin/furl_server.dart --port 3000 --web-root public');
       print('  dart run bin/furl_server.dart --port 443 --ssl-cert server.crt --ssl-key server.key');
       print('');
@@ -671,7 +689,13 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
-  final server = FurlServer(port: port, webRoot: webRoot, sslCertPath: sslCertPath, sslKeyPath: sslKeyPath);
+  final server = FurlServer(
+    port: port, 
+    webRoot: webRoot, 
+    bindAddress: bindAddress,
+    sslCertPath: sslCertPath, 
+    sslKeyPath: sslKeyPath
+  );
 
   // Handle Ctrl+C gracefully
   ProcessSignal.sigint.watch().listen((signal) async {
