@@ -2,6 +2,23 @@
 
 A secure file sharing system that uses multi-layer encryption and client-side decryption to protect files.
 
+## 🚀 Quick Start
+
+```bash
+# 1. Install dependencies
+dart pub get
+
+# 2. Start the servers (in separate terminals)
+dart run bin/furl_api.dart 8085    # API server
+dart run bin/furl_web.dart          # Web server
+
+# 3. Share a file
+dart run bin/furl.dart @youratsign document.pdf 3600
+
+# 4. Share the generated URL and PIN with recipient
+# Recipient enters PIN in web interface to decrypt and download
+```
+
 ## Features
 
 - **Zero-Knowledge Security**: Files are encrypted before upload, decrypted in recipient's browser
@@ -206,6 +223,41 @@ curl http://localhost:8081/furl.html
 - **Storage**: No sensitive data stored on servers
 
 For detailed security analysis, see [SECURITY_DESIGN.md](SECURITY_DESIGN.md).
+
+## Development
+
+### Running Tests
+
+```bash
+dart test
+```
+
+### Project Structure
+
+```
+furl/
+├── bin/                    # Executable scripts
+│   ├── furl.dart          # Main CLI tool for encryption/upload
+│   ├── furl_api.dart      # API server for atSign resolution
+│   └── furl_web.dart      # Static web server
+├── web/                   # Web interface
+│   └── furl.html          # Client-side decryption interface
+├── test/                  # Test suite
+│   └── furl_test.dart     # Security and integration tests
+├── README.md              # This file
+├── SECURITY_DESIGN.md     # Detailed security analysis
+├── CHANGELOG.md           # Version history
+└── LICENSE                # GPL v3 license
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass: `dart test`
+6. Submit a pull request
 
 ## License
 

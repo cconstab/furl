@@ -25,3 +25,25 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Furl specific ignores
+debug_*.dart
+test_*.txt
+test_*.dart
+secrets_*
+*.log
+*.tmp
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

@@ -1,7 +1,7 @@
 name: furl
-description: A sample command-line application.
+description: Secure file sharing with multi-layer encryption and client-side decryption
 version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+repository: https://github.com/cconstab/furl
 
 environment:
   sdk: ^3.8.1
@@ -16,8 +16,10 @@ dependencies:
   crypto: ^3.0.3
   random_string: ^2.3.1
   uuid: ^3.0.7
-  # path: ^1.8.0
 
 dev_dependencies:
   lints: ^5.0.0
   test: ^1.24.0
+
+executables:
+  furl: furl

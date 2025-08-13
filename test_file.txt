@@ -1,3 +1,0 @@
-This is a test file for the furl application.
-It contains some sample text that will be encrypted and uploaded.
-The file should be successfully encrypted with AES-256 and uploaded to filebin.net.
