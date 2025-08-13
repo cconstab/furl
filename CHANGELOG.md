@@ -18,9 +18,12 @@ All notable changes to this project will be documented in this file.
 - Simplified deployment requiring only one server process
 - Updated documentation to reflect single-server architecture
 
+### Removed
+- **Legacy servers**: Removed `furl_api.dart` and `furl_web.dart` (replaced by unified server)
+- Redundant documentation and deprecated references
+
 ### Deprecated
-- `furl_api.dart` - Use `furl_server.dart` instead
-- `furl_web.dart` - Use `furl_server.dart` instead
+- None (deprecated files have been removed)
 
 ### Improved
 - Easier deployment with single binary

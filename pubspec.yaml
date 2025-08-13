@@ -1,6 +1,6 @@
 name: furl
 description: Secure file sharing with multi-layer encryption and client-side decryption
-version: 1.0.0
+version: 1.1.0
 repository: https://github.com/cconstab/furl
 
 environment:
@@ -8,8 +8,9 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-  at_client: ^3.0.62
-  at_cli: ^3.1.1
+  at_client: ^3.4.2
+  #at_cli: ^3.1.1
+  at_cli_commons: ^2.1.0
   at_onboarding_cli: ^1.1.2
   encrypt: ^5.0.3
   http: ^1.2.1

@@ -243,9 +243,7 @@ dart test
 furl/
 ├── bin/                    # Executable scripts
 │   ├── furl.dart          # Main CLI tool for encryption/upload
-│   ├── furl_server.dart   # Unified server (API + Web)
-│   ├── furl_api.dart      # Legacy API server (deprecated)
-│   └── furl_web.dart      # Legacy web server (deprecated)
+│   └── furl_server.dart   # Unified server (API + Web)
 ├── web/                   # Web interface
 │   └── furl.html          # Client-side decryption interface
 ├── test/                  # Test suite

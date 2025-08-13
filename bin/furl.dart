@@ -35,7 +35,7 @@ Future<void> main(List<String> arguments) async {
 
     // 2. Generate 9-char alphanumeric PIN
     final pin = randomAlphaNumeric(9);
-    print('PIN for recipient: $pin');
+    //print('PIN for recipient: $pin');
 
     // 3. Encrypt file
     final fileBytes = await File(filePath).readAsBytes();
@@ -118,8 +118,7 @@ Future<void> main(List<String> arguments) async {
     final putRequestOptions = PutRequestOptions()..useRemoteAtServer = true;
 
     await atClient.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
-    print('Secrets stored in atPlatform with public key: $atKeyName');
-    print(atKey);
+    //print('Secrets stored in atPlatform with public key: $atKeyName');
 
     // 7. Verify the data is retrievable from remote server before exiting
     print('\nVerifying data is accessible on remote atServer...');
@@ -129,12 +128,16 @@ Future<void> main(List<String> arguments) async {
 
     while (retryCount < maxRetries && !dataVerified) {
       try {
-        await Future.delayed(Duration(seconds: 2)); // Wait 2 seconds between attempts
+        final atKey = AtKey()
+        ..namespace = 'furl'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()
+          ..isPublic = true)
+        ..key = atKeyName;
 
         // Force a fresh lookup from the atServer (not cached)
-        final getRequestOptions = GetRequestOptions()..bypassCache = true;
+        final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
         final retrievedData = await atClient.get(atKey, getRequestOptions: getRequestOptions);
-
         if (retrievedData.value != null) {
           print('✓ Data successfully verified on remote atServer');
           dataVerified = true;
@@ -146,6 +149,7 @@ Future<void> main(List<String> arguments) async {
         retryCount++;
         print('⏳ Attempt $retryCount/$maxRetries - waiting for remote sync... ($e)');
       }
+        await Future.delayed(Duration(seconds: 2)); // Wait 2 seconds between attempts
     }
 
     if (!dataVerified) {
@@ -157,8 +161,8 @@ Future<void> main(List<String> arguments) async {
     print('\nSend this URL to the recipient:');
     print('http://localhost:8080/furl.html?atSign=$atSign&key=$atKeyName');
     print('They will need the PIN: $pin');
-    print('\nNote: Make sure the server is running:');
-    print('  Unified Server: dart run bin/furl_server.dart');
+    // print('\nNote: Make sure the server is running:');
+    // print('  Unified Server: dart run bin/furl_server.dart');
 
     // Clean exit
     exit(0);
@@ -182,7 +186,7 @@ Future<AtClient> _getAtClient(String atSign, bool verbose) async {
       ..namespace = 'furl'
       ..commitLogPath = '$home/.atsign/storage/$atSign/commitLog'
       ..isLocalStoreRequired =
-          true // We don't need local storage for a simple put
+          false // We don't need local storage for a simple put
       ..downloadPath = '$home/.atsign/files/$atSign'
       ..rootDomain = 'root.atsign.org'
       ..atKeysFilePath = '$home/.atsign/keys/${atSign}_key.atKeys';
