@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Furl - Secure File Download</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .form-group {
+            margin: 25px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .error {
+            color: #e74c3c;
+            margin-top: 15px;
+            padding: 15px;
+            background: #ffeaea;
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+        }
+        .success {
+            color: #27ae60;
+            margin-top: 15px;
+            padding: 15px;
+            background: #eafaf1;
+            border-radius: 8px;
+            border-left: 4px solid #27ae60;
+        }
+        .info {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            border: 1px solid #b3d9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .info strong {
+            color: #1976d2;
+        }
+        .progress {
+            background: #f0f0f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+            color: #666;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .params-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Furl</h1>
+        <p class="subtitle">Secure File Download</p>
+        
+        <div class="info">
+            <strong>How it works:</strong><br>
+            1. Enter the 9-character PIN provided by the sender<br>
+            2. Click "Download & Decrypt" to retrieve your file<br>
+            3. The file will be automatically decrypted and downloaded<br>
+            <br>
+            <strong>Privacy:</strong> Your PIN never leaves your browser - all decryption happens locally.
+        </div>
+
+        <div id="urlParams" class="params-info" style="display: none;">
+            <strong>Parameters:</strong><br>
+            atSign: <span id="paramAtSign"></span><br>
+            key: <span id="paramKey"></span>
+        </div>
+
+        <div class="form-group">
+            <label for="pin">🔑 PIN (9 characters):</label>
+            <input type="password" id="pin" placeholder="Enter the PIN provided by sender" maxlength="9" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <button id="downloadBtn" onclick="downloadAndDecrypt()">
+                <span id="buttonText">Download & Decrypt File</span>
+            </button>
+        </div>
+
+        <div id="status"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:8080'; // Update this to your API server URL
+
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const atSign = urlParams.get('atSign');
+        const keyName = urlParams.get('key');
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!atSign || !keyName) {
+                document.getElementById('status').innerHTML = 
+                    '<div class="error">❌ Invalid URL - missing atSign or key parameters</div>';
+                document.getElementById('downloadBtn').disabled = true;
+                return;
+            }
+
+            // Show URL parameters for debugging
+            document.getElementById('paramAtSign').textContent = atSign;
+            document.getElementById('paramKey').textContent = keyName;
+            document.getElementById('urlParams').style.display = 'block';
+
+            // Focus on PIN input
+            document.getElementById('pin').focus();
+        });
+
+        function setStatus(message, type = 'progress') {
+            const statusDiv = document.getElementById('status');
+            const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : '';
+            const spinner = type === 'progress' ? '<div class="loading"></div>' : '';
+            statusDiv.innerHTML = `<div class="${type}">${spinner}${icon} ${message}</div>`;
+        }
+
+        function setButtonState(disabled, text) {
+            const btn = document.getElementById('downloadBtn');
+            const btnText = document.getElementById('buttonText');
+            btn.disabled = disabled;
+            btnText.textContent = text;
+        }
+
+        async function downloadAndDecrypt() {
+            const pin = document.getElementById('pin').value;
+
+            if (!pin || pin.length !== 9) {
+                setStatus('Please enter a valid 9-character PIN', 'error');
+                return;
+            }
+
+            setButtonState(true, 'Processing...');
+
+            try {
+                // Step 1: Fetch encrypted data from atPlatform via our API proxy
+                setStatus('Retrieving encrypted data from atPlatform...');
+                
+                const atSignName = atSign.startsWith('@') ? atSign.substring(1) : atSign;
+                const fetchUrl = `${API_BASE_URL}/fetch/${atSignName}/${keyName}`;
+                
+                const secretsResponse = await fetch(fetchUrl);
+                if (!secretsResponse.ok) {
+                    const errorData = await secretsResponse.json();
+                    throw new Error(errorData.error || 'Could not retrieve secrets. Link may have expired or is invalid.');
+                }
+
+                const secrets = await secretsResponse.json();
+                
+                setStatus('Decrypting AES key with your PIN...');
+
+                // Step 2: Decrypt the AES key using the PIN
+                const salt = CryptoJS.enc.Base64.parse(secrets.aes_key_salt);
+                const pinBytes = CryptoJS.enc.Utf8.parse(pin);
+                
+                // Match the Dart key derivation: SHA256(pinBytes + salt)
+                const combinedBytes = pinBytes.concat(salt);
+                const pinKey = CryptoJS.SHA256(combinedBytes);
+                
+                console.log('Salt:', CryptoJS.enc.Base64.stringify(salt));
+                console.log('PIN key (SHA256):', CryptoJS.enc.Hex.stringify(pinKey));
+                
+                const encryptedAesKey = CryptoJS.enc.Base64.parse(secrets.aes_key);
+                const aesKeyIv = CryptoJS.enc.Base64.parse(secrets.aes_key_iv);
+                
+                const aesKey = CryptoJS.AES.decrypt(
+                    CryptoJS.enc.Base64.stringify(encryptedAesKey),
+                    pinKey,
+                    { iv: aesKeyIv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+                );
+
+                console.log('Decrypted AES key length:', aesKey.sigBytes);
+                
+                if (aesKey.sigBytes === 0) {
+                    throw new Error('Invalid PIN or corrupted data');
+                }
+
+                setStatus('Downloading encrypted file...');
+
+                // Step 3: Download the encrypted file via our API proxy
+                const proxyUrl = `${API_BASE_URL}/download?url=${encodeURIComponent(secrets.file_url)}`;
+                const fileResponse = await fetch(proxyUrl);
+                if (!fileResponse.ok) {
+                    throw new Error('Could not download encrypted file from: ' + secrets.file_url);
+                }
+                
+                const encryptedFileData = await fileResponse.arrayBuffer();
+
+                setStatus('Decrypting file...');
+
+                // Step 4: Decrypt the file
+                const fileIv = CryptoJS.enc.Base64.parse(secrets.file_iv);
+                const encryptedFileBytes = CryptoJS.lib.WordArray.create(encryptedFileData);
+                
+                console.log('File IV:', CryptoJS.enc.Base64.stringify(fileIv));
+                console.log('Encrypted file size:', encryptedFileData.byteLength);
+                console.log('AES key for file decryption:', CryptoJS.enc.Hex.stringify(aesKey));
+                
+                const decryptedFile = CryptoJS.AES.decrypt(
+                    CryptoJS.enc.Base64.stringify(encryptedFileBytes),
+                    aesKey,
+                    { iv: fileIv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+                );
+
+                console.log('Decrypted file size:', decryptedFile.sigBytes);
+                
+                if (decryptedFile.sigBytes === 0) {
+                    throw new Error('Failed to decrypt file');
+                }
+
+                setStatus('Preparing download...');
+
+                // Step 5: Convert to blob and trigger download
+                const decryptedBytes = new Uint8Array(decryptedFile.sigBytes);
+                const words = decryptedFile.words;
+                for (let i = 0; i < decryptedFile.sigBytes; i++) {
+                    decryptedBytes[i] = (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+                }
+
+                console.log('Converted to bytes, first 50 chars as text:', 
+                    new TextDecoder().decode(decryptedBytes.slice(0, 50)));
+                console.log('First 20 bytes as hex:', 
+                    Array.from(decryptedBytes.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
+                const blob = new Blob([decryptedBytes]);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = secrets.file_name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
+
+            } catch (error) {
+                console.error('Download error:', error);
+                setStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                setButtonState(false, 'Download & Decrypt File');
+            }
+        }
+
+        // Allow Enter key to submit
+        document.getElementById('pin').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                downloadAndDecrypt();
+            }
+        });
+
+        // Auto-format PIN input (optional - show progress)
+        document.getElementById('pin').addEventListener('input', function(e) {
+            const pin = e.target.value;
+            if (pin.length === 9) {
+                e.target.style.borderColor = '#27ae60';
+            } else {
+                e.target.style.borderColor = '#e1e5e9';
+            }
+        });
+    </script>
+</body>
+</html>

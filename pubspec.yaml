@@ -1,0 +1,23 @@
+name: furl
+description: A sample command-line application.
+version: 1.0.0
+# repository: https://github.com/my_org/my_repo
+
+environment:
+  sdk: ^3.8.1
+
+# Add regular dependencies here.
+dependencies:
+  at_client: ^3.0.62
+  at_cli: ^3.1.1
+  at_onboarding_cli: ^1.1.2
+  encrypt: ^5.0.3
+  http: ^1.2.1
+  crypto: ^3.0.3
+  random_string: ^2.3.1
+  uuid: ^3.0.7
+  # path: ^1.8.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.24.0
