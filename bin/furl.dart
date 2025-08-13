@@ -63,6 +63,8 @@ Future<Uint8List> encryptWithProgress(
         showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
         await Future.delayed(stepDelay);
       }
+      // Complete the progress display
+      showProgressBar('🔒 Encrypting $fileName', steps, steps, quiet: quiet);
     }
   }
 
@@ -112,7 +114,7 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
 
 /// Parse TTL string format like "10s", "5m", "2h", "1d" into seconds
 int parseTtl(String ttlString) {
-  const int maxTtl = 7 * 86400; // 7 days in seconds
+  const int maxTtl = 6 * 86400; // 6 days in seconds (filebin.net limit)
 
   if (ttlString.isEmpty) return 3600; // Default 1 hour
 
@@ -121,7 +123,7 @@ int parseTtl(String ttlString) {
   if (numOnly != null) {
     if (numOnly > maxTtl) {
       print('TTL too long: ${formatDuration(numOnly)}');
-      print('Maximum allowed TTL is 7 days (${formatDuration(maxTtl)})');
+      print('Maximum allowed TTL is 6 days (${formatDuration(maxTtl)})');
       exit(1);
     }
     return numOnly;
@@ -161,7 +163,7 @@ int parseTtl(String ttlString) {
 
   if (ttlSeconds > maxTtl) {
     print('TTL too long: ${formatDuration(ttlSeconds)}');
-    print('Maximum allowed TTL is 7 days (${formatDuration(maxTtl)})');
+    print('Maximum allowed TTL is 6 days (${formatDuration(maxTtl)})');
     exit(1);
   }
 
