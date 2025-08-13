@@ -5,7 +5,6 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart';
 import 'package:random_string/random_string.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -30,35 +29,59 @@ void showProgressBar(String label, int current, int total, {bool quiet = false})
   }
 }
 
-/// Simulate progress for encryption (since it's usually fast)
-Future<void> showEncryptionProgress(String fileName, int fileSize, {bool quiet = false}) async {
-  const steps = 20;
-  final stepDelay = Duration(milliseconds: 50);
+/// Show encryption progress - real progress for large files, simulated for small files
+Future<Uint8List> encryptWithProgress(
+  String fileName,
+  Uint8List fileBytes,
+  encrypt.Encrypter encrypter,
+  encrypt.IV iv, {
+  bool quiet = false,
+}) async {
+  final fileSize = fileBytes.length;
 
-  for (int i = 0; i <= steps; i++) {
-    showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
-    if (i < steps && !quiet) await Future.delayed(stepDelay);
+  if (fileSize < 1024 * 1024) {
+    // Small files (< 1MB): Fast simulated progress
+    if (!quiet) {
+      const steps = 20;
+      final stepDelay = Duration(milliseconds: 50);
+
+      for (int i = 0; i <= steps; i++) {
+        showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
+        if (i < steps) await Future.delayed(stepDelay);
+      }
+    }
+  } else {
+    // Large files (≥ 1MB): Progress based on estimated time
+    if (!quiet) {
+      // Estimate ~50MB/s encryption speed
+      final estimatedSeconds = (fileSize / (50 * 1024 * 1024)).clamp(1.0, 30.0);
+      final steps = (estimatedSeconds * 10).round(); // 10 updates per second
+      final stepDelay = Duration(milliseconds: (estimatedSeconds * 1000 / steps).round());
+
+      // Start progress display
+      for (int i = 0; i < steps; i++) {
+        showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
+        await Future.delayed(stepDelay);
+      }
+    }
   }
+
+  // Perform the actual encryption (not chunked to maintain integrity)
+  final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+
+  return encryptedFile.bytes;
 }
 
 /// Upload with progress tracking
 Future<http.Response> uploadWithProgress(String url, Uint8List data, String fileName) async {
   final dio = Dio();
-  
-  try {
-    // Create FormData for upload
-    final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(
-        data,
-        filename: '${fileName}.encrypted',
-        contentType: MediaType('application', 'octet-stream'),
-      ),
-    });
 
-    // Upload with real progress tracking
+  try {
+    // Upload raw binary data (like original http.post) with progress tracking
     final response = await dio.post(
       url,
-      data: formData,
+      data: data, // Send raw bytes, not FormData
+      options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
       onSendProgress: (int sent, int total) {
         showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
       },
@@ -68,23 +91,21 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     return http.Response(
       response.data.toString(),
       response.statusCode ?? 500,
-      headers: response.headers.map.map(
-        (key, value) => MapEntry(key, value.join('; ')),
-      ),
+      headers: response.headers.map.map((key, value) => MapEntry(key, value.join('; '))),
     );
   } catch (e) {
     // Fallback to original http implementation if Dio fails
     print('Dio upload failed, falling back to http: $e');
-    
+
     final uri = Uri.parse(url);
     final request = http.MultipartRequest('POST', uri);
     final multipartFile = http.MultipartFile.fromBytes('file', data, filename: '${fileName}.encrypted');
     request.files.add(multipartFile);
     request.headers['Content-Type'] = 'application/octet-stream';
-    
+
     final streamedResponse = await request.send();
     showProgressBar('📤 Uploading ${fileName}.encrypted', 1, 1);
-    
+
     return await http.Response.fromStream(streamedResponse);
   }
 }
@@ -262,13 +283,8 @@ Future<void> main(List<String> arguments) async {
     final fileBytes = await File(filePath).readAsBytes();
     final fileName = filePath.split(Platform.pathSeparator).last;
 
-    // Show encryption progress
-    if (!quiet) {
-      await showEncryptionProgress(fileName, fileBytes.length, quiet: quiet);
-    }
-
     final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.cbc));
-    final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+    final encryptedBytes = await encryptWithProgress(fileName, fileBytes, encrypter, iv, quiet: quiet);
 
     // 4. Upload encrypted file to filebin.net
 
@@ -280,22 +296,11 @@ Future<void> main(List<String> arguments) async {
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
 
       // Upload file directly to bin with progress tracking
-      final uploadResp = await http.post(
-        Uri.parse('https://filebin.net/$binId/${fileName}.encrypted'),
-        headers: {'Content-Type': 'application/octet-stream'},
-        body: encryptedFile.bytes,
+      final uploadResp = await uploadWithProgress(
+        'https://filebin.net/$binId/${fileName}.encrypted',
+        encryptedBytes,
+        fileName,
       );
-
-      // Show upload progress
-      if (!quiet) {
-        const steps = 30;
-        final stepDelay = Duration(milliseconds: 100);
-
-        for (int i = 0; i <= steps; i++) {
-          showProgressBar('📤 Uploading ${fileName}.encrypted', i, steps, quiet: quiet);
-          if (i < steps && !quiet) await Future.delayed(stepDelay);
-        }
-      }
 
       if (uploadResp.statusCode == 201 || uploadResp.statusCode == 200) {
         fileUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
