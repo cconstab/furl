@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2025-08-12
+
+### Added
+- **Unified Server**: Combined API and web servers into single `furl_server.dart` binary
+- Command line options for unified server (--port, --web-root, --help)
+- Better emoji-based logging and status messages
+- Automatic redirect from root path (/) to furl.html
+- Enhanced 404 error pages with navigation links
+
+### Changed
+- **BREAKING**: API endpoints now prefixed with `/api/` (e.g., `/api/health`, `/api/fetch/`)
+- Web interface now uses same-origin API calls for better security
+- Default server port consolidated to 8080 for both API and web
+- Simplified deployment requiring only one server process
+- Updated documentation to reflect single-server architecture
+
+### Deprecated
+- `furl_api.dart` - Use `furl_server.dart` instead
+- `furl_web.dart` - Use `furl_server.dart` instead
+
+### Improved
+- Easier deployment with single binary
+- Better resource utilization (one process vs two)
+- Simplified configuration and management
+- Enhanced user experience with consistent port usage
+
 ## [1.0.0] - 2025-08-12
 
 ### Added

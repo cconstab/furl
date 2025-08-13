@@ -8,9 +8,8 @@ A secure file sharing system that uses multi-layer encryption and client-side de
 # 1. Install dependencies
 dart pub get
 
-# 2. Start the servers (in separate terminals)
-dart run bin/furl_api.dart 8085    # API server
-dart run bin/furl_web.dart          # Web server
+# 2. Start the unified server
+dart run bin/furl_server.dart
 
 # 3. Share a file
 dart run bin/furl.dart @youratsign document.pdf 3600
@@ -29,14 +28,17 @@ dart run bin/furl.dart @youratsign document.pdf 3600
 
 ## Quick Start
 
-### 1. Start the Servers
+### 1. Start the Server
 
 ```bash
-# Terminal 1: Start API server
-dart run bin/furl_api.dart 8085
+# Start the unified server (default port 8080)
+dart run bin/furl_server.dart
 
-# Terminal 2: Start web server  
-dart run bin/furl_web.dart
+# Or specify a custom port
+dart run bin/furl_server.dart 8090
+
+# Or use command line options
+dart run bin/furl_server.dart --port 3000 --web-root public
 ```
 
 ### 2. Upload a File
@@ -55,7 +57,7 @@ This will:
 ### 3. Share with Recipient
 
 Send the recipient:
-1. **URL**: `http://localhost:8081/furl.html?atSign=@youratSign&key=_furl_xxxxx`
+1. **URL**: `http://localhost:8080/furl.html?atSign=@youratSign&key=_furl_xxxxx`
 2. **PIN**: The 9-character code displayed during upload
 
 ### 4. Download and Decrypt
@@ -113,18 +115,21 @@ dart run bin/furl.dart @alice document.pdf 3600 -v
 
 ## Server Configuration
 
-### API Server (bin/furl_api.dart)
-- **Default Port**: 8080 (or specify: `dart run bin/furl_api.dart 8085`)
-- **Endpoints**:
-  - `GET /atsign/{atSign}` - Resolve atSign to atServer
-  - `GET /fetch/{atSign}/{keyName}` - Fetch encrypted metadata
-  - `GET /download?url={url}` - Proxy file downloads
-  - `GET /health` - Health check
-
-### Web Server (bin/furl_web.dart)  
-- **Default Port**: 8081
-- **Purpose**: Serves the HTML interface for decryption
-- **Files**: Serves from `web/` directory
+### Unified Server (bin/furl_server.dart)
+- **Default Port**: 8080
+- **Command Line Options**:
+  - `--port <port>` - Specify server port
+  - `--web-root <path>` - Specify web files directory (default: web)
+  - `--help` - Show help message
+- **API Endpoints** (prefixed with `/api/`):
+  - `GET /api/atsign/{atSign}` - Resolve atSign to atServer
+  - `GET /api/fetch/{atSign}/{keyName}` - Fetch encrypted metadata
+  - `GET /api/download?url={url}` - Proxy file downloads
+  - `GET /api/health` - Health check
+- **Web Interface**:
+  - `GET /` - Redirects to furl.html
+  - `GET /furl.html` - File decryption interface
+  - Static files served from web/ directory
 
 ## Security Features
 
@@ -208,11 +213,11 @@ dart run bin/furl.dart @alice file.txt 3600 -v
 ### Check Server Status
 
 ```bash
-# Test API server
-curl http://localhost:8085/health
+# Test unified server health
+curl http://localhost:8080/api/health
 
-# Test web server  
-curl http://localhost:8081/furl.html
+# Test web interface
+curl http://localhost:8080/furl.html
 ```
 
 ## Security Considerations
@@ -238,8 +243,9 @@ dart test
 furl/
 ├── bin/                    # Executable scripts
 │   ├── furl.dart          # Main CLI tool for encryption/upload
-│   ├── furl_api.dart      # API server for atSign resolution
-│   └── furl_web.dart      # Static web server
+│   ├── furl_server.dart   # Unified server (API + Web)
+│   ├── furl_api.dart      # Legacy API server (deprecated)
+│   └── furl_web.dart      # Legacy web server (deprecated)
 ├── web/                   # Web interface
 │   └── furl.html          # Client-side decryption interface
 ├── test/                  # Test suite

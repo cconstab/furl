@@ -174,7 +174,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script>
         // Configuration
-        const API_BASE_URL = 'http://localhost:8080'; // Update this to your API server URL
+        const API_BASE_URL = window.location.origin; // Use same origin as the web interface
 
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
@@ -228,7 +228,7 @@
                 setStatus('Retrieving encrypted data from atPlatform...');
                 
                 const atSignName = atSign.startsWith('@') ? atSign.substring(1) : atSign;
-                const fetchUrl = `${API_BASE_URL}/fetch/${atSignName}/${keyName}`;
+                const fetchUrl = `${API_BASE_URL}/api/fetch/${atSignName}/${keyName}`;
                 
                 const secretsResponse = await fetch(fetchUrl);
                 if (!secretsResponse.ok) {
@@ -269,7 +269,7 @@
                 setStatus('Downloading encrypted file...');
 
                 // Step 3: Download the encrypted file via our API proxy
-                const proxyUrl = `${API_BASE_URL}/download?url=${encodeURIComponent(secrets.file_url)}`;
+                const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}`;
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);

@@ -155,11 +155,10 @@ Future<void> main(List<String> arguments) async {
 
     // 8. Print retrieval URL
     print('\nSend this URL to the recipient:');
-    print('http://localhost:8081/furl.html?atSign=$atSign&key=$atKeyName');
+    print('http://localhost:8080/furl.html?atSign=$atSign&key=$atKeyName');
     print('They will need the PIN: $pin');
-    print('\nNote: Make sure both servers are running:');
-    print('  API Server: dart run bin/furl_api.dart');
-    print('  Web Server: dart run bin/furl_web.dart');
+    print('\nNote: Make sure the server is running:');
+    print('  Unified Server: dart run bin/furl_server.dart');
 
     // Clean exit
     exit(0);
