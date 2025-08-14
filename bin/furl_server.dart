@@ -10,12 +10,13 @@ class FurlServer {
 
   HttpServer? _server;
   final String webRoot;
+  final String bindAddress;
   final int port;
   final String? sslCertPath;
   final String? sslKeyPath;
   final bool useHttps;
 
-  FurlServer({this.port = 8080, this.webRoot = 'web', this.sslCertPath, this.sslKeyPath})
+  FurlServer({this.port = 8080, this.webRoot = 'web', this.bindAddress = '0.0.0.0', this.sslCertPath, this.sslKeyPath})
     : useHttps = sslCertPath != null && sslKeyPath != null;
 
   Future<void> start() async {
@@ -25,11 +26,11 @@ class FurlServer {
       context.useCertificateChain(sslCertPath!);
       context.usePrivateKey(sslKeyPath!);
 
-      _server = await HttpServer.bindSecure('localhost', port, context);
-      print('🔒 Furl HTTPS Server started on https://localhost:$port');
+      _server = await HttpServer.bindSecure(bindAddress, port, context);
+      print('🔒 Furl HTTPS Server started on https://$bindAddress:$port');
     } else {
-      _server = await HttpServer.bind('localhost', port);
-      print('🚀 Furl Server started on http://localhost:$port');
+      _server = await HttpServer.bind(bindAddress, port);
+      print('🚀 Furl Server started on http://$bindAddress:$port');
     }
 
     print('📊 API Endpoints:');
@@ -41,6 +42,7 @@ class FurlServer {
     print('   GET / - Redirect to furl.html');
     print('   GET /furl.html - File decryption interface');
     print('   Static files served from: $webRoot/');
+    print('   Binding to all interfaces: $bindAddress (use --bind 127.0.0.1 for localhost only)');
     print('');
 
     await for (HttpRequest request in _server!) {
@@ -84,7 +86,9 @@ class FurlServer {
       await _handleHealth(request);
     } else if (apiPath == '/download' && uri.queryParameters.containsKey('url')) {
       final fileUrl = uri.queryParameters['url']!;
-      await _handleFileDownload(request, fileUrl);
+      final atSign = uri.queryParameters['atSign'];
+      final keyName = uri.queryParameters['keyName'];
+      await _handleFileDownload(request, fileUrl, atSign: atSign, keyName: keyName);
     } else if (pathSegments.length == 2 && pathSegments[0] == 'atsign') {
       final atSign = pathSegments[1];
       await _handleAtSignLookup(request, atSign);
@@ -343,18 +347,119 @@ class FurlServer {
     await request.response.close();
   }
 
-  Future<void> _handleFileDownload(HttpRequest request, String fileUrl) async {
+  Future<void> _handleFileDownload(HttpRequest request, String fileUrl, {String? atSign, String? keyName}) async {
+    File? tempFile;
     try {
       print('📁 Proxying file download: $fileUrl');
 
-      // Use curl to download the file as binary data
-      final result = await Process.run('curl', ['-s', '-L', fileUrl], stdoutEncoding: null);
+      // Create a more unique temp file name using URL components or atSign/keyName if available
+      final tempDir = Directory.systemTemp;
 
-      if (result.exitCode == 0) {
+      // Extract filename from URL for better traceability
+      String filename = 'unknown';
+      try {
+        final uri = Uri.parse(fileUrl);
+        if (uri.pathSegments.isNotEmpty) {
+          filename = uri.pathSegments.last;
+          // Remove .encrypted extension if present for cleaner naming
+          if (filename.endsWith('.encrypted')) {
+            filename = filename.substring(0, filename.length - 10);
+          }
+          // Make filename safe for filesystem
+          filename = filename.replaceAll(RegExp(r'[^\w\-\.]'), '_');
+        }
+      } catch (e) {
+        // Keep default 'unknown' if URL parsing fails
+      }
+
+      // Generate a random suffix to prevent collisions when multiple users download the same file
+      final random = DateTime.now().microsecondsSinceEpoch.toString().substring(7); // Last 6 digits for uniqueness
+
+      String uniqueId;
+
+      // Prefer atSign and keyName if available for better traceability
+      if (atSign != null && keyName != null) {
+        // Extract UUID from keyName (pattern: _furl_<UUID>)
+        final uuidMatch = RegExp(r'_furl_([a-f0-9]+)').firstMatch(keyName);
+        if (uuidMatch != null) {
+          final uuid = uuidMatch.group(1)!;
+          // Truncate UUID to first 8 chars and include filename
+          final shortUuid = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
+          final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
+          uniqueId = '${safeAtSign}_${shortUuid}_${filename}_${random}';
+          print('📋 Using atSign, short UUID and filename for temp file: $uniqueId');
+        } else {
+          // Fallback to atSign and keyName
+          final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
+          final safeKeyName = keyName.replaceAll(RegExp(r'[^\w\-]'), '_');
+          uniqueId = '${safeAtSign}_${safeKeyName}_${filename}_${random}';
+          print('📋 Using atSign, keyName and filename for temp file: $uniqueId');
+        }
+      } else {
+        // Extract unique identifier from fileUrl to avoid collisions
+        try {
+          final uri = Uri.parse(fileUrl);
+          final pathSegments = uri.pathSegments;
+
+          if (pathSegments.isNotEmpty) {
+            // Extract the bin ID from filebin URLs (e.g., furl340e4ecf3f8541a69d43aa632ac884b5)
+            final binId = pathSegments[0];
+
+            // Use bin ID and filename for better traceability
+            uniqueId = '${binId.replaceAll(RegExp(r'[^\w\-]'), '_')}_${filename}_${random}';
+          } else {
+            // Fallback to URL hash if parsing fails
+            uniqueId = '${fileUrl.hashCode.abs().toString()}_${filename}_${random}';
+          }
+        } catch (e) {
+          // Fallback to URL hash if URL parsing fails
+          uniqueId = '${fileUrl.hashCode.abs().toString()}_${filename}_${random}';
+        }
+        print('📋 Using URL-based identifier and filename for temp file: $uniqueId');
+      }
+
+      // Ensure the temp file name is unique - regenerate if it already exists
+      String baseUniqueId = uniqueId;
+      int attempt = 0;
+      do {
+        if (attempt > 0) {
+          // Generate a new random suffix if file exists
+          final newRandom = DateTime.now().microsecondsSinceEpoch.toString().substring(7);
+          uniqueId = '${baseUniqueId}_${newRandom}';
+          print('🔄 Temp file exists, trying new name: $uniqueId');
+        }
+        tempFile = File('${tempDir.path}/${uniqueId}.tmp');
+        attempt++;
+      } while (await tempFile.exists() && attempt < 10); // Safety limit of 10 attempts
+
+      if (await tempFile.exists()) {
+        throw Exception('Unable to generate unique temp file name after 10 attempts');
+      }
+
+      print('📁 Using temp file: ${tempFile.path}');
+
+      // Use curl to download directly to temp file (no memory buffering)
+      final result = await Process.run('curl', [
+        '-s', // Silent
+        '-L', // Follow redirects
+        '-o', tempFile.path, // Output to file
+        fileUrl,
+      ]);
+
+      if (result.exitCode == 0 && await tempFile.exists()) {
+        final fileSize = await tempFile.length();
+        print('📦 Downloaded ${fileSize} bytes to temp file via curl');
+
+        // Set response headers
         request.response.statusCode = 200;
         request.response.headers.contentType = ContentType.binary;
-        // result.stdout is now List<int> when stdoutEncoding is null
-        request.response.add(result.stdout as List<int>);
+        request.response.headers.contentLength = fileSize;
+
+        // Stream the file directly from disk to response (no memory buffering)
+        final fileStream = tempFile.openRead();
+        await fileStream.pipe(request.response);
+
+        print('✅ Successfully streamed ${fileSize} bytes from temp file');
       } else {
         throw Exception('Curl failed with exit code ${result.exitCode}: ${result.stderr}');
       }
@@ -370,6 +475,16 @@ class FurlServer {
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
+    } finally {
+      // Clean up temp file
+      if (tempFile != null && await tempFile.exists()) {
+        try {
+          await tempFile.delete();
+          print('🗑️ Cleaned up temp file');
+        } catch (e) {
+          print('⚠️ Failed to delete temp file: $e');
+        }
+      }
     }
     await request.response.close();
   }
@@ -482,7 +597,7 @@ class FurlServer {
         'availableEndpoints': [
           'GET /api/atsign/{atSign}',
           'GET /api/fetch/{atSign}/{keyName}',
-          'GET /api/download?url={url}',
+          'GET /api/download?url={url}[&atSign={atSign}&keyName={keyName}]',
           'GET /api/health',
         ],
         'timestamp': DateTime.now().toIso8601String(),
@@ -514,6 +629,7 @@ class FurlServer {
 Future<void> main(List<String> arguments) async {
   int port = 8080;
   String webRoot = 'web';
+  String bindAddress = '0.0.0.0'; // Default to all interfaces
   String? sslCertPath;
   String? sslKeyPath;
 
@@ -526,6 +642,8 @@ Future<void> main(List<String> arguments) async {
       }
     } else if (arguments[i] == '--web-root' && i + 1 < arguments.length) {
       webRoot = arguments[i + 1];
+    } else if ((arguments[i] == '--bind' || arguments[i] == '--host') && i + 1 < arguments.length) {
+      bindAddress = arguments[i + 1];
     } else if (arguments[i] == '--ssl-cert' && i + 1 < arguments.length) {
       sslCertPath = arguments[i + 1];
     } else if (arguments[i] == '--ssl-key' && i + 1 < arguments.length) {
@@ -533,20 +651,28 @@ Future<void> main(List<String> arguments) async {
     } else if (arguments[i] == '--help' || arguments[i] == '-h') {
       print('Furl Unified Server');
       print('');
-      print('Usage: dart run bin/furl_server.dart [options]');
+      print('Usage: furl_server [options]');
       print('');
       print('Options:');
       print('  --port <port>        Server port (default: 8080)');
+      print('  --bind <address>     Bind address (default: 0.0.0.0 - all interfaces)');
+      print('  --host <address>     Alias for --bind');
       print('  --web-root <path>    Web root directory (default: web)');
       print('  --ssl-cert <path>    SSL certificate file for HTTPS');
       print('  --ssl-key <path>     SSL private key file for HTTPS');
       print('  --help, -h           Show this help message');
       print('');
+      print('Bind Address Examples:');
+      print('  0.0.0.0              Bind to all interfaces (default, accessible externally)');
+      print('  127.0.0.1            Bind to localhost only (local access only)');
+      print('  192.168.1.100        Bind to specific IP address');
+      print('');
       print('Examples:');
-      print('  dart run bin/furl_server.dart');
-      print('  dart run bin/furl_server.dart --port 8085');
-      print('  dart run bin/furl_server.dart --port 3000 --web-root public');
-      print('  dart run bin/furl_server.dart --port 443 --ssl-cert server.crt --ssl-key server.key');
+      print('  furl_server');
+      print('  furl_server --port 8085');
+      print('  furl_server --port 3000 --bind 127.0.0.1');
+      print('  furl_server --port 3000 --web-root public');
+      print('  furl_server --port 443 --ssl-cert server.crt --ssl-key server.key');
       print('');
       print('HTTPS Notes:');
       print('  - Both --ssl-cert and --ssl-key must be provided for HTTPS');
@@ -582,7 +708,13 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
-  final server = FurlServer(port: port, webRoot: webRoot, sslCertPath: sslCertPath, sslKeyPath: sslKeyPath);
+  final server = FurlServer(
+    port: port,
+    webRoot: webRoot,
+    bindAddress: bindAddress,
+    sslCertPath: sslCertPath,
+    sslKeyPath: sslKeyPath,
+  );
 
   // Handle Ctrl+C gracefully
   ProcessSignal.sigint.watch().listen((signal) async {

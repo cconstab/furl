@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:random_string/random_string.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -13,59 +14,107 @@ import 'package:uuid/uuid.dart';
 /// Display a progress bar for long-running operations
 void showProgressBar(String label, int current, int total, {bool quiet = false}) {
   if (quiet) return; // Skip progress bars in quiet mode
-  
+
   const int barWidth = 40;
   final progress = (current / total).clamp(0.0, 1.0);
   final filledWidth = (progress * barWidth).round();
   final emptyWidth = barWidth - filledWidth;
-  
+
   final bar = '█' * filledWidth + '░' * emptyWidth;
   final percentage = (progress * 100).toStringAsFixed(1);
-  
+
   stdout.write('\r$label [${bar}] ${percentage}%');
   if (current >= total) {
     stdout.writeln(' ✓');
   }
-}/// Simulate progress for encryption (since it's usually fast)
-Future<void> showEncryptionProgress(String fileName, int fileSize, {bool quiet = false}) async {
-  const steps = 20;
-  final stepDelay = Duration(milliseconds: 50);
+}
 
-  for (int i = 0; i <= steps; i++) {
-    showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
-    if (i < steps && !quiet) await Future.delayed(stepDelay);
+/// Show encryption progress - real progress for large files, simulated for small files
+Future<Uint8List> encryptWithProgress(
+  String fileName,
+  Uint8List fileBytes,
+  encrypt.Encrypter encrypter,
+  encrypt.IV iv, {
+  bool quiet = false,
+}) async {
+  final fileSize = fileBytes.length;
+
+  if (fileSize < 1024 * 1024) {
+    // Small files (< 1MB): Fast simulated progress
+    if (!quiet) {
+      const steps = 20;
+      final stepDelay = Duration(milliseconds: 50);
+
+      for (int i = 0; i <= steps; i++) {
+        showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
+        if (i < steps) await Future.delayed(stepDelay);
+      }
+    }
+  } else {
+    // Large files (≥ 1MB): Progress based on estimated time
+    if (!quiet) {
+      // Estimate ~50MB/s encryption speed
+      final estimatedSeconds = (fileSize / (50 * 1024 * 1024)).clamp(1.0, 30.0);
+      final steps = (estimatedSeconds * 10).round(); // 10 updates per second
+      final stepDelay = Duration(milliseconds: (estimatedSeconds * 1000 / steps).round());
+
+      // Start progress display
+      for (int i = 0; i < steps; i++) {
+        showProgressBar('🔒 Encrypting $fileName', i, steps, quiet: quiet);
+        await Future.delayed(stepDelay);
+      }
+      // Complete the progress display
+      showProgressBar('🔒 Encrypting $fileName', steps, steps, quiet: quiet);
+    }
   }
+
+  // Perform the actual encryption (not chunked to maintain integrity)
+  final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+
+  return encryptedFile.bytes;
 }
 
 /// Upload with progress tracking
 Future<http.Response> uploadWithProgress(String url, Uint8List data, String fileName) async {
-  final uri = Uri.parse(url);
-  final request = http.MultipartRequest('POST', uri);
+  final dio = Dio();
 
-  // Create multipart file
-  final multipartFile = http.MultipartFile.fromBytes('file', data, filename: '${fileName}.encrypted');
+  try {
+    // Upload raw binary data (like original http.post) with progress tracking
+    final response = await dio.post(
+      url,
+      data: data, // Send raw bytes, not FormData
+      options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
+      onSendProgress: (int sent, int total) {
+        showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
+      },
+    );
 
-  request.files.add(multipartFile);
-  request.headers['Content-Type'] = 'application/octet-stream';
+    // Convert Dio response to http.Response for compatibility
+    return http.Response(
+      response.data.toString(),
+      response.statusCode ?? 500,
+      headers: response.headers.map.map((key, value) => MapEntry(key, value.join('; '))),
+    );
+  } catch (e) {
+    // Fallback to original http implementation if Dio fails
+    print('Dio upload failed, falling back to http: $e');
 
-  // Send request with progress tracking
-  final streamedResponse = await request.send();
+    final uri = Uri.parse(url);
+    final request = http.MultipartRequest('POST', uri);
+    final multipartFile = http.MultipartFile.fromBytes('file', data, filename: '${fileName}.encrypted');
+    request.files.add(multipartFile);
+    request.headers['Content-Type'] = 'application/octet-stream';
 
-  // Simulate upload progress (since we can't track actual upload progress easily with http package)
-  const steps = 30;
-  final stepDelay = Duration(milliseconds: 100);
+    final streamedResponse = await request.send();
+    showProgressBar('📤 Uploading ${fileName}.encrypted', 1, 1);
 
-  for (int i = 0; i <= steps; i++) {
-    showProgressBar('� Uploading ${fileName}.encrypted', i, steps);
-    if (i < steps) await Future.delayed(stepDelay);
+    return await http.Response.fromStream(streamedResponse);
   }
-
-  return await http.Response.fromStream(streamedResponse);
 }
 
 /// Parse TTL string format like "10s", "5m", "2h", "1d" into seconds
 int parseTtl(String ttlString) {
-  const int maxTtl = 7 * 86400; // 7 days in seconds
+  const int maxTtl = 6 * 86400; // 6 days in seconds (filebin.net limit)
 
   if (ttlString.isEmpty) return 3600; // Default 1 hour
 
@@ -74,7 +123,7 @@ int parseTtl(String ttlString) {
   if (numOnly != null) {
     if (numOnly > maxTtl) {
       print('TTL too long: ${formatDuration(numOnly)}');
-      print('Maximum allowed TTL is 7 days (${formatDuration(maxTtl)})');
+      print('Maximum allowed TTL is 6 days (${formatDuration(maxTtl)})');
       exit(1);
     }
     return numOnly;
@@ -114,7 +163,7 @@ int parseTtl(String ttlString) {
 
   if (ttlSeconds > maxTtl) {
     print('TTL too long: ${formatDuration(ttlSeconds)}');
-    print('Maximum allowed TTL is 7 days (${formatDuration(maxTtl)})');
+    print('Maximum allowed TTL is 6 days (${formatDuration(maxTtl)})');
     exit(1);
   }
 
@@ -150,7 +199,7 @@ Future<void> main(List<String> arguments) async {
     print('Arguments:');
     print('  atSign                Your atSign (e.g., @alice)');
     print('  file_path             Path to the file to encrypt and share');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
+    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
     print('');
     print('Options:');
     print('  -v, --verbose         Enable verbose logging');
@@ -163,7 +212,7 @@ Future<void> main(List<String> arguments) async {
     print('  10m                   10 minutes');
     print('  2h                    2 hours');
     print('  1d                    1 day');
-    print('  7d                    7 days (maximum)');
+    print('  6d                    6 days (maximum)');
     print('  3600                  3600 seconds (1 hour)');
     print('');
     print('Examples:');
@@ -187,7 +236,7 @@ Future<void> main(List<String> arguments) async {
     print('Usage: furl <atSign> <file_path> <ttl> [options]');
     print('');
     print('Arguments:');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 7d, or seconds as number)');
+    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
     print('');
     print('Examples:');
     print('  furl @alice document.pdf 1h');
@@ -236,13 +285,8 @@ Future<void> main(List<String> arguments) async {
     final fileBytes = await File(filePath).readAsBytes();
     final fileName = filePath.split(Platform.pathSeparator).last;
 
-    // Show encryption progress
-    if (!quiet) {
-      await showEncryptionProgress(fileName, fileBytes.length, quiet: quiet);
-    }
-
     final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.cbc));
-    final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+    final encryptedBytes = await encryptWithProgress(fileName, fileBytes, encrypter, iv, quiet: quiet);
 
     // 4. Upload encrypted file to filebin.net
 
@@ -254,26 +298,15 @@ Future<void> main(List<String> arguments) async {
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
 
       // Upload file directly to bin with progress tracking
-      final uploadResp = await http.post(
-        Uri.parse('https://filebin.net/$binId/${fileName}.encrypted'),
-        headers: {'Content-Type': 'application/octet-stream'},
-        body: encryptedFile.bytes,
+      final uploadResp = await uploadWithProgress(
+        'https://filebin.net/$binId/${fileName}.encrypted',
+        encryptedBytes,
+        fileName,
       );
-
-      // Show upload progress
-      if (!quiet) {
-        const steps = 30;
-        final stepDelay = Duration(milliseconds: 100);
-
-        for (int i = 0; i <= steps; i++) {
-          showProgressBar('📤 Uploading ${fileName}.encrypted', i, steps, quiet: quiet);
-          if (i < steps && !quiet) await Future.delayed(stepDelay);
-        }
-      }
 
       if (uploadResp.statusCode == 201 || uploadResp.statusCode == 200) {
         fileUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
-       // print('File uploaded to: $fileUrl');
+        // print('File uploaded to: $fileUrl');
       } else {
         throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
       }
