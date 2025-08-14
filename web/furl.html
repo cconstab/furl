@@ -171,7 +171,6 @@
         <div id="status"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script>
         // Configuration
         const API_BASE_URL = window.location.origin; // Use same origin as the web interface
@@ -213,6 +212,104 @@
             btnText.textContent = text;
         }
 
+        // Helper function to convert base64 to ArrayBuffer
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Helper function to increment CTR counter by a specific number of blocks
+        function incrementCounter(counter, blockCount) {
+            const result = new Uint8Array(counter);
+            
+            // Convert blockCount to bytes and add to counter (big-endian)
+            let carry = blockCount;
+            
+            // Work from right to left (least significant to most significant)
+            for (let i = result.length - 1; i >= 0 && carry > 0; i--) {
+                const sum = result[i] + (carry & 0xFF);
+                result[i] = sum & 0xFF;
+                carry = Math.floor(carry / 256);
+            }
+            
+            return result;
+        }
+
+        // Simplified chunked decryption - decrypt continuous streams
+        async function decryptInChunks(key, initialIv, encryptedData) {
+            // Much smaller chunks to reduce memory pressure
+            const chunkSize = 2 * 1024 * 1024; // 2MB chunks
+            const numChunks = Math.ceil(encryptedData.length / chunkSize);
+            const decryptedChunks = [];
+            
+            console.log(`Trying chunked decryption: ${numChunks} chunks of up to ${chunkSize} bytes each`);
+            console.log('Initial IV:', Array.from(new Uint8Array(initialIv)).map(b => b.toString(16).padStart(2, '0')).join(''));
+            
+            // Create a running counter state
+            let currentCounter = new Uint8Array(initialIv);
+            
+            for (let i = 0; i < numChunks; i++) {
+                const start = i * chunkSize;
+                const end = Math.min(start + chunkSize, encryptedData.length);
+                const chunk = encryptedData.slice(start, end);
+                
+                console.log(`Chunk ${i + 1}/${numChunks}: bytes ${start}-${end-1} (${chunk.length} bytes)`);
+                console.log(`  Counter: ${Array.from(currentCounter).map(b => b.toString(16).padStart(2, '0')).join('')}`);
+                
+                try {
+                    // Decrypt this chunk with the current counter
+                    const decryptedChunk = await crypto.subtle.decrypt(
+                        {
+                            name: 'AES-CTR',
+                            counter: currentCounter.slice(), // Copy the counter
+                            length: 128
+                        },
+                        key,
+                        chunk
+                    );
+                    
+                    const decryptedBytes = new Uint8Array(decryptedChunk);
+                    decryptedChunks.push(decryptedBytes);
+                    
+                    console.log(`  Successfully decrypted ${decryptedBytes.length} bytes`);
+                    
+                    // Advance the counter by the number of 16-byte blocks processed
+                    const blocksProcessed = Math.ceil(chunk.length / 16);
+                    currentCounter = incrementCounter(currentCounter, blocksProcessed);
+                    
+                    // Update progress
+                    const progress = Math.round(((i + 1) / numChunks) * 100);
+                    setStatus(`Decrypting... ${progress}%`);
+                    
+                    // Allow other operations to proceed
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                    
+                } catch (error) {
+                    console.error(`Failed to decrypt chunk ${i + 1}:`, error);
+                    throw new Error(`Chunked decryption failed at chunk ${i + 1}: ${error.message}`);
+                }
+            }
+            
+            // Combine all decrypted chunks
+            setStatus('Assembling decrypted file...');
+            const totalLength = decryptedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            
+            for (const chunk of decryptedChunks) {
+                result.set(chunk, offset);
+                offset += chunk.length;
+            }
+            
+            console.log(`Successfully assembled ${totalLength} bytes from ${numChunks} chunks`);
+            return result;
+        }
+
         async function downloadAndDecrypt() {
             const pin = document.getElementById('pin').value;
 
@@ -240,72 +337,184 @@
                 
                 setStatus('Decrypting AES key with your PIN...');
 
-                // Step 2: Decrypt the AES key using the PIN
-                const salt = CryptoJS.enc.Base64.parse(secrets.aes_key_salt);
-                const pinBytes = CryptoJS.enc.Utf8.parse(pin);
+                // Step 2: Decrypt the AES key using the PIN with WebCrypto
+                const salt = base64ToArrayBuffer(secrets.aes_key_salt);
+                const pinBytes = new TextEncoder().encode(pin);
                 
-                // Match the Dart key derivation: SHA256(pinBytes + salt)
-                const combinedBytes = pinBytes.concat(salt);
-                const pinKey = CryptoJS.SHA256(combinedBytes);
+                // Create combined bytes for key derivation (PIN + salt)
+                const combinedBytes = new Uint8Array(pinBytes.length + salt.byteLength);
+                combinedBytes.set(new Uint8Array(pinBytes));
+                combinedBytes.set(new Uint8Array(salt), pinBytes.length);
                 
-                console.log('Salt:', CryptoJS.enc.Base64.stringify(salt));
-                console.log('PIN key (SHA256):', CryptoJS.enc.Hex.stringify(pinKey));
+                // Hash with SHA-256 to match Dart implementation (produces 32 bytes = 256 bits)
+                const pinKeyArrayBuffer = await crypto.subtle.digest('SHA-256', combinedBytes);
                 
-                const encryptedAesKey = CryptoJS.enc.Base64.parse(secrets.aes_key);
-                const aesKeyIv = CryptoJS.enc.Base64.parse(secrets.aes_key_iv);
+                console.log('Salt bytes:', salt.byteLength);
+                console.log('PIN key bytes:', pinKeyArrayBuffer.byteLength);
                 
-                const aesKey = CryptoJS.AES.decrypt(
-                    CryptoJS.enc.Base64.stringify(encryptedAesKey),
-                    pinKey,
-                    { iv: aesKeyIv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+                // Import PIN key for AES-CTR decryption (32 bytes = 256-bit key)
+                const pinKey = await crypto.subtle.importKey(
+                    'raw',
+                    pinKeyArrayBuffer,
+                    { name: 'AES-CTR' },
+                    false,
+                    ['decrypt']
                 );
-
-                console.log('Decrypted AES key length:', aesKey.sigBytes);
                 
-                if (aesKey.sigBytes === 0) {
-                    throw new Error('Invalid PIN or corrupted data');
+                const encryptedAesKeyBuffer = base64ToArrayBuffer(secrets.aes_key);
+                const aesKeyIvBuffer = base64ToArrayBuffer(secrets.aes_key_iv);
+                
+                console.log('Encrypted AES key bytes:', encryptedAesKeyBuffer.byteLength);
+                console.log('AES key IV bytes:', aesKeyIvBuffer.byteLength);
+                
+                // Decrypt AES key using CTR mode
+                const aesKeyBuffer = await crypto.subtle.decrypt(
+                    {
+                        name: 'AES-CTR',
+                        counter: aesKeyIvBuffer,
+                        length: 128
+                    },
+                    pinKey,
+                    encryptedAesKeyBuffer
+                );
+                
+                console.log('Decrypted AES key length:', aesKeyBuffer.byteLength);
+                console.log('Expected: 32 bytes, got:', aesKeyBuffer.byteLength);
+                
+                // Log the actual bytes for debugging
+                const keyBytes = new Uint8Array(aesKeyBuffer);
+                console.log('Decrypted key bytes (hex):', Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+                
+                if (aesKeyBuffer.byteLength === 0) {
+                    throw new Error('Invalid PIN - no key decrypted');
                 }
+                
+                // Handle case where we get more bytes than expected (possibly due to Dart encrypt package behavior)
+                let actualKeyBuffer;
+                if (aesKeyBuffer.byteLength === 48) {
+                    // Take first 32 bytes (the actual AES key, ignore any padding/metadata)
+                    console.log('Got 48 bytes, taking first 32 bytes as AES key');
+                    actualKeyBuffer = aesKeyBuffer.slice(0, 32);
+                } else if (aesKeyBuffer.byteLength === 32) {
+                    actualKeyBuffer = aesKeyBuffer;
+                } else if (aesKeyBuffer.byteLength === 16) {
+                    actualKeyBuffer = aesKeyBuffer;
+                } else {
+                    throw new Error(`Invalid key size: expected 16, 32, or 48 bytes, got ${aesKeyBuffer.byteLength} bytes`);
+                }
+                
+                // Import the file decryption key (should be 32 bytes = 256-bit key)
+                const fileKey = await crypto.subtle.importKey(
+                    'raw',
+                    actualKeyBuffer,
+                    { name: 'AES-CTR' },
+                    false,
+                    ['decrypt']
+                );
 
                 setStatus('Downloading encrypted file...');
 
-                // Step 3: Download the encrypted file via our API proxy
+                // Step 3: Download entire file and decrypt as one stream
                 const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}&atSign=${encodeURIComponent(atSign)}&keyName=${encodeURIComponent(keyName)}`;
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);
                 }
                 
-                const encryptedFileData = await fileResponse.arrayBuffer();
-
-                setStatus('Decrypting file...');
-
-                // Step 4: Decrypt the file
-                const fileIv = CryptoJS.enc.Base64.parse(secrets.file_iv);
-                const encryptedFileBytes = CryptoJS.lib.WordArray.create(encryptedFileData);
+                setStatus('Downloading and decrypting file...');
                 
-                console.log('File IV:', CryptoJS.enc.Base64.stringify(fileIv));
-                console.log('Encrypted file size:', encryptedFileData.byteLength);
-                console.log('AES key for file decryption:', CryptoJS.enc.Hex.stringify(aesKey));
+                // Check content length to determine approach
+                const contentLength = fileResponse.headers.get('content-length');
+                const fileSize = contentLength ? parseInt(contentLength) : 0;
                 
-                const decryptedFile = CryptoJS.AES.decrypt(
-                    CryptoJS.enc.Base64.stringify(encryptedFileBytes),
-                    aesKey,
-                    { iv: fileIv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
-                );
-
-                console.log('Decrypted file size:', decryptedFile.sigBytes);
+                console.log('Encrypted file size:', fileSize, 'bytes');
                 
-                if (decryptedFile.sigBytes === 0) {
-                    throw new Error('Failed to decrypt file');
+                // For large files (>50MB), warn user about memory usage
+                if (fileSize > 50 * 1024 * 1024) {
+                    setStatus(`Large file detected (${Math.round(fileSize / 1024 / 1024)}MB). Processing...`);
                 }
-
-                setStatus('Preparing download...');
-
-                // Step 5: Convert to blob and trigger download
-                const decryptedBytes = new Uint8Array(decryptedFile.sigBytes);
-                const words = decryptedFile.words;
-                for (let i = 0; i < decryptedFile.sigBytes; i++) {
-                    decryptedBytes[i] = (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+                
+                // Use streaming approach for better memory efficiency
+                const reader = fileResponse.body.getReader();
+                const chunks = [];
+                let receivedLength = 0;
+                let lastProgressUpdate = Date.now();
+                
+                // Read all chunks with throttled progress updates
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    chunks.push(value);
+                    receivedLength += value.length;
+                    
+                    // Throttle progress updates to every 100ms for performance
+                    const now = Date.now();
+                    if (fileSize > 0 && (now - lastProgressUpdate > 100)) {
+                        const progress = Math.round((receivedLength / fileSize) * 100);
+                        setStatus(`Downloading... ${progress}%`);
+                        lastProgressUpdate = now;
+                    }
+                }
+                
+                setStatus('Assembling file...');
+                
+                // Combine chunks efficiently using a single typed array
+                const encryptedArrayBuffer = new Uint8Array(receivedLength);
+                let position = 0;
+                for (const chunk of chunks) {
+                    encryptedArrayBuffer.set(chunk, position);
+                    position += chunk.length;
+                }
+                
+                // Clear chunks array to free memory
+                chunks.length = 0;
+                
+                setStatus('Decrypting file...');
+                
+                const fileIvBuffer = base64ToArrayBuffer(secrets.file_iv);
+                
+                console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
+                console.log('File IV size:', fileIvBuffer.byteLength);
+                
+                let decryptedBytes;
+                
+                // For files larger than 5MB, try a different approach
+                if (encryptedArrayBuffer.byteLength > 5 * 1024 * 1024) {
+                    console.log('Large file detected, trying progressive decryption');
+                    try {
+                        // First try single-pass decryption
+                        console.log('Attempting single-pass decryption for large file...');
+                        const decryptedArrayBuffer = await crypto.subtle.decrypt(
+                            {
+                                name: 'AES-CTR',
+                                counter: fileIvBuffer,
+                                length: 128
+                            },
+                            fileKey,
+                            encryptedArrayBuffer
+                        );
+                        
+                        decryptedBytes = new Uint8Array(decryptedArrayBuffer);
+                        console.log('Single-pass decryption succeeded for large file');
+                    } catch (error) {
+                        console.log('Single-pass failed, trying chunked approach:', error.message);
+                        decryptedBytes = await decryptInChunks(fileKey, fileIvBuffer, encryptedArrayBuffer);
+                    }
+                } else {
+                    console.log('Using single-pass decryption for smaller file');
+                    // Decrypt the file with WebCrypto CTR mode
+                    const decryptedArrayBuffer = await crypto.subtle.decrypt(
+                        {
+                            name: 'AES-CTR',
+                            counter: fileIvBuffer,
+                            length: 128
+                        },
+                        fileKey,
+                        encryptedArrayBuffer
+                    );
+                    
+                    decryptedBytes = new Uint8Array(decryptedArrayBuffer);
                 }
 
                 console.log('Converted to bytes, first 50 chars as text:', 
@@ -313,6 +522,7 @@
                 console.log('First 20 bytes as hex:', 
                     Array.from(decryptedBytes.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
 
+                // Step 4: Create blob and trigger download
                 const blob = new Blob([decryptedBytes]);
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
