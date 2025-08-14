@@ -355,6 +355,23 @@ class FurlServer {
       // Create a more unique temp file name using URL components or atSign/keyName if available
       final tempDir = Directory.systemTemp;
 
+      // Extract filename from URL for better traceability
+      String filename = 'unknown';
+      try {
+        final uri = Uri.parse(fileUrl);
+        if (uri.pathSegments.isNotEmpty) {
+          filename = uri.pathSegments.last;
+          // Remove .encrypted extension if present for cleaner naming
+          if (filename.endsWith('.encrypted')) {
+            filename = filename.substring(0, filename.length - 10);
+          }
+          // Make filename safe for filesystem
+          filename = filename.replaceAll(RegExp(r'[^\w\-\.]'), '_');
+        }
+      } catch (e) {
+        // Keep default 'unknown' if URL parsing fails
+      }
+
       // Generate a random suffix to prevent collisions when multiple users download the same file
       final random = DateTime.now().microsecondsSinceEpoch.toString().substring(7); // Last 6 digits for uniqueness
 
@@ -366,17 +383,17 @@ class FurlServer {
         final uuidMatch = RegExp(r'_furl_([a-f0-9]+)').firstMatch(keyName);
         if (uuidMatch != null) {
           final uuid = uuidMatch.group(1)!;
-          // Truncate UUID to first 8 chars and add random suffix
+          // Truncate UUID to first 8 chars and include filename
           final shortUuid = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
           final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
-          uniqueId = '${safeAtSign}_${shortUuid}_${random}';
-          print('📋 Using atSign and short UUID for temp file: $uniqueId');
+          uniqueId = '${safeAtSign}_${shortUuid}_${filename}_${random}';
+          print('📋 Using atSign, short UUID and filename for temp file: $uniqueId');
         } else {
           // Fallback to atSign and keyName
           final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
           final safeKeyName = keyName.replaceAll(RegExp(r'[^\w\-]'), '_');
-          uniqueId = '${safeAtSign}_${safeKeyName}_${random}';
-          print('📋 Using atSign and keyName for temp file: $uniqueId');
+          uniqueId = '${safeAtSign}_${safeKeyName}_${filename}_${random}';
+          print('📋 Using atSign, keyName and filename for temp file: $uniqueId');
         }
       } else {
         // Extract unique identifier from fileUrl to avoid collisions
@@ -388,17 +405,17 @@ class FurlServer {
             // Extract the bin ID from filebin URLs (e.g., furl340e4ecf3f8541a69d43aa632ac884b5)
             final binId = pathSegments[0];
 
-            // Use only the bin ID as the unique identifier (clean fallback naming)
-            uniqueId = '${binId.replaceAll(RegExp(r'[^\w\-]'), '_')}_${random}';
+            // Use bin ID and filename for better traceability
+            uniqueId = '${binId.replaceAll(RegExp(r'[^\w\-]'), '_')}_${filename}_${random}';
           } else {
             // Fallback to URL hash if parsing fails
-            uniqueId = '${fileUrl.hashCode.abs().toString()}_${random}';
+            uniqueId = '${fileUrl.hashCode.abs().toString()}_${filename}_${random}';
           }
         } catch (e) {
           // Fallback to URL hash if URL parsing fails
-          uniqueId = '${fileUrl.hashCode.abs().toString()}_${random}';
+          uniqueId = '${fileUrl.hashCode.abs().toString()}_${filename}_${random}';
         }
-        print('📋 Using URL-based identifier for temp file: $uniqueId');
+        print('📋 Using URL-based identifier and filename for temp file: $uniqueId');
       }
 
       // Ensure the temp file name is unique - regenerate if it already exists
