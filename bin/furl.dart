@@ -29,9 +29,8 @@ void showProgressBar(String label, int current, int total, {bool quiet = false})
   }
 }
 
-/// Encryption using AES-CTR mode for memory efficiency
-/// CTR mode allows streaming by encrypting the entire file efficiently
-/// Memory benefits come from CTR mode's inherent efficiency and WebCrypto compatibility
+/// Encryption using AES-CTR mode with proper memory handling
+/// For CTR mode, we need to encrypt the entire file as one stream to maintain counter integrity
 Future<Uint8List> encryptFileStream(
   String filePath,
   encrypt.Encrypter encrypter,
@@ -40,20 +39,25 @@ Future<Uint8List> encryptFileStream(
   int chunkSize = 1024 * 1024, // 1MB chunks for progress display only
 }) async {
   final file = File(filePath);
-  final fileSize = await file.length();
   final fileName = filePath.split(Platform.pathSeparator).last;
   
-  // For CTR mode, we can encrypt the entire file at once
-  // The streaming benefit comes during decryption
+  if (!quiet) {
+    showProgressBar('🔒 Reading $fileName', 0, 100, quiet: quiet);
+  }
+  
+  // Read entire file - CTR mode requires sequential processing
   final fileBytes = await file.readAsBytes();
   
   if (!quiet) {
-    // Show progress while reading file
-    showProgressBar('🔒 Encrypting $fileName', fileSize, fileSize, quiet: quiet);
+    showProgressBar('🔒 Encrypting $fileName', 50, 100, quiet: quiet);
   }
   
-  // Encrypt entire file with CTR mode (no manual chunking needed)
+  // Encrypt entire file with CTR mode (maintains counter integrity)
   final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+  
+  if (!quiet) {
+    showProgressBar('🔒 Encrypting $fileName', 100, 100, quiet: quiet);
+  }
   
   return encryptedFile.bytes;
 }
