@@ -16,13 +16,8 @@ class FurlServer {
   final String? sslKeyPath;
   final bool useHttps;
 
-  FurlServer({
-    this.port = 8080, 
-    this.webRoot = 'web', 
-    this.bindAddress = '0.0.0.0',
-    this.sslCertPath, 
-    this.sslKeyPath
-  }) : useHttps = sslCertPath != null && sslKeyPath != null;
+  FurlServer({this.port = 8080, this.webRoot = 'web', this.bindAddress = '0.0.0.0', this.sslCertPath, this.sslKeyPath})
+    : useHttps = sslCertPath != null && sslKeyPath != null;
 
   Future<void> start() async {
     if (useHttps) {
@@ -351,22 +346,36 @@ class FurlServer {
   }
 
   Future<void> _handleFileDownload(HttpRequest request, String fileUrl) async {
+    File? tempFile;
     try {
       print('📁 Proxying file download: $fileUrl');
 
-      // Use curl directly - it's proven to work reliably with filebin
-      final result = await Process.run('curl', ['-s', '-L', fileUrl], stdoutEncoding: null);
+      // Create a temporary file for streaming
+      final tempDir = Directory.systemTemp;
+      tempFile = File('${tempDir.path}/furl_download_${DateTime.now().millisecondsSinceEpoch}.tmp');
 
-      if (result.exitCode == 0) {
-        final bytes = result.stdout as List<int>;
-        print('📦 Downloaded ${bytes.length} bytes via curl');
+      // Use curl to download directly to temp file (no memory buffering)
+      final result = await Process.run('curl', [
+        '-s', // Silent
+        '-L', // Follow redirects
+        '-o', tempFile.path, // Output to file
+        fileUrl,
+      ]);
 
+      if (result.exitCode == 0 && await tempFile.exists()) {
+        final fileSize = await tempFile.length();
+        print('📦 Downloaded ${fileSize} bytes to temp file via curl');
+
+        // Set response headers
         request.response.statusCode = 200;
         request.response.headers.contentType = ContentType.binary;
-        request.response.headers.contentLength = bytes.length;
-        request.response.add(bytes);
+        request.response.headers.contentLength = fileSize;
 
-        print('✅ Successfully proxied file via curl');
+        // Stream the file directly from disk to response (no memory buffering)
+        final fileStream = tempFile.openRead();
+        await fileStream.pipe(request.response);
+
+        print('✅ Successfully streamed ${fileSize} bytes from temp file');
       } else {
         throw Exception('Curl failed with exit code ${result.exitCode}: ${result.stderr}');
       }
@@ -382,9 +391,21 @@ class FurlServer {
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
+    } finally {
+      // Clean up temp file
+      if (tempFile != null && await tempFile.exists()) {
+        try {
+          await tempFile.delete();
+          print('🗑️ Cleaned up temp file');
+        } catch (e) {
+          print('⚠️ Failed to delete temp file: $e');
+        }
+      }
     }
     await request.response.close();
-  }  Future<Map<String, dynamic>> _queryAtDirectory(String atSign) async {
+  }
+
+  Future<Map<String, dynamic>> _queryAtDirectory(String atSign) async {
     Socket? socket;
     try {
       print('🔌 Connecting to atDirectory at $atDirectoryHost:$atDirectoryPort');
@@ -604,11 +625,11 @@ Future<void> main(List<String> arguments) async {
   }
 
   final server = FurlServer(
-    port: port, 
-    webRoot: webRoot, 
+    port: port,
+    webRoot: webRoot,
     bindAddress: bindAddress,
-    sslCertPath: sslCertPath, 
-    sslKeyPath: sslKeyPath
+    sslCertPath: sslCertPath,
+    sslKeyPath: sslKeyPath,
   );
 
   // Handle Ctrl+C gracefully
