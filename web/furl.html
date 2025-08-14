@@ -269,7 +269,7 @@
                 setStatus('Downloading encrypted file...');
 
                 // Step 3: Download the encrypted file via our API proxy
-                const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}`;
+                const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}&atSign=${encodeURIComponent(atSign)}&keyName=${encodeURIComponent(keyName)}`;
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);

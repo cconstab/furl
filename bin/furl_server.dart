@@ -86,7 +86,9 @@ class FurlServer {
       await _handleHealth(request);
     } else if (apiPath == '/download' && uri.queryParameters.containsKey('url')) {
       final fileUrl = uri.queryParameters['url']!;
-      await _handleFileDownload(request, fileUrl);
+      final atSign = uri.queryParameters['atSign'];
+      final keyName = uri.queryParameters['keyName'];
+      await _handleFileDownload(request, fileUrl, atSign: atSign, keyName: keyName);
     } else if (pathSegments.length == 2 && pathSegments[0] == 'atsign') {
       final atSign = pathSegments[1];
       await _handleAtSignLookup(request, atSign);
@@ -345,14 +347,79 @@ class FurlServer {
     await request.response.close();
   }
 
-  Future<void> _handleFileDownload(HttpRequest request, String fileUrl) async {
+  Future<void> _handleFileDownload(HttpRequest request, String fileUrl, {String? atSign, String? keyName}) async {
     File? tempFile;
     try {
       print('📁 Proxying file download: $fileUrl');
 
-      // Create a temporary file for streaming
+      // Create a more unique temp file name using URL components or atSign/keyName if available
       final tempDir = Directory.systemTemp;
-      tempFile = File('${tempDir.path}/furl_download_${DateTime.now().millisecondsSinceEpoch}.tmp');
+
+      // Generate a random suffix to prevent collisions when multiple users download the same file
+      final random = DateTime.now().microsecondsSinceEpoch.toString().substring(7); // Last 6 digits for uniqueness
+
+      String uniqueId;
+
+      // Prefer atSign and keyName if available for better traceability
+      if (atSign != null && keyName != null) {
+        // Extract UUID from keyName (pattern: _furl_<UUID>)
+        final uuidMatch = RegExp(r'_furl_([a-f0-9]+)').firstMatch(keyName);
+        if (uuidMatch != null) {
+          final uuid = uuidMatch.group(1)!;
+          // Truncate UUID to first 8 chars and add random suffix
+          final shortUuid = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
+          final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
+          uniqueId = '${safeAtSign}_${shortUuid}_${random}';
+          print('📋 Using atSign and short UUID for temp file: $uniqueId');
+        } else {
+          // Fallback to atSign and keyName
+          final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
+          final safeKeyName = keyName.replaceAll(RegExp(r'[^\w\-]'), '_');
+          uniqueId = '${safeAtSign}_${safeKeyName}_${random}';
+          print('📋 Using atSign and keyName for temp file: $uniqueId');
+        }
+      } else {
+        // Extract unique identifier from fileUrl to avoid collisions
+        try {
+          final uri = Uri.parse(fileUrl);
+          final pathSegments = uri.pathSegments;
+
+          if (pathSegments.isNotEmpty) {
+            // Extract the bin ID from filebin URLs (e.g., furl340e4ecf3f8541a69d43aa632ac884b5)
+            final binId = pathSegments[0];
+
+            // Use only the bin ID as the unique identifier (clean fallback naming)
+            uniqueId = '${binId.replaceAll(RegExp(r'[^\w\-]'), '_')}_${random}';
+          } else {
+            // Fallback to URL hash if parsing fails
+            uniqueId = '${fileUrl.hashCode.abs().toString()}_${random}';
+          }
+        } catch (e) {
+          // Fallback to URL hash if URL parsing fails
+          uniqueId = '${fileUrl.hashCode.abs().toString()}_${random}';
+        }
+        print('📋 Using URL-based identifier for temp file: $uniqueId');
+      }
+
+      // Ensure the temp file name is unique - regenerate if it already exists
+      String baseUniqueId = uniqueId;
+      int attempt = 0;
+      do {
+        if (attempt > 0) {
+          // Generate a new random suffix if file exists
+          final newRandom = DateTime.now().microsecondsSinceEpoch.toString().substring(7);
+          uniqueId = '${baseUniqueId}_${newRandom}';
+          print('🔄 Temp file exists, trying new name: $uniqueId');
+        }
+        tempFile = File('${tempDir.path}/${uniqueId}.tmp');
+        attempt++;
+      } while (await tempFile.exists() && attempt < 10); // Safety limit of 10 attempts
+
+      if (await tempFile.exists()) {
+        throw Exception('Unable to generate unique temp file name after 10 attempts');
+      }
+
+      print('📁 Using temp file: ${tempFile.path}');
 
       // Use curl to download directly to temp file (no memory buffering)
       final result = await Process.run('curl', [
@@ -513,7 +580,7 @@ class FurlServer {
         'availableEndpoints': [
           'GET /api/atsign/{atSign}',
           'GET /api/fetch/{atSign}/{keyName}',
-          'GET /api/download?url={url}',
+          'GET /api/download?url={url}[&atSign={atSign}&keyName={keyName}]',
           'GET /api/health',
         ],
         'timestamp': DateTime.now().toIso8601String(),
