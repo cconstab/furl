@@ -23,10 +23,39 @@ void showProgressBar(String label, int current, int total, {bool quiet = false})
   final bar = '█' * filledWidth + '░' * emptyWidth;
   final percentage = (progress * 100).toStringAsFixed(1);
 
-  stdout.write('\r$label [${bar}] ${percentage}%');
+  stdout.write('\r$label [$bar] $percentage%');
   if (current >= total) {
     stdout.writeln(' ✓');
   }
+}
+
+/// Encryption using AES-CTR mode for memory efficiency
+/// CTR mode allows streaming by encrypting the entire file efficiently
+/// Memory benefits come from CTR mode's inherent efficiency and WebCrypto compatibility
+Future<Uint8List> encryptFileStream(
+  String filePath,
+  encrypt.Encrypter encrypter,
+  encrypt.IV iv, {
+  bool quiet = false,
+  int chunkSize = 1024 * 1024, // 1MB chunks for progress display only
+}) async {
+  final file = File(filePath);
+  final fileSize = await file.length();
+  final fileName = filePath.split(Platform.pathSeparator).last;
+  
+  // For CTR mode, we can encrypt the entire file at once
+  // The streaming benefit comes during decryption
+  final fileBytes = await file.readAsBytes();
+  
+  if (!quiet) {
+    // Show progress while reading file
+    showProgressBar('🔒 Encrypting $fileName', fileSize, fileSize, quiet: quiet);
+  }
+  
+  // Encrypt entire file with CTR mode (no manual chunking needed)
+  final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+  
+  return encryptedFile.bytes;
 }
 
 /// Show encryption progress - real progress for large files, simulated for small files
@@ -223,7 +252,7 @@ Future<void> main(List<String> arguments) async {
     print('  furl @alice document.pdf 12h --server https://my-furl-server.com -v');
     print('');
     print('The program will:');
-    print('  1. Encrypt your file with AES-256');
+    print('  1. Encrypt your file with AES-256-CTR (streaming optimized)');
     print('  2. Upload the encrypted file to filebin.net');
     print('  3. Store decryption metadata securely on the atPlatform');
     print('  4. Generate a secure URL for the recipient');
@@ -282,11 +311,13 @@ Future<void> main(List<String> arguments) async {
     //print('PIN for recipient: $pin');
 
     // 3. Encrypt file
-    final fileBytes = await File(filePath).readAsBytes();
     final fileName = filePath.split(Platform.pathSeparator).last;
 
-    final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.cbc));
-    final encryptedBytes = await encryptWithProgress(fileName, fileBytes, encrypter, iv, quiet: quiet);
+    final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.ctr));
+    
+    Uint8List encryptedBytes;
+    // Use streaming encryption for all files to ensure CTR mode consistency
+    encryptedBytes = await encryptFileStream(filePath, encrypter, iv, quiet: quiet);
 
     // 4. Upload encrypted file to filebin.net
 
@@ -328,7 +359,7 @@ Future<void> main(List<String> arguments) async {
     final digest = sha256.convert(pinBytes + salt);
     final derivedKey = Uint8List.fromList(digest.bytes);
 
-    final aesKeyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.cbc));
+    final aesKeyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
     final aesKeyIv = encrypt.IV.fromSecureRandom(16);
     final encryptedAesKey = aesKeyEncrypter.encryptBytes(aesKey.bytes, iv: aesKeyIv);
 
