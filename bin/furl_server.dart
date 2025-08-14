@@ -159,6 +159,8 @@ class FurlServer {
         return ContentType('application', 'javascript');
       case 'json':
         return ContentType.json;
+      case 'wasm':
+        return ContentType('application', 'wasm');
       case 'png':
         return ContentType('image', 'png');
       case 'jpg':

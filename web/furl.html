@@ -126,6 +126,53 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Progress Bar Styles */
+        .progress-container {
+            width: 100%;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .progress-bar {
+            height: 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            min-width: 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-bar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255,255,255,0.2) 50%, 
+                transparent 100%);
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .progress-text {
+            position: relative;
+            z-index: 1;
+        }
         .params-info {
             background: #f8f9fa;
             padding: 15px;
@@ -171,6 +218,9 @@
         <div id="status"></div>
     </div>
 
+    <!-- WASM Crypto Module -->
+    <script type="module" src="wasm-crypto.js"></script>
+    
     <script>
         // Configuration
         const API_BASE_URL = window.location.origin; // Use same origin as the web interface
@@ -203,6 +253,35 @@
             const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : '';
             const spinner = type === 'progress' ? '<div class="loading"></div>' : '';
             statusDiv.innerHTML = `<div class="${type}">${spinner}${icon} ${message}</div>`;
+        }
+
+        function setStatusWithProgress(message, progress = 0) {
+            const statusDiv = document.getElementById('status');
+            const progressHtml = `
+                <div class="progress">
+                    <div style="margin-bottom: 10px;">${message}</div>
+                    <div class="progress-container">
+                        <div class="progress-bar" style="width: ${progress}%">
+                            <span class="progress-text">${progress}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            statusDiv.innerHTML = progressHtml;
+        }
+
+        function updateProgress(progress, message = null) {
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.querySelector('.progress-text');
+            const messageDiv = document.querySelector('.progress div');
+            
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+                progressText.textContent = `${progress}%`;
+                if (message && messageDiv) {
+                    messageDiv.textContent = message;
+                }
+            }
         }
 
         function setButtonState(disabled, text) {
@@ -412,16 +491,17 @@
                     ['decrypt']
                 );
 
-                setStatus('Downloading encrypted file...');
+                // Initialize progress bar immediately
+                setStatusWithProgress('Connecting to download server...', 0);
 
                 // Step 3: Download entire file and decrypt as one stream
                 const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}&atSign=${encodeURIComponent(atSign)}&keyName=${encodeURIComponent(keyName)}`;
+                
+                updateProgress(5, 'Requesting file from server...');
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);
                 }
-                
-                setStatus('Downloading and decrypting file...');
                 
                 // Check content length to determine approach
                 const contentLength = fileResponse.headers.get('content-length');
@@ -429,95 +509,109 @@
                 
                 console.log('Encrypted file size:', fileSize, 'bytes');
                 
-                // For large files (>50MB), warn user about memory usage
-                if (fileSize > 50 * 1024 * 1024) {
-                    setStatus(`Large file detected (${Math.round(fileSize / 1024 / 1024)}MB). Processing...`);
+                // Update progress bar with file info
+                if (fileSize > 0) {
+                    const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
+                    updateProgress(10, `Starting download... (${mbTotal}MB)`);
+                } else {
+                    updateProgress(10, 'Starting download...');
                 }
                 
                 // Use streaming approach for better memory efficiency
                 const reader = fileResponse.body.getReader();
                 const chunks = [];
                 let receivedLength = 0;
-                let lastProgressUpdate = Date.now();
+                let chunkCount = 0;
+                const startTime = Date.now();
                 
-                // Read all chunks with throttled progress updates
+                // More responsive progress updates
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     
                     chunks.push(value);
                     receivedLength += value.length;
+                    chunkCount++;
                     
-                    // Throttle progress updates to every 100ms for performance
-                    const now = Date.now();
-                    if (fileSize > 0 && (now - lastProgressUpdate > 100)) {
-                        const progress = Math.round((receivedLength / fileSize) * 100);
-                        setStatus(`Downloading... ${progress}%`);
-                        lastProgressUpdate = now;
+                    // Update progress more frequently for better user experience
+                    if (fileSize > 0) {
+                        // Calculate percentage and map to 10-50% range for download phase
+                        const downloadPercent = Math.min((receivedLength / fileSize) * 100, 100);
+                        const progress = 10 + Math.round(downloadPercent * 0.4); // Map to 10-50%
+                        
+                        // Update every chunk for small files, or every few chunks for large files
+                        const shouldUpdate = fileSize < 5 * 1024 * 1024 || chunkCount % 3 === 0;
+                        
+                        if (shouldUpdate) {
+                            const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
+                            const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
+                            
+                            // Calculate download speed
+                            const elapsed = (Date.now() - startTime) / 1000;
+                            const speed = elapsed > 0 ? (receivedLength / 1024 / 1024) / elapsed : 0;
+                            const speedText = speed > 1 ? `${speed.toFixed(1)} MB/s` : `${(speed * 1024).toFixed(0)} KB/s`;
+                            
+                            updateProgress(progress, `Downloading... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
+                        }
+                    } else {
+                        // If no content-length header, show chunk-based progress
+                        const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
+                        if (chunkCount % 5 === 0) {
+                            const elapsed = (Date.now() - startTime) / 1000;
+                            const speed = elapsed > 0 ? (receivedLength / 1024 / 1024) / elapsed : 0;
+                            const speedText = speed > 1 ? `${speed.toFixed(1)} MB/s` : `${(speed * 1024).toFixed(0)} KB/s`;
+                            updateProgress(10 + Math.min(chunkCount * 2, 30), `Downloading... ${mbReceived}MB (${speedText})`);
+                        }
                     }
                 }
                 
-                setStatus('Assembling file...');
+                updateProgress(50, 'Download complete, assembling file...');
                 
-                // Combine chunks efficiently using a single typed array
+                // Combine chunks efficiently with progress updates
                 const encryptedArrayBuffer = new Uint8Array(receivedLength);
                 let position = 0;
-                for (const chunk of chunks) {
+                const totalChunks = chunks.length;
+                
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunk = chunks[i];
                     encryptedArrayBuffer.set(chunk, position);
                     position += chunk.length;
+                    
+                    // Show assembly progress for large files
+                    if (totalChunks > 10 && i % Math.ceil(totalChunks / 10) === 0) {
+                        const assemblyProgress = Math.round((i / totalChunks) * 100);
+                        updateProgress(50, `Assembling file... ${assemblyProgress}%`);
+                    }
                 }
                 
                 // Clear chunks array to free memory
                 chunks.length = 0;
-                
-                setStatus('Decrypting file...');
                 
                 const fileIvBuffer = base64ToArrayBuffer(secrets.file_iv);
                 
                 console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
                 console.log('File IV size:', fileIvBuffer.byteLength);
                 
-                let decryptedBytes;
+                // Use hybrid WASM/WebCrypto decryption with progress callback
+                updateProgress(50, 'Starting decryption...');
                 
-                // For files larger than 5MB, try a different approach
-                if (encryptedArrayBuffer.byteLength > 5 * 1024 * 1024) {
-                    console.log('Large file detected, trying progressive decryption');
-                    try {
-                        // First try single-pass decryption
-                        console.log('Attempting single-pass decryption for large file...');
-                        const decryptedArrayBuffer = await crypto.subtle.decrypt(
-                            {
-                                name: 'AES-CTR',
-                                counter: fileIvBuffer,
-                                length: 128
-                            },
-                            fileKey,
-                            encryptedArrayBuffer
-                        );
-                        
-                        decryptedBytes = new Uint8Array(decryptedArrayBuffer);
-                        console.log('Single-pass decryption succeeded for large file');
-                    } catch (error) {
-                        console.log('Single-pass failed, trying chunked approach:', error.message);
-                        decryptedBytes = await decryptInChunks(fileKey, fileIvBuffer, encryptedArrayBuffer);
-                    }
-                } else {
-                    console.log('Using single-pass decryption for smaller file');
-                    // Decrypt the file with WebCrypto CTR mode
-                    const decryptedArrayBuffer = await crypto.subtle.decrypt(
-                        {
-                            name: 'AES-CTR',
-                            counter: fileIvBuffer,
-                            length: 128
-                        },
-                        fileKey,
-                        encryptedArrayBuffer
-                    );
-                    
-                    decryptedBytes = new Uint8Array(decryptedArrayBuffer);
-                }
+                const progressCallback = (progress) => {
+                    // Map decryption progress to 50-100% range  
+                    const totalProgress = 50 + Math.round(progress * 0.5);
+                    const technique = window.wasmCrypto && window.wasmCrypto.isAvailable() ? 'WASM' : 'WebCrypto';
+                    updateProgress(totalProgress, `Decrypting with ${technique}... ${progress}%`);
+                };
+                
+                const decryptedBytes = await hybridDecryptAesCtr(
+                    new Uint8Array(actualKeyBuffer),
+                    new Uint8Array(fileIvBuffer), 
+                    encryptedArrayBuffer,
+                    progressCallback
+                );
 
-                console.log('Converted to bytes, first 50 chars as text:', 
+                console.log('Decryption completed successfully');
+                console.log('Decrypted size:', decryptedBytes.length);
+                console.log('First 50 chars as text:', 
                     new TextDecoder().decode(decryptedBytes.slice(0, 50)));
                 console.log('First 20 bytes as hex:', 
                     Array.from(decryptedBytes.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
@@ -533,7 +627,10 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
-                setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
+                updateProgress(100, 'Download complete!');
+                setTimeout(() => {
+                    setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
+                }, 500);
 
             } catch (error) {
                 console.error('Download error:', error);
