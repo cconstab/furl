@@ -567,7 +567,7 @@ Future<void> main(List<String> arguments) async {
     } else if (arguments[i] == '--help' || arguments[i] == '-h') {
       print('Furl Unified Server');
       print('');
-      print('Usage: dart run bin/furl_server.dart [options]');
+      print('Usage: furl_server [options]');
       print('');
       print('Options:');
       print('  --port <port>        Server port (default: 8080)');
@@ -584,11 +584,11 @@ Future<void> main(List<String> arguments) async {
       print('  192.168.1.100        Bind to specific IP address');
       print('');
       print('Examples:');
-      print('  dart run bin/furl_server.dart');
-      print('  dart run bin/furl_server.dart --port 8085');
-      print('  dart run bin/furl_server.dart --port 3000 --bind 127.0.0.1');
-      print('  dart run bin/furl_server.dart --port 3000 --web-root public');
-      print('  dart run bin/furl_server.dart --port 443 --ssl-cert server.crt --ssl-key server.key');
+      print('  furl_server');
+      print('  furl_server --port 8085');
+      print('  furl_server --port 3000 --bind 127.0.0.1');
+      print('  furl_server --port 3000 --web-root public');
+      print('  furl_server --port 443 --ssl-cert server.crt --ssl-key server.key');
       print('');
       print('HTTPS Notes:');
       print('  - Both --ssl-cert and --ssl-key must be provided for HTTPS');
