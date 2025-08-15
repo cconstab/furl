@@ -255,6 +255,18 @@
                 return;
             }
 
+            // Check WASM availability immediately
+            setTimeout(() => {
+                if (!window.wasmCrypto || !window.wasmCrypto.isAvailable()) {
+                    document.getElementById('status').innerHTML = 
+                        '<div class="error">❌ WASM module required but not available. Please ensure your browser supports WebAssembly and refresh the page.</div>';
+                    document.getElementById('downloadBtn').disabled = true;
+                    return;
+                } else {
+                    console.log('✅ WASM crypto module is available for pure WASM decryption');
+                }
+            }, 1000); // Give WASM time to initialize
+
             // Show URL parameters for debugging
             document.getElementById('paramAtSign').textContent = atSign;
             document.getElementById('paramKey').textContent = keyName;
@@ -318,7 +330,7 @@
             return bytes.buffer;
         }
 
-        // Helper function to increment CTR counter by a specific number of blocks
+        // Helper function to increment CTR counter by a specific number of blocks (for legacy compatibility)
         function incrementCounter(counter, blockCount) {
             const result = new Uint8Array(counter);
             
@@ -332,76 +344,6 @@
                 carry = Math.floor(carry / 256);
             }
             
-            return result;
-        }
-
-        // Simplified chunked decryption - decrypt continuous streams
-        async function decryptInChunks(key, initialIv, encryptedData) {
-            // Much smaller chunks to reduce memory pressure
-            const chunkSize = 2 * 1024 * 1024; // 2MB chunks
-            const numChunks = Math.ceil(encryptedData.length / chunkSize);
-            const decryptedChunks = [];
-            
-            console.log(`Trying chunked decryption: ${numChunks} chunks of up to ${chunkSize} bytes each`);
-            console.log('Initial IV:', Array.from(new Uint8Array(initialIv)).map(b => b.toString(16).padStart(2, '0')).join(''));
-            
-            // Create a running counter state
-            let currentCounter = new Uint8Array(initialIv);
-            
-            for (let i = 0; i < numChunks; i++) {
-                const start = i * chunkSize;
-                const end = Math.min(start + chunkSize, encryptedData.length);
-                const chunk = encryptedData.slice(start, end);
-                
-                console.log(`Chunk ${i + 1}/${numChunks}: bytes ${start}-${end-1} (${chunk.length} bytes)`);
-                console.log(`  Counter: ${Array.from(currentCounter).map(b => b.toString(16).padStart(2, '0')).join('')}`);
-                
-                try {
-                    // Decrypt this chunk with the current counter
-                    const decryptedChunk = await window.crypto.subtle.decrypt(
-                        {
-                            name: 'AES-CTR',
-                            counter: currentCounter.slice(), // Copy the counter
-                            length: 128
-                        },
-                        key,
-                        chunk
-                    );
-                    
-                    const decryptedBytes = new Uint8Array(decryptedChunk);
-                    decryptedChunks.push(decryptedBytes);
-                    
-                    console.log(`  Successfully decrypted ${decryptedBytes.length} bytes`);
-                    
-                    // Advance the counter by the number of 16-byte blocks processed
-                    const blocksProcessed = Math.ceil(chunk.length / 16);
-                    currentCounter = incrementCounter(currentCounter, blocksProcessed);
-                    
-                    // Update progress
-                    const progress = Math.round(((i + 1) / numChunks) * 100);
-                    setStatus(`Decrypting... ${progress}%`);
-                    
-                    // Allow other operations to proceed
-                    await new Promise(resolve => setTimeout(resolve, 0));
-                    
-                } catch (error) {
-                    console.error(`Failed to decrypt chunk ${i + 1}:`, error);
-                    throw new Error(`Chunked decryption failed at chunk ${i + 1}: ${error.message}`);
-                }
-            }
-            
-            // Combine all decrypted chunks
-            setStatus('Assembling decrypted file...');
-            const totalLength = decryptedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-            const result = new Uint8Array(totalLength);
-            let offset = 0;
-            
-            for (const chunk of decryptedChunks) {
-                result.set(chunk, offset);
-                offset += chunk.length;
-            }
-            
-            console.log(`Successfully assembled ${totalLength} bytes from ${numChunks} chunks`);
             return result;
         }
 
@@ -604,11 +546,16 @@
                     }
                 }
                 
-                // Initialize ChaCha20 cipher state for streaming decryption
+                // Initialize pure WASM decryption - no fallbacks
                 let cipherState = null;
                 let canStream = false;
                 
-                if (cipherType === 'chacha20' && window.wasmCrypto && window.wasmCrypto.isAvailable()) {
+                // Ensure WASM is available for pure WASM mode
+                if (!window.wasmCrypto || !window.wasmCrypto.isAvailable()) {
+                    throw new Error('WASM module required for decryption but not available');
+                }
+                
+                if (cipherType === 'chacha20') {
                     try {
                         // Check if streaming functions are available
                         if (window.wasmCrypto.wasmModule.create_chacha20_stream && 
@@ -619,14 +566,16 @@
                             
                             cipherState = await window.wasmCrypto.createChaCha20Stream(key, nonce);
                             canStream = true;
-                            console.log('ChaCha20 streaming mode enabled');
+                            console.log('✅ Pure WASM ChaCha20 streaming mode enabled');
                         } else {
-                            console.log('ChaCha20 streaming functions not available, using batch mode');
+                            console.log('⚡ ChaCha20 streaming functions not available, using WASM batch mode');
                         }
                     } catch (error) {
-                        console.log('Failed to initialize streaming cipher, using batch mode:', error);
+                        console.log('⚡ Failed to initialize streaming cipher, using WASM batch mode:', error);
                         canStream = false;
                     }
+                } else {
+                    console.log('⚡ Pure WASM AES-CTR mode');
                 }
                 
                 // For non-streaming mode, collect chunks for later processing
@@ -672,7 +621,7 @@
                             const totalProgress = 40 + Math.round(decryptProgress * 0.5);
                             
                             if (chunkCount % 5 === 0) {
-                                updateProgress(totalProgress, `Streaming decrypt... ${(receivedLength / 1024 / 1024).toFixed(1)}MB`);
+                                updateProgress(totalProgress, `Pure WASM streaming... ${(receivedLength / 1024 / 1024).toFixed(1)}MB`);
                             }
                             
                         } catch (error) {
@@ -698,7 +647,7 @@
                     updateProgress(100, 'File streamed and decrypted successfully!');
                     
                     setTimeout(() => {
-                        setStatus(`File "${secrets.file_name}" streamed and decrypted to disk!`, 'success');
+                        setStatus(`File "${secrets.file_name}" streamed and decrypted with pure WASM!`, 'success');
                     }, 500);
                     
                 } else {
@@ -717,13 +666,12 @@
                     console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
                     console.log('IV/Nonce size:', ivOrNonce.byteLength);
                     
-                    // Decrypt in batch mode with progress
-                    updateProgress(50, 'Starting decryption...');
+                    // Decrypt in pure WASM batch mode with progress
+                    updateProgress(50, 'Starting pure WASM decryption...');
                     
                     const progressCallback = (progress) => {
                         const totalProgress = 50 + Math.round(progress * 0.5);
-                        const technique = window.wasmCrypto && window.wasmCrypto.isAvailable() ? 'WASM' : 'WebCrypto';
-                        updateProgress(totalProgress, `Decrypting with ${technique} ${cipherType.toUpperCase()}... ${progress}%`);
+                        updateProgress(totalProgress, `Pure WASM ${cipherType.toUpperCase()} decrypting... ${progress}%`);
                     };
                     
                     const decryptedBytes = await hybridDecryptFile(
@@ -734,7 +682,7 @@
                         progressCallback
                     );
 
-                    console.log('Decryption completed successfully');
+                    console.log('✅ Pure WASM decryption completed successfully');
                     console.log('Decrypted size:', decryptedBytes.length);
                     
                     // Create blob and trigger download
@@ -748,9 +696,9 @@
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
 
-                    updateProgress(100, 'Download complete!');
+                    updateProgress(100, 'Pure WASM decryption complete!');
                     setTimeout(() => {
-                        setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
+                        setStatus(`File "${secrets.file_name}" decrypted with pure WASM and downloaded!`, 'success');
                     }, 500);
                 }
 
