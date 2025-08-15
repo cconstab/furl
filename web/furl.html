@@ -222,6 +222,22 @@
     <script type="module" src="wasm-crypto.js"></script>
     
     <script>
+        // Early crypto availability check
+        console.log('=== EARLY CRYPTO CHECK ===');
+        console.log('window.crypto available:', !!window.crypto);
+        console.log('window.crypto.subtle available:', !!window.crypto?.subtle);
+        console.log('isSecureContext:', window.isSecureContext);
+        console.log('protocol:', window.location.protocol);
+        console.log('hostname:', window.location.hostname);
+        
+        if (!window.crypto || !window.crypto.subtle) {
+            console.error('❌ Web Crypto API not available!');
+            console.error('This application requires HTTPS or localhost');
+            console.error('Current URL:', window.location.href);
+        } else {
+            console.log('✅ Web Crypto API is available');
+        }
+        
         // Configuration
         const API_BASE_URL = window.location.origin; // Use same origin as the web interface
 
@@ -397,6 +413,13 @@
                 return;
             }
 
+            // Check crypto availability before proceeding
+            if (!window.crypto || !window.crypto.subtle) {
+                setStatus('❌ Web Crypto API not available. This application requires HTTPS or localhost.', 'error');
+                setButtonState(false, 'Download & Decrypt File');
+                return;
+            }
+
             setButtonState(true, 'Processing...');
 
             try {
@@ -431,6 +454,18 @@
                 console.log('window.crypto.subtle:', window.crypto?.subtle);
                 console.log('crypto variable:', typeof crypto);
                 console.log('crypto.subtle:', typeof crypto?.subtle);
+                console.log('window.isSecureContext:', window.isSecureContext);
+                console.log('location.protocol:', window.location.protocol);
+                console.log('location.hostname:', window.location.hostname);
+                
+                // Check if we have crypto available
+                if (!window.crypto) {
+                    throw new Error('window.crypto is not available. This requires HTTPS or localhost.');
+                }
+                
+                if (!window.crypto.subtle) {
+                    throw new Error('window.crypto.subtle is not available. This requires a secure context (HTTPS or localhost).');
+                }
                 
                 // Hash with SHA-256 to match Dart implementation (produces 32 bytes = 256 bits)
                 const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
