@@ -3,7 +3,6 @@ use aes::Aes256;
 use ctr::Ctr128BE;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
-use chacha20::cipher::{KeyIvInit as ChaChaKeyIvInit, StreamCipher as ChaChaStreamCipher};
 use js_sys::Uint8Array;
 use web_sys::console;
 
