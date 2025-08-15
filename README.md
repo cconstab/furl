@@ -82,7 +82,7 @@ dart run bin/furl.dart @youratSign path/to/file.txt 1h
 ```
 
 This will:
-- Encrypt the file with AES-256
+- Encrypt the file with ChaCha20
 - Generate a 9-character PIN
 - Upload encrypted file to filebin.net
 - Store encrypted metadata on atPlatform
@@ -106,21 +106,21 @@ The recipient:
 
 ### Upload Process
 ```
-Original File → AES-256 Encrypt → Upload to filebin.net
+Original File → ChaCha20 Encrypt → Upload to filebin.net
                      ↓
-            AES Key → PIN Encrypt → Store on atPlatform
+            ChaCha20 Key → PIN Encrypt → Store on atPlatform
 ```
 
 ### Download Process
 ```
-atPlatform → Get Encrypted Metadata → PIN Decrypt → AES Key
-filebin.net → Get Encrypted File → AES Decrypt → Original File
+atPlatform → Get Encrypted Metadata → PIN Decrypt → ChaCha20 Key
+filebin.net → Get Encrypted File → ChaCha20 Decrypt → Original File
 ```
 
 ### Security Model
 
-1. **File Encryption**: Each file is encrypted with a unique 256-bit AES key
-2. **Key Protection**: The AES key is encrypted using a PIN-derived key  
+1. **File Encryption**: Each file is encrypted with a unique 256-bit ChaCha20 key
+2. **Key Protection**: The ChaCha20 key is encrypted using a PIN-derived key  
 3. **Separation**: File data and encryption keys are stored separately
 4. **Client-Side**: All decryption happens in the recipient's browser
 5. **Zero-Knowledge**: Servers never see plaintext files or PINs
@@ -177,7 +177,7 @@ dart run bin/furl.dart @alice document.pdf 1h -v
 
 ## WebAssembly (WASM) High-Performance Decryption
 
-For improved performance with large files, furl includes an optional WebAssembly (WASM) module written in Rust that provides hardware-accelerated AES-CTR decryption. This can improve decryption speeds by 2-10x for files larger than 10MB.
+For improved performance with large files, furl includes an optional WebAssembly (WASM) module written in Rust that provides hardware-accelerated ChaCha20 decryption. This can improve decryption speeds by 2-10x for files larger than 10MB.
 
 ### WASM Prerequisites
 
@@ -218,8 +218,7 @@ The web interface automatically detects and uses the WASM module if available:
 ### Development Notes
 
 The WASM module source is in `wasm-crypto/src/lib.rs` and uses:
-- `aes` crate for AES encryption primitives
-- `ctr` crate for Counter mode implementation
+- `chacha20` crate for ChaCha20 encryption primitives
 - `wasm-bindgen` for JavaScript integration
 - `js-sys` for browser API access
 
@@ -228,7 +227,7 @@ Build artifacts (wasm-crypto/pkg/) are excluded from the repository - you must b
 ## Security Features
 
 ### Defense in Depth
-- **Layer 1**: AES-256 file encryption
+- **Layer 1**: ChaCha20 file encryption
 - **Layer 2**: PIN-protected key encryption  
 - **Layer 3**: Separate storage of files and metadata
 - **Layer 4**: Client-side decryption only
@@ -248,10 +247,10 @@ Build artifacts (wasm-crypto/pkg/) are excluded from the repository - you must b
 
 The **PIN serves as a shared secret** that enables secure key exchange:
 
-1. **Key Protection**: Protects the AES encryption key with an additional layer
+1. **Key Protection**: Protects the ChaCha20 encryption key with an additional layer
 2. **Zero-Knowledge**: PIN never leaves the recipient's browser  
 3. **Access Control**: Requires both URL and PIN for file access
-4. **Forward Secrecy**: Each file gets a unique PIN and AES key
+4. **Forward Secrecy**: Each file gets a unique PIN and ChaCha20 key
 
 ### PIN Security Process
 
@@ -259,8 +258,8 @@ The **PIN serves as a shared secret** that enables secure key exchange:
 ```
 1. Generate random 9-char PIN
 2. Derive key: PIN_Key = SHA256(PIN_bytes + Salt_bytes)  
-3. Encrypt: Encrypted_AES_Key = AES-256(AES_Key, PIN_Key)
-4. Store encrypted AES key + salt in atPlatform
+3. Encrypt: Encrypted_ChaCha20_Key = ChaCha20(ChaCha20_Key, PIN_Key)
+4. Store encrypted ChaCha20 key + salt in atPlatform
 5. Share URL + PIN with recipient
 ```
 
@@ -268,8 +267,8 @@ The **PIN serves as a shared secret** that enables secure key exchange:
 ```
 1. Enter PIN in browser
 2. Derive same key: PIN_Key = SHA256(PIN_bytes + Salt_bytes)
-3. Decrypt: AES_Key = AES-256-DECRYPT(Encrypted_AES_Key, PIN_Key)  
-4. Use AES_Key to decrypt the downloaded file
+3. Decrypt: ChaCha20_Key = ChaCha20-DECRYPT(Encrypted_ChaCha20_Key, PIN_Key)  
+4. Use ChaCha20_Key to decrypt the downloaded file
 ```
 
 ## File Structure
@@ -383,7 +382,7 @@ dart run bin/furl.dart @alice document.pdf 1h
 ```
 
 This will:
-- Encrypt the file with AES-256
+- Encrypt the file with ChaCha20
 - Generate a 9-character PIN
 - Upload the encrypted file
 - Store secrets in atPlatform for 1 hour
@@ -399,8 +398,8 @@ This will:
 ## Security Features
 
 - **End-to-end encryption**: Files are encrypted before upload
-- **Ephemeral keys**: AES keys are generated fresh for each file
-- **PIN protection**: AES keys are encrypted with recipient's PIN
+- **Ephemeral keys**: ChaCha20 keys are generated fresh for each file
+- **PIN protection**: ChaCha20 keys are encrypted with recipient's PIN
 - **Automatic expiration**: Secrets expire after configured TTL
 - **No persistent storage**: atPlatform only stores encrypted metadata
 
@@ -459,7 +458,7 @@ furl/
 ## Dependencies
 
 - `at_client`: atPlatform client library
-- `encrypt`: AES encryption
+- `pointycastle`: ChaCha20 encryption
 - `crypto`: Cryptographic functions
 - `http`: HTTP client for file uploads
 - `random_string`: PIN generation
@@ -467,7 +466,7 @@ furl/
 ## Security Considerations
 
 - PINs are 9 characters (alphanumeric) providing ~10^13 combinations
-- AES-256 provides strong file encryption
+- ChaCha20 provides strong file encryption with excellent performance
 - atPlatform provides secure, decentralized secret storage
 - TTL ensures secrets don't persist indefinitely
 - No file content is stored in atPlatform (only metadata)
