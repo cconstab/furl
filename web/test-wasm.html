@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WASM Crypto Test</title>
+</head>
+<body>
+    <h1>WASM Crypto Test</h1>
+    <div id="status">Loading...</div>
+    <button id="testBtn" onclick="runTest()" disabled>Run Test</button>
+    <div id="results"></div>
+
+    <script type="module" src="wasm-crypto.js"></script>
+    <script>
+        let testData = null;
+
+        // Wait for WASM to initialize
+        setTimeout(async () => {
+            if (window.wasmCrypto && window.wasmCrypto.isAvailable()) {
+                document.getElementById('status').innerHTML = '✅ WASM module loaded successfully!';
+                document.getElementById('testBtn').disabled = false;
+            } else {
+                document.getElementById('status').innerHTML = '⚠️ WASM not available, WebCrypto fallback ready';
+                document.getElementById('testBtn').disabled = false;
+            }
+        }, 1000);
+
+        async function runTest() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h3>Running tests...</h3>';
+
+            try {
+                // Generate test data
+                const key = new Uint8Array(32);
+                const iv = new Uint8Array(16);
+                const testMessage = 'Hello WASM World! This is a test message for AES-CTR encryption.';
+                const plaintext = new TextEncoder().encode(testMessage);
+
+                // Fill key and IV with test data
+                for (let i = 0; i < 32; i++) key[i] = i;
+                for (let i = 0; i < 16; i++) iv[i] = i + 100;
+
+                results.innerHTML += '<p>🔑 Generated test key and IV</p>';
+
+                // First encrypt with WebCrypto to get test data
+                const webKey = await crypto.subtle.importKey(
+                    'raw', key, { name: 'AES-CTR' }, false, ['encrypt']
+                );
+
+                const encrypted = await crypto.subtle.encrypt(
+                    { name: 'AES-CTR', counter: iv, length: 128 },
+                    webKey,
+                    plaintext
+                );
+
+                results.innerHTML += '<p>🔒 Encrypted test data with WebCrypto</p>';
+
+                // Now test decryption with hybrid function
+                const start = performance.now();
+                const decrypted = await window.hybridDecryptAesCtr(
+                    key, 
+                    iv, 
+                    new Uint8Array(encrypted),
+                    (progress) => {
+                        results.innerHTML += `<p>📊 Progress: ${progress}%</p>`;
+                    }
+                );
+                const duration = performance.now() - start;
+
+                const decryptedText = new TextDecoder().decode(decrypted);
+                
+                if (decryptedText === testMessage) {
+                    results.innerHTML += `<p>✅ Test PASSED! Decryption successful in ${duration.toFixed(2)}ms</p>`;
+                    results.innerHTML += `<p>📝 Original: "${testMessage}"</p>`;
+                    results.innerHTML += `<p>📝 Decrypted: "${decryptedText}"</p>`;
+                } else {
+                    results.innerHTML += `<p>❌ Test FAILED! Text mismatch</p>`;
+                    results.innerHTML += `<p>📝 Expected: "${testMessage}"</p>`;
+                    results.innerHTML += `<p>📝 Got: "${decryptedText}"</p>`;
+                }
+
+                // Test with larger data
+                const largeData = new Uint8Array(5 * 1024 * 1024); // 5MB
+                for (let i = 0; i < largeData.length; i++) {
+                    largeData[i] = i % 256;
+                }
+
+                const largeEncrypted = await crypto.subtle.encrypt(
+                    { name: 'AES-CTR', counter: iv, length: 128 },
+                    webKey,
+                    largeData
+                );
+
+                results.innerHTML += '<p>🔒 Testing with 5MB data...</p>';
+
+                const largeStart = performance.now();
+                const largeDecrypted = await window.hybridDecryptAesCtr(
+                    key,
+                    iv,
+                    new Uint8Array(largeEncrypted),
+                    (progress) => console.log(`Large file progress: ${progress}%`)
+                );
+                const largeDuration = performance.now() - largeStart;
+
+                if (largeDecrypted.length === largeData.length) {
+                    results.innerHTML += `<p>✅ Large file test PASSED! ${largeDecrypted.length} bytes in ${largeDuration.toFixed(2)}ms</p>`;
+                    results.innerHTML += `<p>⚡ Throughput: ${((largeData.length / 1024 / 1024) / (largeDuration / 1000)).toFixed(2)} MB/s</p>`;
+                } else {
+                    results.innerHTML += `<p>❌ Large file test FAILED! Size mismatch</p>`;
+                }
+
+            } catch (error) {
+                results.innerHTML += `<p>❌ Test failed with error: ${error.message}</p>`;
+                console.error('Test error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

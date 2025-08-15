@@ -34,6 +34,19 @@ secrets_*
 *.log
 *.tmp
 
+# Rust and WASM build artifacts
+wasm-crypto/target/
+wasm-crypto/Cargo.lock
+wasm-crypto/pkg/
+web/wasm/
+*.wasm
+*.wasm.d.ts
+
+# Rust cache and build files
+target/
+Cargo.lock
+pkg/
+
 # IDE files
 .vscode/
 .idea/
