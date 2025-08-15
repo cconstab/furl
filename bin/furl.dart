@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:crypto/crypto.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
 import 'package:random_string/random_string.dart';
@@ -10,6 +10,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pointycastle/export.dart';
 
 /// Display a progress bar for long-running operations
 void showProgressBar(String label, int current, int total, {bool quiet = false}) {
@@ -40,26 +41,87 @@ Future<Uint8List> encryptFileStream(
 }) async {
   final file = File(filePath);
   final fileName = filePath.split(Platform.pathSeparator).last;
+  final fileSize = await file.length();
   
   if (!quiet) {
-    showProgressBar('🔒 Reading $fileName', 0, 100, quiet: quiet);
+    showProgressBar('🔒 Starting streaming encryption for $fileName', 0, fileSize, quiet: quiet);
   }
   
-  // Read entire file - CTR mode requires sequential processing
-  final fileBytes = await file.readAsBytes();
+  // Stream the file data but encrypt all at once to maintain CTR integrity
+  final List<int> allFileBytes = [];
+  int processedBytes = 0;
+  
+  final inputStream = file.openRead();
+  
+  await for (final List<int> chunk in inputStream) {
+    allFileBytes.addAll(chunk);
+    processedBytes += chunk.length;
+    
+    if (!quiet) {
+      showProgressBar('🔒 Reading $fileName', processedBytes, fileSize, quiet: quiet);
+    }
+  }
   
   if (!quiet) {
-    showProgressBar('🔒 Encrypting $fileName', 50, 100, quiet: quiet);
+    showProgressBar('🔒 Encrypting $fileName', 0, 1, quiet: quiet);
   }
   
-  // Encrypt entire file with CTR mode (maintains counter integrity)
-  final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
+  // Encrypt the entire file as one operation to maintain CTR integrity
+  final fileBytes = Uint8List.fromList(allFileBytes);
+  final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
   
   if (!quiet) {
-    showProgressBar('🔒 Encrypting $fileName', 100, 100, quiet: quiet);
+    showProgressBar('🔒 Encrypting $fileName', 1, 1, quiet: quiet);
   }
   
-  return encryptedFile.bytes;
+  return encrypted.bytes;
+}
+
+/// ChaCha20 streaming encryption - memory efficient with true streaming
+/// This maintains keystream state across chunks without memory issues
+Future<Uint8List> encryptFileStreamChaCha20(
+  String filePath,
+  Uint8List key, // 32-byte ChaCha20 key
+  Uint8List nonce, // 12-byte ChaCha20 nonce
+  {
+  bool quiet = false,
+  int chunkSize = 64 * 1024, // 64KB chunks
+}) async {
+  final file = File(filePath);
+  final fileName = file.uri.pathSegments.last;
+  final fileSize = await file.length();
+  
+  // Initialize ChaCha20 cipher
+  final cipher = ChaCha20Engine();
+  final params = ParametersWithIV<KeyParameter>(
+    KeyParameter(key), 
+    nonce
+  );
+  cipher.init(true, params); // true = encrypt
+  
+  final List<int> allEncryptedBytes = [];
+  int processedBytes = 0;
+  
+  // Process file in chunks - ChaCha20 maintains state automatically
+  final inputStream = file.openRead();
+  
+  await for (final List<int> chunk in inputStream) {
+    // ChaCha20 can encrypt any size chunk - no block boundary issues
+    final chunkBytes = Uint8List.fromList(chunk);
+    final encryptedChunk = Uint8List(chunkBytes.length);
+    
+    // Process chunk through ChaCha20 - maintains keystream state
+    cipher.processBytes(chunkBytes, 0, chunkBytes.length, encryptedChunk, 0);
+    
+    allEncryptedBytes.addAll(encryptedChunk);
+    processedBytes += chunk.length;
+    
+    if (!quiet) {
+      showProgressBar('🔒 Encrypting $fileName', processedBytes, fileSize, quiet: quiet);
+    }
+  }
+  
+  return Uint8List.fromList(allEncryptedBytes);
 }
 
 /// Show encryption progress - real progress for large files, simulated for small files
@@ -306,22 +368,25 @@ Future<void> main(List<String> arguments) async {
   }
 
   try {
-    // 1. Generate AES-256 key and IV
-    final aesKey = encrypt.Key.fromSecureRandom(32);
-    final iv = encrypt.IV.fromSecureRandom(16);
+    // 1. Generate ChaCha20 key and nonce using secure random
+    final chaCha20Key = encrypt.Key.fromSecureRandom(32); // 32-byte key for ChaCha20
+    final chaCha20Nonce = encrypt.IV.fromSecureRandom(8); // 8-byte nonce for ChaCha20 (some implementations use 8 bytes)
 
     // 2. Generate 9-char alphanumeric PIN
     final pin = randomAlphaNumeric(9);
     //print('PIN for recipient: $pin');
 
-    // 3. Encrypt file
+    // 3. Encrypt file with ChaCha20 streaming
     final fileName = filePath.split(Platform.pathSeparator).last;
 
-    final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.ctr));
-    
     Uint8List encryptedBytes;
-    // Use streaming encryption for all files to ensure CTR mode consistency
-    encryptedBytes = await encryptFileStream(filePath, encrypter, iv, quiet: quiet);
+    // Use ChaCha20 streaming encryption for memory efficiency
+    encryptedBytes = await encryptFileStreamChaCha20(
+      filePath, 
+      chaCha20Key.bytes, 
+      chaCha20Nonce.bytes, 
+      quiet: quiet
+    );
 
     // 4. Upload encrypted file to filebin.net
 
@@ -363,11 +428,11 @@ Future<void> main(List<String> arguments) async {
     final digest = sha256.convert(pinBytes + salt);
     final derivedKey = Uint8List.fromList(digest.bytes);
 
-    final aesKeyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
-    final aesKeyIv = encrypt.IV.fromSecureRandom(16);
-    final encryptedAesKey = aesKeyEncrypter.encryptBytes(aesKey.bytes, iv: aesKeyIv);
+    final keyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
+    final keyIv = encrypt.IV.fromSecureRandom(16);
+    final encryptedChaCha20Key = keyEncrypter.encryptBytes(chaCha20Key.bytes, iv: keyIv);
 
-    // 6. Store encrypted AES key, salt, iv, and file URL in public atKey
+    // 6. Store encrypted ChaCha20 key, salt, nonce, and file URL in public atKey
     //print('Storing secrets in atPlatform...');
 
     // Use a public atKey with leading underscore to make it invisible to scan verb
@@ -378,11 +443,12 @@ Future<void> main(List<String> arguments) async {
 
     final secretPayload = jsonEncode({
       'file_url': fileUrl,
-      'aes_key': base64Encode(encryptedAesKey.bytes),
-      'aes_key_iv': base64Encode(aesKeyIv.bytes),
-      'aes_key_salt': base64Encode(salt),
-      'file_iv': base64Encode(iv.bytes),
+      'chacha20_key': base64Encode(encryptedChaCha20Key.bytes),
+      'key_iv': base64Encode(keyIv.bytes),
+      'key_salt': base64Encode(salt),
+      'file_nonce': base64Encode(chaCha20Nonce.bytes),
       'file_name': fileName,
+      'cipher': 'chacha20', // Indicate which cipher was used
     });
 
     // Get AtClient using the correct onboarding pattern from the demos

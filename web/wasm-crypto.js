@@ -41,6 +41,66 @@ class WasmCrypto {
     }
 
     /**
+     * Decrypt data using WASM ChaCha20
+     * @param {Uint8Array} key - 32-byte ChaCha20 key
+     * @param {Uint8Array} nonce - 12-byte ChaCha20 nonce
+     * @param {Uint8Array} encryptedData - Encrypted data
+     * @returns {Promise<Uint8Array>} Decrypted data
+     */
+    async decryptChaCha20(key, nonce, encryptedData) {
+        if (!this.isAvailable()) {
+            throw new Error('WASM module not initialized');
+        }
+
+        try {
+            console.log(`WASM: ChaCha20 decrypting ${encryptedData.length} bytes`);
+            const result = this.wasmModule.decrypt_chacha20(key, nonce, encryptedData);
+            console.log(`WASM: Successfully decrypted ${result.length} bytes`);
+            return result;
+        } catch (error) {
+            console.error('WASM ChaCha20 decryption failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Decrypt large data using chunked WASM ChaCha20
+     * @param {Uint8Array} key - 32-byte ChaCha20 key
+     * @param {Uint8Array} nonce - 12-byte ChaCha20 nonce
+     * @param {Uint8Array} encryptedData - Encrypted data
+     * @param {number} chunkSize - Chunk size in bytes (default: 2MB)
+     * @param {Function} progressCallback - Progress callback function
+     * @returns {Promise<Uint8Array>} Decrypted data
+     */
+    async decryptChaCha20Chunked(key, nonce, encryptedData, chunkSize = 2 * 1024 * 1024, progressCallback = null) {
+        if (!this.isAvailable()) {
+            throw new Error('WASM module not initialized');
+        }
+
+        try {
+            console.log(`WASM: ChaCha20 chunked decrypting ${encryptedData.length} bytes`);
+            
+            // Create a wrapper for the progress callback
+            const wasmProgressCallback = progressCallback ? 
+                (progress) => progressCallback(progress) : null;
+
+            const result = this.wasmModule.decrypt_chacha20_chunked(
+                key, 
+                nonce, 
+                encryptedData, 
+                chunkSize,
+                wasmProgressCallback
+            );
+            
+            console.log(`WASM: Successfully decrypted ${result.length} bytes in chunks`);
+            return result;
+        } catch (error) {
+            console.error('WASM ChaCha20 chunked decryption failed:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Decrypt data using WASM AES-CTR
      * @param {Uint8Array} key - 32-byte AES key
      * @param {Uint8Array} iv - 16-byte initialization vector
@@ -104,50 +164,62 @@ class WasmCrypto {
 // Create global instance
 const wasmCrypto = new WasmCrypto();
 
-// Enhanced decryption function that tries WASM first, falls back to WebCrypto
-async function hybridDecryptAesCtr(key, iv, encryptedData, progressCallback = null) {
-    // Try WASM first if available
-    if (wasmCrypto.isAvailable()) {
-        try {
-            // For larger files, use chunked decryption
-            if (encryptedData.length > 5 * 1024 * 1024) { // 5MB threshold
-                return await wasmCrypto.decryptAesCtrChunked(key, iv, encryptedData, undefined, progressCallback);
-            } else {
-                return await wasmCrypto.decryptAesCtr(key, iv, encryptedData);
+// Enhanced decryption function that supports both ChaCha20 and AES-CTR
+async function hybridDecryptFile(key, ivOrNonce, encryptedData, cipher = 'aes-ctr', progressCallback = null) {
+    console.log(`Decrypting with cipher: ${cipher}`);
+    
+    if (cipher === 'chacha20') {
+        // Use ChaCha20 decryption
+        if (wasmCrypto.isAvailable()) {
+            try {
+                // For larger files, use chunked decryption
+                if (encryptedData.length > 5 * 1024 * 1024) { // 5MB threshold
+                    return await wasmCrypto.decryptChaCha20Chunked(key, ivOrNonce, encryptedData, undefined, progressCallback);
+                } else {
+                    return await wasmCrypto.decryptChaCha20(key, ivOrNonce, encryptedData);
+                }
+            } catch (error) {
+                console.error('WASM ChaCha20 decryption failed:', error);
+                throw new Error('ChaCha20 decryption failed: ' + error.message);
             }
-        } catch (error) {
-            console.warn('WASM decryption failed, falling back to WebCrypto:', error);
+        } else {
+            throw new Error('WASM module not available for ChaCha20 decryption');
         }
+    } else {
+        // Default to AES-CTR (legacy support)
+        console.log('FORCED: Using WebCrypto for CTR debugging');
+        
+        if (progressCallback) {
+            progressCallback(50); // Simulate progress for single operation
+        }
+        
+        const decryptedArrayBuffer = await window.crypto.subtle.decrypt(
+            {
+                name: 'AES-CTR',
+                counter: ivOrNonce,
+                length: 128
+            },
+            await window.crypto.subtle.importKey(
+                'raw',
+                key,
+                { name: 'AES-CTR' },
+                false,
+                ['decrypt']
+            ),
+            encryptedData
+        );
+        
+        if (progressCallback) {
+            progressCallback(100);
+        }
+        
+        return new Uint8Array(decryptedArrayBuffer);
     }
+}
 
-    // Fallback to WebCrypto
-    console.log('Using WebCrypto fallback');
-    
-    if (progressCallback) {
-        progressCallback(50); // Simulate progress for single operation
-    }
-    
-    const decryptedArrayBuffer = await window.crypto.subtle.decrypt(
-        {
-            name: 'AES-CTR',
-            counter: iv,
-            length: 128
-        },
-        await window.crypto.subtle.importKey(
-            'raw',
-            key,
-            { name: 'AES-CTR' },
-            false,
-            ['decrypt']
-        ),
-        encryptedData
-    );
-    
-    if (progressCallback) {
-        progressCallback(100);
-    }
-    
-    return new Uint8Array(decryptedArrayBuffer);
+// Legacy function for backward compatibility
+async function hybridDecryptAesCtr(key, iv, encryptedData, progressCallback = null) {
+    return await hybridDecryptFile(key, iv, encryptedData, 'aes-ctr', progressCallback);
 }
 
 // Initialize WASM when module loads
@@ -157,4 +229,5 @@ async function hybridDecryptAesCtr(key, iv, encryptedData, progressCallback = nu
 
 // Export for use in other modules
 window.wasmCrypto = wasmCrypto;
+window.hybridDecryptFile = hybridDecryptFile;
 window.hybridDecryptAesCtr = hybridDecryptAesCtr;

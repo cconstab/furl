@@ -437,101 +437,118 @@
 
                 const secrets = await secretsResponse.json();
                 
-                setStatus('Decrypting AES key with your PIN...');
+                // Step 2: Determine cipher type and decrypt the encryption key using PIN
+                const cipherType = secrets.cipher || 'aes-ctr'; // Default to AES-CTR for backward compatibility
+                console.log('Detected cipher type:', cipherType);
 
-                // Step 2: Decrypt the AES key using the PIN with WebCrypto
-                const salt = base64ToArrayBuffer(secrets.aes_key_salt);
-                const pinBytes = new TextEncoder().encode(pin);
-                
-                // Create combined bytes for key derivation (PIN + salt)
-                const combinedBytes = new Uint8Array(pinBytes.length + salt.byteLength);
-                combinedBytes.set(new Uint8Array(pinBytes));
-                combinedBytes.set(new Uint8Array(salt), pinBytes.length);
-                
-                // Debug crypto availability
-                console.log('=== CRYPTO DEBUG ===');
-                console.log('window.crypto:', window.crypto);
-                console.log('window.crypto.subtle:', window.crypto?.subtle);
-                console.log('crypto variable:', typeof crypto);
-                console.log('crypto.subtle:', typeof crypto?.subtle);
-                console.log('window.isSecureContext:', window.isSecureContext);
-                console.log('location.protocol:', window.location.protocol);
-                console.log('location.hostname:', window.location.hostname);
-                
-                // Check if we have crypto available
-                if (!window.crypto) {
-                    throw new Error('window.crypto is not available. This requires HTTPS or localhost.');
-                }
-                
-                if (!window.crypto.subtle) {
-                    throw new Error('window.crypto.subtle is not available. This requires a secure context (HTTPS or localhost).');
-                }
-                
-                // Hash with SHA-256 to match Dart implementation (produces 32 bytes = 256 bits)
-                const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
-                
-                console.log('Salt bytes:', salt.byteLength);
-                console.log('PIN key bytes:', pinKeyArrayBuffer.byteLength);
-                
-                // Import PIN key for AES-CTR decryption (32 bytes = 256-bit key)
-                const pinKey = await window.crypto.subtle.importKey(
-                    'raw',
-                    pinKeyArrayBuffer,
-                    { name: 'AES-CTR' },
-                    false,
-                    ['decrypt']
-                );
-                
-                const encryptedAesKeyBuffer = base64ToArrayBuffer(secrets.aes_key);
-                const aesKeyIvBuffer = base64ToArrayBuffer(secrets.aes_key_iv);
-                
-                console.log('Encrypted AES key bytes:', encryptedAesKeyBuffer.byteLength);
-                console.log('AES key IV bytes:', aesKeyIvBuffer.byteLength);
-                
-                // Decrypt AES key using CTR mode
-                const aesKeyBuffer = await window.crypto.subtle.decrypt(
-                    {
-                        name: 'AES-CTR',
-                        counter: aesKeyIvBuffer,
-                        length: 128
-                    },
-                    pinKey,
-                    encryptedAesKeyBuffer
-                );
-                
-                console.log('Decrypted AES key length:', aesKeyBuffer.byteLength);
-                console.log('Expected: 32 bytes, got:', aesKeyBuffer.byteLength);
-                
-                // Log the actual bytes for debugging
-                const keyBytes = new Uint8Array(aesKeyBuffer);
-                console.log('Decrypted key bytes (hex):', Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
-                
-                if (aesKeyBuffer.byteLength === 0) {
-                    throw new Error('Invalid PIN - no key decrypted');
-                }
-                
-                // Handle case where we get more bytes than expected (possibly due to Dart encrypt package behavior)
-                let actualKeyBuffer;
-                if (aesKeyBuffer.byteLength === 48) {
-                    // Take first 32 bytes (the actual AES key, ignore any padding/metadata)
-                    console.log('Got 48 bytes, taking first 32 bytes as AES key');
-                    actualKeyBuffer = aesKeyBuffer.slice(0, 32);
-                } else if (aesKeyBuffer.byteLength === 32) {
-                    actualKeyBuffer = aesKeyBuffer;
-                } else if (aesKeyBuffer.byteLength === 16) {
-                    actualKeyBuffer = aesKeyBuffer;
+                let fileDecryptionKey, ivOrNonce;
+
+                if (cipherType === 'chacha20') {
+                    setStatus('Decrypting ChaCha20 key with your PIN...');
+                    
+                    const salt = base64ToArrayBuffer(secrets.key_salt);
+                    const pinBytes = new TextEncoder().encode(pin);
+                    
+                    // Create combined bytes for key derivation (PIN + salt)
+                    const combinedBytes = new Uint8Array(pinBytes.length + salt.byteLength);
+                    combinedBytes.set(new Uint8Array(pinBytes));
+                    combinedBytes.set(new Uint8Array(salt), pinBytes.length);
+                    
+                    // Hash with SHA-256 to match Dart implementation
+                    const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
+                    
+                    // Import PIN key for AES-CTR decryption of ChaCha20 key
+                    const pinKey = await window.crypto.subtle.importKey(
+                        'raw',
+                        pinKeyArrayBuffer,
+                        { name: 'AES-CTR' },
+                        false,
+                        ['decrypt']
+                    );
+                    
+                    const encryptedChaCha20KeyBuffer = base64ToArrayBuffer(secrets.chacha20_key);
+                    const keyIvBuffer = base64ToArrayBuffer(secrets.key_iv);
+                    
+                    // Decrypt ChaCha20 key using AES-CTR mode
+                    const chaCha20KeyBuffer = await window.crypto.subtle.decrypt(
+                        {
+                            name: 'AES-CTR',
+                            counter: keyIvBuffer,
+                            length: 128
+                        },
+                        pinKey,
+                        encryptedChaCha20KeyBuffer
+                    );
+                    
+                    // Handle key size variations (same issue as with AES)
+                    let actualChaCha20KeyBuffer;
+                    if (chaCha20KeyBuffer.byteLength === 48) {
+                        // Take first 32 bytes (the actual ChaCha20 key, ignore padding/metadata)
+                        console.log('Got 48 bytes, taking first 32 bytes as ChaCha20 key');
+                        actualChaCha20KeyBuffer = chaCha20KeyBuffer.slice(0, 32);
+                    } else if (chaCha20KeyBuffer.byteLength === 32) {
+                        actualChaCha20KeyBuffer = chaCha20KeyBuffer;
+                    } else {
+                        throw new Error(`Invalid ChaCha20 key size: expected 32 or 48 bytes, got ${chaCha20KeyBuffer.byteLength} bytes`);
+                    }
+                    
+                    fileDecryptionKey = new Uint8Array(actualChaCha20KeyBuffer);
+                    ivOrNonce = base64ToArrayBuffer(secrets.file_nonce); // 8-byte nonce for ChaCha20
+                    
+                    console.log('ChaCha20 key length:', fileDecryptionKey.length);
+                    console.log('ChaCha20 nonce length:', ivOrNonce.byteLength);
+                    
                 } else {
-                    throw new Error(`Invalid key size: expected 16, 32, or 48 bytes, got ${aesKeyBuffer.byteLength} bytes`);
+                    // Legacy AES-CTR support
+                    setStatus('Decrypting AES key with your PIN...');
+                    
+                    const salt = base64ToArrayBuffer(secrets.aes_key_salt || secrets.key_salt);
+                    const pinBytes = new TextEncoder().encode(pin);
+                    
+                    // Create combined bytes for key derivation (PIN + salt)
+                    const combinedBytes = new Uint8Array(pinBytes.length + salt.byteLength);
+                    combinedBytes.set(new Uint8Array(pinBytes));
+                    combinedBytes.set(new Uint8Array(salt), pinBytes.length);
+                    
+                    // Hash with SHA-256 to match Dart implementation
+                    const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
+                    
+                    // Import PIN key for AES-CTR decryption
+                    const pinKey = await window.crypto.subtle.importKey(
+                        'raw',
+                        pinKeyArrayBuffer,
+                        { name: 'AES-CTR' },
+                        false,
+                        ['decrypt']
+                    );
+                    
+                    const encryptedAesKeyBuffer = base64ToArrayBuffer(secrets.aes_key);
+                    const aesKeyIvBuffer = base64ToArrayBuffer(secrets.aes_key_iv || secrets.key_iv);
+                    
+                    // Decrypt AES key using CTR mode
+                    const aesKeyBuffer = await window.crypto.subtle.decrypt(
+                        {
+                            name: 'AES-CTR',
+                            counter: aesKeyIvBuffer,
+                            length: 128
+                        },
+                        pinKey,
+                        encryptedAesKeyBuffer
+                    );
+                    
+                    // Handle key size variations
+                    let actualKeyBuffer;
+                    if (aesKeyBuffer.byteLength === 48) {
+                        actualKeyBuffer = aesKeyBuffer.slice(0, 32);
+                    } else if (aesKeyBuffer.byteLength === 32 || aesKeyBuffer.byteLength === 16) {
+                        actualKeyBuffer = aesKeyBuffer;
+                    } else {
+                        throw new Error(`Invalid AES key size: expected 16, 32, or 48 bytes, got ${aesKeyBuffer.byteLength} bytes`);
+                    }
+                    
+                    fileDecryptionKey = new Uint8Array(actualKeyBuffer);
+                    ivOrNonce = base64ToArrayBuffer(secrets.file_iv); // 16-byte IV for AES-CTR
                 }
-                
-                // Import the file decryption key (should be 32 bytes = 256-bit key)
-                const fileKey = await window.crypto.subtle.importKey(
-                    'raw',
-                    actualKeyBuffer,
-                    { name: 'AES-CTR' },
-                    false,
-                    ['decrypt']
-                );
 
                 // Initialize progress bar immediately
                 setStatusWithProgress('Connecting to download server...', 0);
@@ -629,10 +646,8 @@
                 // Clear chunks array to free memory
                 chunks.length = 0;
                 
-                const fileIvBuffer = base64ToArrayBuffer(secrets.file_iv);
-                
                 console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
-                console.log('File IV size:', fileIvBuffer.byteLength);
+                console.log('IV/Nonce size:', ivOrNonce.byteLength);
                 
                 // Use hybrid WASM/WebCrypto decryption with progress callback
                 updateProgress(50, 'Starting decryption...');
@@ -641,13 +656,14 @@
                     // Map decryption progress to 50-100% range  
                     const totalProgress = 50 + Math.round(progress * 0.5);
                     const technique = window.wasmCrypto && window.wasmCrypto.isAvailable() ? 'WASM' : 'WebCrypto';
-                    updateProgress(totalProgress, `Decrypting with ${technique}... ${progress}%`);
+                    updateProgress(totalProgress, `Decrypting with ${technique} ${cipherType.toUpperCase()}... ${progress}%`);
                 };
                 
-                const decryptedBytes = await hybridDecryptAesCtr(
-                    new Uint8Array(actualKeyBuffer),
-                    new Uint8Array(fileIvBuffer), 
+                const decryptedBytes = await hybridDecryptFile(
+                    fileDecryptionKey,
+                    new Uint8Array(ivOrNonce), 
                     encryptedArrayBuffer,
+                    cipherType,
                     progressCallback
                 );
 

@@ -2,6 +2,8 @@ use wasm_bindgen::prelude::*;
 use aes::Aes256;
 use ctr::Ctr128BE;
 use ctr::cipher::{KeyIvInit, StreamCipher};
+use chacha20::{ChaCha20, Key, Nonce};
+use chacha20::cipher::{KeyIvInit as ChaChaKeyIvInit, StreamCipher as ChaChaStreamCipher};
 use js_sys::Uint8Array;
 use web_sys::console;
 
@@ -164,6 +166,146 @@ fn increment_counter(counter: &mut [u8], blocks: usize) {
         counter[i] = (sum & 0xFF) as u8;
         carry >>= 8;
     }
+}
+
+/// Decrypt data using ChaCha20 stream cipher
+/// 
+/// # Arguments
+/// * `key` - 32-byte ChaCha20 key as Uint8Array
+/// * `nonce` - 8-byte ChaCha20 nonce as Uint8Array  
+/// * `encrypted_data` - Encrypted data as Uint8Array
+/// 
+/// # Returns
+/// Decrypted data as Uint8Array
+#[wasm_bindgen]
+pub fn decrypt_chacha20(
+    key: &Uint8Array,
+    nonce: &Uint8Array, 
+    encrypted_data: &Uint8Array
+) -> Result<Uint8Array, JsValue> {
+    // Validate input sizes
+    if key.length() != 32 {
+        return Err(JsValue::from_str(&format!("Invalid key size: expected 32 bytes, got {}", key.length())));
+    }
+    
+    if nonce.length() != 8 && nonce.length() != 12 {
+        return Err(JsValue::from_str(&format!("Invalid nonce size: expected 8 or 12 bytes, got {}", nonce.length())));
+    }
+
+    // Convert JS arrays to Rust vectors
+    let key_bytes = key.to_vec();
+    let nonce_bytes = nonce.to_vec();
+    let mut data = encrypted_data.to_vec();
+
+    log!("ChaCha20: Decrypting {} bytes with {}-byte nonce", data.len(), nonce_bytes.len());
+
+    // Create ChaCha20 cipher
+    let key_array: [u8; 32] = key_bytes.try_into()
+        .map_err(|_| JsValue::from_str("Failed to convert key to fixed array"))?;
+
+    let mut cipher = if nonce_bytes.len() == 12 {
+        // Standard 12-byte nonce
+        let nonce_array: [u8; 12] = nonce_bytes.try_into()
+            .map_err(|_| JsValue::from_str("Failed to convert 12-byte nonce to fixed array"))?;
+        ChaCha20::new(
+            Key::from_slice(&key_array),
+            Nonce::from_slice(&nonce_array)
+        )
+    } else {
+        // 8-byte nonce - pad to 12 bytes with zeros
+        let mut padded_nonce = [0u8; 12];
+        padded_nonce[4..12].copy_from_slice(&nonce_bytes);
+        ChaCha20::new(
+            Key::from_slice(&key_array),
+            Nonce::from_slice(&padded_nonce)
+        )
+    };
+
+    // Decrypt in-place
+    cipher.apply_keystream(&mut data);
+
+    log!("ChaCha20: Successfully decrypted {} bytes", data.len());
+
+    // Convert back to Uint8Array
+    Ok(Uint8Array::from(data.as_slice()))
+}
+
+/// Decrypt large data using ChaCha20 with chunked processing and progress callback
+/// 
+/// # Arguments
+/// * `key` - 32-byte ChaCha20 key as Uint8Array
+/// * `nonce` - 8 or 12-byte ChaCha20 nonce as Uint8Array
+/// * `encrypted_data` - Encrypted data as Uint8Array
+/// * `chunk_size` - Size of chunks to process (for memory management)
+/// * `progress_callback` - Optional JavaScript function to call with progress updates
+/// 
+/// # Returns
+/// Decrypted data as Uint8Array
+#[wasm_bindgen]
+pub fn decrypt_chacha20_chunked(
+    key: &Uint8Array,
+    nonce: &Uint8Array,
+    encrypted_data: &Uint8Array,
+    chunk_size: usize,
+    progress_callback: Option<js_sys::Function>
+) -> Result<Uint8Array, JsValue> {
+    // Validate inputs
+    if key.length() != 32 {
+        return Err(JsValue::from_str(&format!("Invalid key size: expected 32 bytes, got {}", key.length())));
+    }
+    
+    if nonce.length() != 8 && nonce.length() != 12 {
+        return Err(JsValue::from_str(&format!("Invalid nonce size: expected 8 or 12 bytes, got {}", nonce.length())));
+    }
+
+    let key_bytes = key.to_vec();
+    let nonce_bytes = nonce.to_vec();
+    let mut data = encrypted_data.to_vec();
+    let total_len = data.len();
+
+    log!("ChaCha20 Chunked: Decrypting {} bytes in chunks of {} with {}-byte nonce", total_len, chunk_size, nonce_bytes.len());
+
+    // Create ChaCha20 cipher
+    let key_array: [u8; 32] = key_bytes.try_into()
+        .map_err(|_| JsValue::from_str("Failed to convert key to fixed array"))?;
+
+    let mut cipher = if nonce_bytes.len() == 12 {
+        // Standard 12-byte nonce
+        let nonce_array: [u8; 12] = nonce_bytes.try_into()
+            .map_err(|_| JsValue::from_str("Failed to convert 12-byte nonce to fixed array"))?;
+        ChaCha20::new(
+            Key::from_slice(&key_array),
+            Nonce::from_slice(&nonce_array)
+        )
+    } else {
+        // 8-byte nonce - pad to 12 bytes with zeros
+        let mut padded_nonce = [0u8; 12];
+        padded_nonce[4..12].copy_from_slice(&nonce_bytes);
+        ChaCha20::new(
+            Key::from_slice(&key_array),
+            Nonce::from_slice(&padded_nonce)
+        )
+    };
+
+    // Process data in chunks for better memory management and progress reporting
+    let num_chunks = (total_len + chunk_size - 1) / chunk_size;
+    
+    for (chunk_idx, chunk) in data.chunks_mut(chunk_size).enumerate() {
+        // Decrypt this chunk in-place
+        cipher.apply_keystream(chunk);
+        
+        // Report progress if callback provided
+        if let Some(callback) = &progress_callback {
+            let progress = ((chunk_idx + 1) as f64 / num_chunks as f64 * 100.0) as u32;
+            let progress_value = JsValue::from(progress);
+            let _ = callback.call1(&JsValue::NULL, &progress_value);
+        }
+    }
+
+    log!("ChaCha20 Chunked: Successfully decrypted {} bytes", total_len);
+
+    // Convert back to Uint8Array
+    Ok(Uint8Array::from(data.as_slice()))
 }
 
 /// Get version information
