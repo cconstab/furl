@@ -77,9 +77,8 @@ Future<Uint8List> encryptFileStream(
   return encrypted.bytes;
 }
 
-/// ChaCha20 streaming encryption - memory efficient with true streaming
-/// This maintains keystream state across chunks without memory issues
-Future<Uint8List> encryptFileStreamChaCha20(
+/// ChaCha20 streaming encryption - returns temporary file for maximum memory efficiency
+Future<File> encryptFileStreamChaCha20ToFile(
   String filePath,
   Uint8List key, // 32-byte ChaCha20 key
   Uint8List nonce, // 12-byte ChaCha20 nonce
@@ -91,37 +90,77 @@ Future<Uint8List> encryptFileStreamChaCha20(
   final fileName = file.uri.pathSegments.last;
   final fileSize = await file.length();
   
-  // Initialize ChaCha20 cipher
-  final cipher = ChaCha20Engine();
-  final params = ParametersWithIV<KeyParameter>(
-    KeyParameter(key), 
-    nonce
-  );
-  cipher.init(true, params); // true = encrypt
+  // Create temporary file for encrypted output to avoid memory accumulation
+  final tempDir = Directory.systemTemp;
+  final tempFile = File('${tempDir.path}/furl_encrypted_${DateTime.now().millisecondsSinceEpoch}.tmp');
+  final sink = tempFile.openWrite();
   
-  final List<int> allEncryptedBytes = [];
-  int processedBytes = 0;
+  try {
+    // Initialize ChaCha20 cipher
+    final cipher = ChaCha20Engine();
+    final params = ParametersWithIV<KeyParameter>(
+      KeyParameter(key), 
+      nonce
+    );
+    cipher.init(true, params); // true = encrypt
+    
+    int processedBytes = 0;
+    
+    // Process file in chunks - ChaCha20 maintains state automatically
+    final inputStream = file.openRead();
+    
+    await for (final List<int> chunk in inputStream) {
+      // ChaCha20 can encrypt any size chunk - no block boundary issues
+      final chunkBytes = Uint8List.fromList(chunk);
+      final encryptedChunk = Uint8List(chunkBytes.length);
+      
+      // Process chunk through ChaCha20 - maintains keystream state
+      cipher.processBytes(chunkBytes, 0, chunkBytes.length, encryptedChunk, 0);
+      
+      // Write encrypted chunk directly to temp file instead of accumulating in memory
+      sink.add(encryptedChunk);
+      processedBytes += chunk.length;
+      
+      if (!quiet) {
+        showProgressBar('🔒 Encrypting $fileName', processedBytes, fileSize, quiet: quiet);
+      }
+    }
+    
+    await sink.flush();
+    await sink.close();
+    
+    return tempFile;
+  } catch (e) {
+    await sink.close();
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+    rethrow;
+  }
+}
+
+/// ChaCha20 streaming encryption - memory efficient with direct disk writing
+/// This maintains keystream state across chunks without memory accumulation
+Future<Uint8List> encryptFileStreamChaCha20(
+  String filePath,
+  Uint8List key, // 32-byte ChaCha20 key
+  Uint8List nonce, // 12-byte ChaCha20 nonce
+  {
+  bool quiet = false,
+  int chunkSize = 64 * 1024, // 64KB chunks
+}) async {
+  final tempFile = await encryptFileStreamChaCha20ToFile(filePath, key, nonce, quiet: quiet, chunkSize: chunkSize);
   
-  // Process file in chunks - ChaCha20 maintains state automatically
-  final inputStream = file.openRead();
-  
-  await for (final List<int> chunk in inputStream) {
-    // ChaCha20 can encrypt any size chunk - no block boundary issues
-    final chunkBytes = Uint8List.fromList(chunk);
-    final encryptedChunk = Uint8List(chunkBytes.length);
-    
-    // Process chunk through ChaCha20 - maintains keystream state
-    cipher.processBytes(chunkBytes, 0, chunkBytes.length, encryptedChunk, 0);
-    
-    allEncryptedBytes.addAll(encryptedChunk);
-    processedBytes += chunk.length;
-    
-    if (!quiet) {
-      showProgressBar('🔒 Encrypting $fileName', processedBytes, fileSize, quiet: quiet);
+  try {
+    // Read the final result - only loads complete file into memory at the end
+    final encryptedBytes = await tempFile.readAsBytes();
+    return encryptedBytes;
+  } finally {
+    // Clean up temporary file
+    if (await tempFile.exists()) {
+      await tempFile.delete();
     }
   }
-  
-  return Uint8List.fromList(allEncryptedBytes);
 }
 
 /// Show encryption progress - real progress for large files, simulated for small files
@@ -170,6 +209,45 @@ Future<Uint8List> encryptWithProgress(
 }
 
 /// Upload with progress tracking
+/// Upload file with progress tracking from a file (memory efficient)
+Future<http.Response> uploadFileWithProgress(String url, File file, String fileName) async {
+  final dio = Dio();
+
+  try {
+    // Get file size for Content-Length header
+    final fileSize = await file.length();
+    
+    // Read file as stream and upload as raw bytes (same as uploadWithProgress)
+    final fileBytes = file.openRead();
+    
+    final response = await dio.post(
+      url,
+      data: fileBytes, // Send file stream directly as raw bytes
+      options: Options(
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': fileSize.toString(), // Required for filebin.net
+        }, 
+        responseType: ResponseType.plain
+      ),
+      onSendProgress: (int sent, int total) {
+        showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
+      },
+    );
+
+    // Convert Dio response to http.Response for compatibility
+    return http.Response(
+      response.data.toString(),
+      response.statusCode ?? 500,
+      headers: response.headers.map.map((key, value) => MapEntry(key, value.join('; '))),
+    );
+  } catch (e) {
+    print('File upload failed: $e');
+    rethrow;
+  }
+}
+
+/// Upload data with progress tracking (kept for compatibility)
 Future<http.Response> uploadWithProgress(String url, Uint8List data, String fileName) async {
   final dio = Dio();
 
@@ -378,34 +456,51 @@ Future<void> main(List<String> arguments) async {
 
     // 3. Encrypt file with ChaCha20 streaming
     final fileName = filePath.split(Platform.pathSeparator).last;
-
-    Uint8List encryptedBytes;
-    // Use ChaCha20 streaming encryption for memory efficiency
-    encryptedBytes = await encryptFileStreamChaCha20(
-      filePath, 
-      chaCha20Key.bytes, 
-      chaCha20Nonce.bytes, 
-      quiet: quiet
-    );
-
+    final fileSize = await File(filePath).length();
+    final isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB threshold
+    
     // 4. Upload encrypted file to filebin.net
-
     String fileUrl;
+    File? tempEncryptedFile;
+    
     try {
       // Upload to filebin.net - they require a bin first, then file upload
       // Use UUID for bin ID instead of timestamp for better security
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
+      final uploadUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
 
-      // Upload file directly to bin with progress tracking
-      final uploadResp = await uploadWithProgress(
-        'https://filebin.net/$binId/${fileName}.encrypted',
-        encryptedBytes,
-        fileName,
-      );
+      http.Response uploadResp;
+      
+      if (isLargeFile) {
+        // For large files: use file-to-file streaming to minimize memory usage
+        if (!quiet) {
+          print('Large file detected (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB) - using memory-efficient streaming...');
+        }
+        
+        tempEncryptedFile = await encryptFileStreamChaCha20ToFile(
+          filePath, 
+          chaCha20Key.bytes, 
+          chaCha20Nonce.bytes, 
+          quiet: quiet
+        );
+        
+        // Upload directly from file
+        uploadResp = await uploadFileWithProgress(uploadUrl, tempEncryptedFile, fileName);
+      } else {
+        // For small files: use existing in-memory approach
+        final encryptedBytes = await encryptFileStreamChaCha20(
+          filePath, 
+          chaCha20Key.bytes, 
+          chaCha20Nonce.bytes, 
+          quiet: quiet
+        );
+        
+        uploadResp = await uploadWithProgress(uploadUrl, encryptedBytes, fileName);
+      }
 
       if (uploadResp.statusCode == 201 || uploadResp.statusCode == 200) {
-        fileUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
+        fileUrl = uploadUrl;
         // print('File uploaded to: $fileUrl');
       } else {
         throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
@@ -418,6 +513,11 @@ Future<void> main(List<String> arguments) async {
       fileUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${fileName}.encrypted';
       print('File would be uploaded to: $fileUrl');
       print('Note: Ensure network connectivity for actual filebin.net upload');
+    } finally {
+      // Clean up temporary file if it was created
+      if (tempEncryptedFile != null && await tempEncryptedFile.exists()) {
+        await tempEncryptedFile.delete();
+      }
     }
 
     // 5. Encrypt AES key with PIN (using PBKDF2 for key derivation)
