@@ -127,13 +127,13 @@ async function hybridDecryptAesCtr(key, iv, encryptedData, progressCallback = nu
         progressCallback(50); // Simulate progress for single operation
     }
     
-    const decryptedArrayBuffer = await crypto.subtle.decrypt(
+    const decryptedArrayBuffer = await window.crypto.subtle.decrypt(
         {
             name: 'AES-CTR',
             counter: iv,
             length: 128
         },
-        await crypto.subtle.importKey(
+        await window.crypto.subtle.importKey(
             'raw',
             key,
             { name: 'AES-CTR' },

@@ -342,7 +342,7 @@
                 
                 try {
                     // Decrypt this chunk with the current counter
-                    const decryptedChunk = await crypto.subtle.decrypt(
+                    const decryptedChunk = await window.crypto.subtle.decrypt(
                         {
                             name: 'AES-CTR',
                             counter: currentCounter.slice(), // Copy the counter
@@ -425,14 +425,21 @@
                 combinedBytes.set(new Uint8Array(pinBytes));
                 combinedBytes.set(new Uint8Array(salt), pinBytes.length);
                 
+                // Debug crypto availability
+                console.log('=== CRYPTO DEBUG ===');
+                console.log('window.crypto:', window.crypto);
+                console.log('window.crypto.subtle:', window.crypto?.subtle);
+                console.log('crypto variable:', typeof crypto);
+                console.log('crypto.subtle:', typeof crypto?.subtle);
+                
                 // Hash with SHA-256 to match Dart implementation (produces 32 bytes = 256 bits)
-                const pinKeyArrayBuffer = await crypto.subtle.digest('SHA-256', combinedBytes);
+                const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
                 
                 console.log('Salt bytes:', salt.byteLength);
                 console.log('PIN key bytes:', pinKeyArrayBuffer.byteLength);
                 
                 // Import PIN key for AES-CTR decryption (32 bytes = 256-bit key)
-                const pinKey = await crypto.subtle.importKey(
+                const pinKey = await window.crypto.subtle.importKey(
                     'raw',
                     pinKeyArrayBuffer,
                     { name: 'AES-CTR' },
@@ -447,7 +454,7 @@
                 console.log('AES key IV bytes:', aesKeyIvBuffer.byteLength);
                 
                 // Decrypt AES key using CTR mode
-                const aesKeyBuffer = await crypto.subtle.decrypt(
+                const aesKeyBuffer = await window.crypto.subtle.decrypt(
                     {
                         name: 'AES-CTR',
                         counter: aesKeyIvBuffer,
@@ -483,7 +490,7 @@
                 }
                 
                 // Import the file decryption key (should be 32 bytes = 256-bit key)
-                const fileKey = await crypto.subtle.importKey(
+                const fileKey = await window.crypto.subtle.importKey(
                     'raw',
                     actualKeyBuffer,
                     { name: 'AES-CTR' },
