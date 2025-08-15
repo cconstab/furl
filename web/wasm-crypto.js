@@ -41,6 +41,48 @@ class WasmCrypto {
     }
 
     /**
+     * Create a ChaCha20 streaming cipher state
+     * @param {Uint8Array} key - 32-byte ChaCha20 key
+     * @param {Uint8Array} nonce - 12-byte ChaCha20 nonce
+     * @returns {Promise<Object>} Cipher state object
+     */
+    async createChaCha20Stream(key, nonce) {
+        if (!this.isAvailable()) {
+            throw new Error('WASM module not initialized');
+        }
+
+        try {
+            console.log('WASM: Creating ChaCha20 stream cipher state');
+            const state = this.wasmModule.create_chacha20_stream(key, nonce);
+            console.log('WASM: ChaCha20 stream state created');
+            return state;
+        } catch (error) {
+            console.error('WASM ChaCha20 stream creation failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Decrypt a single chunk using streaming ChaCha20
+     * @param {Object} cipherState - Cipher state from createChaCha20Stream
+     * @param {Uint8Array} chunk - Encrypted chunk
+     * @returns {Promise<Uint8Array>} Decrypted chunk
+     */
+    async decryptChaCha20Chunk(cipherState, chunk) {
+        if (!this.isAvailable()) {
+            throw new Error('WASM module not initialized');
+        }
+
+        try {
+            const result = this.wasmModule.decrypt_chacha20_chunk(cipherState, chunk);
+            return result;
+        } catch (error) {
+            console.error('WASM ChaCha20 chunk decryption failed:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Decrypt data using WASM ChaCha20
      * @param {Uint8Array} key - 32-byte ChaCha20 key
      * @param {Uint8Array} nonce - 12-byte ChaCha20 nonce
@@ -164,7 +206,7 @@ class WasmCrypto {
 // Create global instance
 const wasmCrypto = new WasmCrypto();
 
-// Enhanced decryption function that supports both ChaCha20 and AES-CTR
+// Enhanced decryption function that supports both ChaCha20 and AES-CTR with streaming
 async function hybridDecryptFile(key, ivOrNonce, encryptedData, cipher = 'aes-ctr', progressCallback = null) {
     console.log(`Decrypting with cipher: ${cipher}`);
     
@@ -172,7 +214,7 @@ async function hybridDecryptFile(key, ivOrNonce, encryptedData, cipher = 'aes-ct
         // Use ChaCha20 decryption
         if (wasmCrypto.isAvailable()) {
             try {
-                // For larger files, use chunked decryption
+                // For larger files, use chunked decryption to reduce memory usage
                 if (encryptedData.length > 5 * 1024 * 1024) { // 5MB threshold
                     return await wasmCrypto.decryptChaCha20Chunked(key, ivOrNonce, encryptedData, undefined, progressCallback);
                 } else {
@@ -186,35 +228,122 @@ async function hybridDecryptFile(key, ivOrNonce, encryptedData, cipher = 'aes-ct
             throw new Error('WASM module not available for ChaCha20 decryption');
         }
     } else {
-        // Default to AES-CTR (legacy support)
-        console.log('FORCED: Using WebCrypto for CTR debugging');
+        // Default to AES-CTR (legacy support) with chunked processing for large files
+        console.log('Using WebCrypto for AES-CTR decryption');
         
-        if (progressCallback) {
-            progressCallback(50); // Simulate progress for single operation
+        // For large files, process in chunks to reduce memory pressure
+        if (encryptedData.length > 10 * 1024 * 1024) { // 10MB threshold
+            return await decryptAesCtrInChunks(key, ivOrNonce, encryptedData, progressCallback);
+        } else {
+            // Small files - process normally
+            if (progressCallback) {
+                progressCallback(50);
+            }
+            
+            const decryptedArrayBuffer = await window.crypto.subtle.decrypt(
+                {
+                    name: 'AES-CTR',
+                    counter: ivOrNonce,
+                    length: 128
+                },
+                await window.crypto.subtle.importKey(
+                    'raw',
+                    key,
+                    { name: 'AES-CTR' },
+                    false,
+                    ['decrypt']
+                ),
+                encryptedData
+            );
+            
+            if (progressCallback) {
+                progressCallback(100);
+            }
+            
+            return new Uint8Array(decryptedArrayBuffer);
         }
+    }
+}
+
+// Memory-efficient chunked AES-CTR decryption for large files
+async function decryptAesCtrInChunks(key, initialIv, encryptedData, progressCallback = null) {
+    console.log(`AES-CTR chunked decryption: ${encryptedData.length} bytes`);
+    
+    // Import the key once
+    const cryptoKey = await window.crypto.subtle.importKey(
+        'raw',
+        key,
+        { name: 'AES-CTR' },
+        false,
+        ['decrypt']
+    );
+    
+    // Process in 2MB chunks to balance memory usage and performance
+    const chunkSize = 2 * 1024 * 1024;
+    const numChunks = Math.ceil(encryptedData.length / chunkSize);
+    const decryptedChunks = [];
+    
+    // Track counter state
+    let currentCounter = new Uint8Array(initialIv);
+    
+    for (let i = 0; i < numChunks; i++) {
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, encryptedData.length);
+        const chunk = encryptedData.slice(start, end);
         
-        const decryptedArrayBuffer = await window.crypto.subtle.decrypt(
+        // Decrypt this chunk
+        const decryptedChunk = await window.crypto.subtle.decrypt(
             {
                 name: 'AES-CTR',
-                counter: ivOrNonce,
+                counter: currentCounter.slice(),
                 length: 128
             },
-            await window.crypto.subtle.importKey(
-                'raw',
-                key,
-                { name: 'AES-CTR' },
-                false,
-                ['decrypt']
-            ),
-            encryptedData
+            cryptoKey,
+            chunk
         );
         
+        decryptedChunks.push(new Uint8Array(decryptedChunk));
+        
+        // Advance counter for next chunk
+        const blocksProcessed = Math.ceil(chunk.length / 16);
+        currentCounter = incrementCounter(currentCounter, blocksProcessed);
+        
+        // Update progress
+        const progress = Math.round(((i + 1) / numChunks) * 100);
         if (progressCallback) {
-            progressCallback(100);
+            progressCallback(progress);
         }
         
-        return new Uint8Array(decryptedArrayBuffer);
+        // Allow other operations
+        await new Promise(resolve => setTimeout(resolve, 0));
     }
+    
+    // Combine chunks efficiently
+    const totalLength = decryptedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    
+    for (const chunk of decryptedChunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+    
+    console.log(`AES-CTR chunked decryption completed: ${totalLength} bytes`);
+    return result;
+}
+
+// Helper function to increment CTR counter
+function incrementCounter(counter, blockCount) {
+    const result = new Uint8Array(counter);
+    let carry = blockCount;
+    
+    for (let i = result.length - 1; i >= 0 && carry > 0; i--) {
+        const sum = result[i] + (carry & 0xFF);
+        result[i] = sum & 0xFF;
+        carry = Math.floor(carry / 256);
+    }
+    
+    return result;
 }
 
 // Legacy function for backward compatibility

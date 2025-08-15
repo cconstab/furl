@@ -576,114 +576,183 @@
                     updateProgress(10, 'Starting download...');
                 }
                 
-                // Use streaming approach for better memory efficiency
+                // Use streaming decryption for better memory efficiency
                 const reader = fileResponse.body.getReader();
-                const chunks = [];
                 let receivedLength = 0;
                 let chunkCount = 0;
                 const startTime = Date.now();
                 
-                // More responsive progress updates
+                // Check if we can use File System Access API for direct streaming
+                let fileHandle = null;
+                let writerStream = null;
+                
+                // Try to use File System Access API for large files (>10MB)
+                if (fileSize > 10 * 1024 * 1024 && 'showSaveFilePicker' in window) {
+                    try {
+                        fileHandle = await window.showSaveFilePicker({
+                            suggestedName: secrets.file_name,
+                            types: [{
+                                description: 'All files',
+                                accept: { '*/*': ['.*'] }
+                            }]
+                        });
+                        writerStream = await fileHandle.createWritable();
+                        updateProgress(10, 'File dialog completed, streaming to disk...');
+                    } catch (error) {
+                        console.log('File System Access API not available or user cancelled, using blob download');
+                        fileHandle = null;
+                    }
+                }
+                
+                // Initialize ChaCha20 cipher state for streaming decryption
+                let cipherState = null;
+                let canStream = false;
+                
+                if (cipherType === 'chacha20' && window.wasmCrypto && window.wasmCrypto.isAvailable()) {
+                    try {
+                        // Check if streaming functions are available
+                        if (window.wasmCrypto.wasmModule.create_chacha20_stream && 
+                            window.wasmCrypto.wasmModule.decrypt_chacha20_chunk) {
+                            
+                            const key = fileDecryptionKey;
+                            const nonce = new Uint8Array(ivOrNonce);
+                            
+                            cipherState = await window.wasmCrypto.createChaCha20Stream(key, nonce);
+                            canStream = true;
+                            console.log('ChaCha20 streaming mode enabled');
+                        } else {
+                            console.log('ChaCha20 streaming functions not available, using batch mode');
+                        }
+                    } catch (error) {
+                        console.log('Failed to initialize streaming cipher, using batch mode:', error);
+                        canStream = false;
+                    }
+                }
+                
+                // For non-streaming mode, collect chunks for later processing
+                const chunks = [];
+                let decryptedChunks = [];
+                
+                // Stream processing
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     
-                    chunks.push(value);
                     receivedLength += value.length;
                     chunkCount++;
                     
-                    // Update progress more frequently for better user experience
+                    // Update download progress (10-40% range)
                     if (fileSize > 0) {
-                        // Calculate percentage and map to 10-50% range for download phase
                         const downloadPercent = Math.min((receivedLength / fileSize) * 100, 100);
-                        const progress = 10 + Math.round(downloadPercent * 0.4); // Map to 10-50%
+                        const progress = 10 + Math.round(downloadPercent * 0.3); // Map to 10-40%
                         
-                        // Update every chunk for small files, or every few chunks for large files
-                        const shouldUpdate = fileSize < 5 * 1024 * 1024 || chunkCount % 3 === 0;
-                        
-                        if (shouldUpdate) {
+                        if (chunkCount % 3 === 0 || downloadPercent > 95) {
                             const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
                             const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
                             
-                            // Calculate download speed
                             const elapsed = (Date.now() - startTime) / 1000;
                             const speed = elapsed > 0 ? (receivedLength / 1024 / 1024) / elapsed : 0;
                             const speedText = speed > 1 ? `${speed.toFixed(1)} MB/s` : `${(speed * 1024).toFixed(0)} KB/s`;
                             
                             updateProgress(progress, `Downloading... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
                         }
-                    } else {
-                        // If no content-length header, show chunk-based progress
-                        const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
-                        if (chunkCount % 5 === 0) {
-                            const elapsed = (Date.now() - startTime) / 1000;
-                            const speed = elapsed > 0 ? (receivedLength / 1024 / 1024) / elapsed : 0;
-                            const speedText = speed > 1 ? `${speed.toFixed(1)} MB/s` : `${(speed * 1024).toFixed(0)} KB/s`;
-                            updateProgress(10 + Math.min(chunkCount * 2, 30), `Downloading... ${mbReceived}MB (${speedText})`);
-                        }
                     }
-                }
-                
-                updateProgress(50, 'Download complete, assembling file...');
-                
-                // Combine chunks efficiently with progress updates
-                const encryptedArrayBuffer = new Uint8Array(receivedLength);
-                let position = 0;
-                const totalChunks = chunks.length;
-                
-                for (let i = 0; i < chunks.length; i++) {
-                    const chunk = chunks[i];
-                    encryptedArrayBuffer.set(chunk, position);
-                    position += chunk.length;
                     
-                    // Show assembly progress for large files
-                    if (totalChunks > 10 && i % Math.ceil(totalChunks / 10) === 0) {
-                        const assemblyProgress = Math.round((i / totalChunks) * 100);
-                        updateProgress(50, `Assembling file... ${assemblyProgress}%`);
+                    // For streaming mode, decrypt chunk immediately
+                    if (canStream && cipherState && writerStream) {
+                        try {
+                            // Decrypt this chunk using streaming cipher
+                            const decryptedChunk = await window.wasmCrypto.decryptChaCha20Chunk(cipherState, value);
+                            
+                            // Write directly to file
+                            await writerStream.write(decryptedChunk);
+                            
+                            // Update decryption progress (40-90% range)
+                            const decryptProgress = Math.min((receivedLength / fileSize) * 100, 100);
+                            const totalProgress = 40 + Math.round(decryptProgress * 0.5);
+                            
+                            if (chunkCount % 5 === 0) {
+                                updateProgress(totalProgress, `Streaming decrypt... ${(receivedLength / 1024 / 1024).toFixed(1)}MB`);
+                            }
+                            
+                        } catch (error) {
+                            console.error('Streaming decryption failed, falling back to batch mode:', error);
+                            // Fall back to collecting chunks
+                            chunks.push(value);
+                            if (writerStream) {
+                                await writerStream.close();
+                                writerStream = null;
+                                canStream = false;
+                            }
+                        }
+                    } else {
+                        // Collect chunks for batch processing
+                        chunks.push(value);
                     }
                 }
                 
-                // Clear chunks array to free memory
-                chunks.length = 0;
-                
-                console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
-                console.log('IV/Nonce size:', ivOrNonce.byteLength);
-                
-                // Use hybrid WASM/WebCrypto decryption with progress callback
-                updateProgress(50, 'Starting decryption...');
-                
-                const progressCallback = (progress) => {
-                    // Map decryption progress to 50-100% range  
-                    const totalProgress = 50 + Math.round(progress * 0.5);
-                    const technique = window.wasmCrypto && window.wasmCrypto.isAvailable() ? 'WASM' : 'WebCrypto';
-                    updateProgress(totalProgress, `Decrypting with ${technique} ${cipherType.toUpperCase()}... ${progress}%`);
-                };
-                
-                const decryptedBytes = await hybridDecryptFile(
-                    fileDecryptionKey,
-                    new Uint8Array(ivOrNonce), 
-                    encryptedArrayBuffer,
-                    cipherType,
-                    progressCallback
-                );
+                // Handle completion
+                if (writerStream) {
+                    // Streaming mode completed successfully
+                    await writerStream.close();
+                    updateProgress(100, 'File streamed and decrypted successfully!');
+                    
+                    setTimeout(() => {
+                        setStatus(`File "${secrets.file_name}" streamed and decrypted to disk!`, 'success');
+                    }, 500);
+                    
+                } else {
+                    // Batch mode - process all chunks at once
+                    updateProgress(40, 'Download complete, assembling file...');
+                    
+                    const encryptedArrayBuffer = new Uint8Array(receivedLength);
+                    let position = 0;
+                    
+                    for (const chunk of chunks) {
+                        encryptedArrayBuffer.set(chunk, position);
+                        position += chunk.length;
+                    }
+                    chunks.length = 0; // Free memory
+                    
+                    console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
+                    console.log('IV/Nonce size:', ivOrNonce.byteLength);
+                    
+                    // Decrypt in batch mode with progress
+                    updateProgress(50, 'Starting decryption...');
+                    
+                    const progressCallback = (progress) => {
+                        const totalProgress = 50 + Math.round(progress * 0.5);
+                        const technique = window.wasmCrypto && window.wasmCrypto.isAvailable() ? 'WASM' : 'WebCrypto';
+                        updateProgress(totalProgress, `Decrypting with ${technique} ${cipherType.toUpperCase()}... ${progress}%`);
+                    };
+                    
+                    const decryptedBytes = await hybridDecryptFile(
+                        fileDecryptionKey,
+                        new Uint8Array(ivOrNonce), 
+                        encryptedArrayBuffer,
+                        cipherType,
+                        progressCallback
+                    );
 
-                console.log('Decryption completed successfully');
-                console.log('Decrypted size:', decryptedBytes.length);
-                console.log('First 50 chars as text:', 
-                    new TextDecoder().decode(decryptedBytes.slice(0, 50)));
-                console.log('First 20 bytes as hex:', 
-                    Array.from(decryptedBytes.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+                    console.log('Decryption completed successfully');
+                    console.log('Decrypted size:', decryptedBytes.length);
+                    
+                    // Create blob and trigger download
+                    const blob = new Blob([decryptedBytes]);
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = secrets.file_name;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
 
-                // Step 4: Create blob and trigger download
-                const blob = new Blob([decryptedBytes]);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = secrets.file_name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                    updateProgress(100, 'Download complete!');
+                    setTimeout(() => {
+                        setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
+                    }, 500);
+                }
 
                 updateProgress(100, 'Download complete!');
                 setTimeout(() => {
