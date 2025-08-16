@@ -13,6 +13,14 @@ import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pointycastle/export.dart';
 
+/// Calculate SHA-512 hash of a file
+Future<String> calculateFileSha512(String filePath) async {
+  final file = File(filePath);
+  final contents = await file.readAsBytes();
+  final digest = sha512.convert(contents);
+  return digest.toString();
+}
+
 /// Display a progress bar for long-running operations
 void showProgressBar(
   String label,
@@ -94,7 +102,8 @@ Future<Uint8List> encryptFileStream(
 }
 
 /// ChaCha20 streaming encryption - returns temporary file for maximum memory efficiency
-Future<File> encryptFileStreamChaCha20ToFile(
+/// Also calculates SHA-512 hash of the original file for integrity verification
+Future<(File, String)> encryptFileStreamChaCha20ToFile(
   String filePath,
   Uint8List key, // 32-byte ChaCha20 key
   Uint8List nonce, { // 12-byte ChaCha20 nonce
@@ -111,6 +120,9 @@ Future<File> encryptFileStreamChaCha20ToFile(
     '${tempDir.path}/furl_encrypted_${DateTime.now().millisecondsSinceEpoch}.tmp',
   );
   final sink = tempFile.openWrite();
+
+  // Initialize buffer for SHA-512 hash calculation of original file
+  final fileDataForHash = <int>[];
 
   try {
     // Initialize ChaCha20 cipher
@@ -136,6 +148,10 @@ Future<File> encryptFileStreamChaCha20ToFile(
 
         // Read chunk
         final chunkBytes = await randomAccessFile.read(currentChunkSize);
+
+        // Add original chunk data to hash calculation
+        fileDataForHash.addAll(chunkBytes);
+
         final encryptedChunk = Uint8List(chunkBytes.length);
 
         // Process chunk through ChaCha20 - maintains keystream state
@@ -171,7 +187,11 @@ Future<File> encryptFileStreamChaCha20ToFile(
     await sink.flush();
     await sink.close();
 
-    return tempFile;
+    // Calculate SHA-512 hash of the original file
+    final digest = sha512.convert(fileDataForHash);
+    final sha512Hash = digest.toString();
+
+    return (tempFile, sha512Hash);
   } catch (e) {
     await sink.close();
     if (await tempFile.exists()) {
@@ -190,7 +210,7 @@ Future<Uint8List> encryptFileStreamChaCha20(
   bool quiet = false,
   int chunkSize = 64 * 1024, // 64KB chunks
 }) async {
-  final tempFile = await encryptFileStreamChaCha20ToFile(
+  final (tempFile, _) = await encryptFileStreamChaCha20ToFile(
     filePath,
     key,
     nonce,
@@ -545,10 +565,20 @@ Future<void> main(List<String> arguments) async {
     final pin = randomAlphaNumeric(9);
     //print('PIN for recipient: $pin');
 
-    // 3. Encrypt file with ChaCha20 streaming
+    // 3. Encrypt file with ChaCha20 streaming and calculate SHA-512 for integrity
     final fileName = filePath.split(Platform.pathSeparator).last;
     final fileSize = await File(filePath).length();
     final isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB threshold
+
+    // Calculate SHA-512 hash of original file for integrity verification
+    String sha512Hash;
+    if (isLargeFile) {
+      // For large files, hash will be calculated during streaming encryption
+      sha512Hash = '';
+    } else {
+      // For small files, calculate hash upfront
+      sha512Hash = await calculateFileSha512(filePath);
+    }
 
     // 4. Upload encrypted file to filebin.net
     String fileUrl;
@@ -571,12 +601,17 @@ Future<void> main(List<String> arguments) async {
           );
         }
 
-        tempEncryptedFile = await encryptFileStreamChaCha20ToFile(
+        final (
+          tempFile,
+          calculatedSha512Hash,
+        ) = await encryptFileStreamChaCha20ToFile(
           filePath,
           chaCha20Key.bytes,
           chaCha20Nonce.bytes,
           quiet: quiet,
         );
+        tempEncryptedFile = tempFile;
+        sha512Hash = calculatedSha512Hash;
 
         // Upload directly from file
         uploadResp = await uploadFileWithProgress(
@@ -661,6 +696,8 @@ Future<void> main(List<String> arguments) async {
       'file_nonce': base64Encode(chaCha20Nonce.bytes),
       'file_name': fileName,
       'cipher': 'chacha20', // Indicate which cipher was used
+      'sha512_hash':
+          sha512Hash, // SHA-512 hash of original file for integrity verification
     });
 
     // Get AtClient using the correct onboarding pattern from the demos

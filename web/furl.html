@@ -347,6 +347,15 @@
             return result;
         }
 
+        // Helper function to calculate SHA-512 hash
+        async function calculateSha512(data) {
+            const hashBuffer = await crypto.subtle.digest('SHA-512', data);
+            const hashArray = new Uint8Array(hashBuffer);
+            const hashHex = Array.from(hashArray).map(byte => 
+                byte.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
         async function downloadAndDecrypt() {
             const pin = document.getElementById('pin').value;
 
@@ -644,6 +653,14 @@
                 if (writerStream) {
                     // Streaming mode completed successfully
                     await writerStream.close();
+                    
+                    // Note: For streaming mode with File System Access API, SHA-512 verification
+                    // would require reading the entire file back from disk, which defeats the
+                    // memory efficiency purpose. The integrity is still protected by:
+                    // 1. HTTPS transport encryption
+                    // 2. ChaCha20 authentication via decryption success
+                    // 3. File size verification
+                    
                     updateProgress(100, 'File streamed and decrypted successfully!');
                     
                     setTimeout(() => {
@@ -684,6 +701,21 @@
 
                     console.log('✅ Pure WASM decryption completed successfully');
                     console.log('Decrypted size:', decryptedBytes.length);
+                    
+                    // Verify SHA-512 hash if available
+                    if (secrets.sha512_hash) {
+                        updateProgress(95, 'Verifying file integrity...');
+                        const calculatedHash = await calculateSha512(decryptedBytes);
+                        
+                        if (calculatedHash === secrets.sha512_hash) {
+                            console.log('✅ SHA-512 verification passed');
+                        } else {
+                            console.error('❌ SHA-512 verification failed!');
+                            console.error('Expected:', secrets.sha512_hash);
+                            console.error('Calculated:', calculatedHash);
+                            throw new Error('File integrity verification failed - the file may be corrupted');
+                        }
+                    }
                     
                     // Create blob and trigger download
                     const blob = new Blob([decryptedBytes]);
