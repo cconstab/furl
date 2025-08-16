@@ -188,15 +188,6 @@
     <div class="container">
         <h1>🔐 Furl</h1>
         <p class="subtitle">Secure File Download</p>
-        
-        <div class="info">
-            <strong>How it works:</strong><br>
-            1. Enter the 9-character PIN provided by the sender<br>
-            2. Click "Download & Decrypt" to retrieve your file<br>
-            3. The file will be automatically decrypted and downloaded<br>
-            <br>
-            <strong>Privacy:</strong> Your PIN never leaves your browser - all decryption happens locally.
-        </div>
 
         <div id="messageInfo" class="info" style="display: none; background: #f0f8ff; border-left: 4px solid #4CAF50;">
             <strong id="messageHeader">📝 Message from sender:</strong><br>
@@ -218,6 +209,12 @@
             <button id="downloadBtn" onclick="downloadAndDecrypt()">
                 <span id="buttonText">Download & Decrypt File</span>
             </button>
+        </div>
+
+        <div id="privacyInfo" class="info">
+            <strong>Privacy:</strong><br>
+            Your PIN never leaves your browser. <br> 
+            All decryption happens locally.
         </div>
 
         <div id="status"></div>
@@ -411,6 +408,12 @@
         }
 
         async function downloadAndDecrypt() {
+            // Hide the privacy info box when download starts
+            const privacyInfo = document.getElementById('privacyInfo');
+            if (privacyInfo) {
+                privacyInfo.style.display = 'none';
+            }
+
             const pin = document.getElementById('pin').value;
 
             if (!pin || pin.length !== 9) {

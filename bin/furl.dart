@@ -282,16 +282,30 @@ Future<Uint8List> encryptWithProgress(
 Future<http.Response> uploadFileWithProgress(
   String url,
   File file,
-  String fileName,
-) async {
-  final dio = Dio();
+  String fileName, {
+  bool quiet = false,
+}) async {
+  final dio = Dio()
+    ..options.connectTimeout = Duration(minutes: 5) // 5 minute connection timeout
+    ..options.receiveTimeout = Duration(minutes: 30) // 30 minute receive timeout  
+    ..options.sendTimeout = Duration(hours: 2) // 2 hour send timeout for large files
+    ..options.followRedirects = true
+    ..options.maxRedirects = 5;
 
   try {
     // Get file size for Content-Length header
     final fileSize = await file.length();
+    
+    if (!quiet) {
+      print('📤 Starting upload of ${fileName}.encrypted (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB)...');
+    }
 
     // Use file stream for upload
     final fileBytes = file.openRead();
+
+    // Track progress updates to detect hanging
+    var lastProgressTime = DateTime.now();
+    var lastSentBytes = 0;
 
     final response = await dio.post(
       url,
@@ -304,10 +318,28 @@ Future<http.Response> uploadFileWithProgress(
         responseType: ResponseType.plain,
       ),
       onSendProgress: (int sent, int total) {
-        // Only update progress at meaningful intervals
-        if (sent == total ||
-            sent % (total ~/ 100).clamp(1024, 1024 * 1024) == 0) {
-          showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
+        final now = DateTime.now();
+        final timeSinceLastUpdate = now.difference(lastProgressTime).inSeconds;
+        
+        // Update progress more frequently for large files and show speed
+        final shouldUpdate = sent == total || 
+            sent % (total ~/ 200).clamp(1024, 512 * 1024) == 0 ||
+            timeSinceLastUpdate >= 5; // Force update every 5 seconds
+            
+        if (shouldUpdate) {
+          // Calculate upload speed
+          final bytesSinceLastUpdate = sent - lastSentBytes;
+          final speedMBps = bytesSinceLastUpdate / (1024 * 1024 * (timeSinceLastUpdate > 0 ? timeSinceLastUpdate : 1));
+          
+          if (!quiet) {
+            final progressMsg = timeSinceLastUpdate > 0 && sent < total
+                ? '📤 Uploading ${fileName}.encrypted (${speedMBps.toStringAsFixed(1)} MB/s)'
+                : '📤 Uploading ${fileName}.encrypted';
+            showProgressBar(progressMsg, sent, total);
+          }
+          
+          lastProgressTime = now;
+          lastSentBytes = sent;
         }
       },
     );
@@ -321,6 +353,32 @@ Future<http.Response> uploadFileWithProgress(
       ),
     );
   } catch (e) {
+    if (e is DioException) {
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+          throw Exception('Upload failed: Connection timeout after 5 minutes. Please check your internet connection.');
+        case DioExceptionType.sendTimeout:
+          throw Exception('Upload failed: Send timeout after 2 hours. File may be too large or connection too slow.');
+        case DioExceptionType.receiveTimeout:
+          throw Exception('Upload failed: Server response timeout after 30 minutes.');
+        case DioExceptionType.badResponse:
+          final statusCode = e.response?.statusCode;
+          if (statusCode == 413) {
+            final fileSizeKnown = await file.length();
+            throw Exception('Upload failed: File too large (${(fileSizeKnown / (1024 * 1024)).toStringAsFixed(1)}MB). Server limit exceeded.');
+          } else if (statusCode == 404) {
+            throw Exception('Upload failed: Server endpoint not found (404). Please verify the upload URL.');
+          } else if (statusCode == 403) {
+            throw Exception('Upload failed: Access forbidden (403). Server may have rejected the upload.');
+          } else if (statusCode == 429) {
+            throw Exception('Upload failed: Rate limit exceeded (429). Please wait and try again later.');
+          } else {
+            throw Exception('Upload failed: Server returned ${statusCode} - ${e.response?.data}');
+          }
+        default:
+          throw Exception('Upload failed: ${e.message}');
+      }
+    }
     print('File upload failed: $e');
     rethrow;
   }
@@ -330,9 +388,15 @@ Future<http.Response> uploadFileWithProgress(
 Future<http.Response> uploadWithProgress(
   String url,
   Uint8List data,
-  String fileName,
-) async {
-  final dio = Dio();
+  String fileName, {
+  bool quiet = false,
+}) async {
+  final dio = Dio()
+    ..options.connectTimeout = Duration(minutes: 5) // 5 minute connection timeout
+    ..options.receiveTimeout = Duration(minutes: 30) // 30 minute receive timeout
+    ..options.sendTimeout = Duration(hours: 2) // 2 hour send timeout for large files
+    ..options.followRedirects = true
+    ..options.maxRedirects = 5;
 
   try {
     // Upload raw binary data (like original http.post) with progress tracking
@@ -357,6 +421,32 @@ Future<http.Response> uploadWithProgress(
       ),
     );
   } catch (e) {
+    if (e is DioException) {
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+          throw Exception('Upload failed: Connection timeout after 5 minutes. Please check your internet connection.');
+        case DioExceptionType.sendTimeout:
+          throw Exception('Upload failed: Send timeout after 2 hours. File may be too large or connection too slow.');
+        case DioExceptionType.receiveTimeout:
+          throw Exception('Upload failed: Server response timeout after 30 minutes.');
+        case DioExceptionType.badResponse:
+          final statusCode = e.response?.statusCode;
+          if (statusCode == 413) {
+            throw Exception('Upload failed: File too large (${(data.length / (1024 * 1024)).toStringAsFixed(1)}MB). Server limit exceeded.');
+          } else if (statusCode == 404) {
+            throw Exception('Upload failed: Server endpoint not found (404). Please verify the upload URL.');
+          } else if (statusCode == 403) {
+            throw Exception('Upload failed: Access forbidden (403). Server may have rejected the upload.');
+          } else if (statusCode == 429) {
+            throw Exception('Upload failed: Rate limit exceeded (429). Please wait and try again later.');
+          } else {
+            throw Exception('Upload failed: Server returned ${statusCode} - ${e.response?.data}');
+          }
+        default:
+          throw Exception('Upload failed: ${e.message}');
+      }
+    }
+    
     // Fallback to original http implementation if Dio fails
     print('Dio upload failed, falling back to http: $e');
 
@@ -589,6 +679,16 @@ Future<void> main(List<String> arguments) async {
     final fileName = filePath.split(Platform.pathSeparator).last;
     final fileSize = await File(filePath).length();
     final isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB threshold
+    final isSuperLargeFile = fileSize > 100 * 1024 * 1024; // 100MB threshold for special handling
+
+    // Warn user about super large files
+    if (isSuperLargeFile && !quiet) {
+      print('⚠️  Large file detected: ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB');
+      print('   This may take a significant amount of time to encrypt and upload.');
+      print('   The process may appear to hang after encryption completes - this is normal.');
+      print('   Upload speeds depend on your internet connection.');
+      print('');
+    }
 
     // Calculate SHA-512 hash of original file for integrity verification
     String sha512Hash;
@@ -633,11 +733,20 @@ Future<void> main(List<String> arguments) async {
         tempEncryptedFile = tempFile;
         sha512Hash = calculatedSha512Hash;
 
+        // Notify user that encryption is complete and upload is starting
+        if (!quiet) {
+          print('✅ Encryption complete. Starting upload...');
+          if (isSuperLargeFile) {
+            print('   Upload progress will be shown below. Large uploads may take considerable time.');
+          }
+        }
+
         // Upload directly from file
         uploadResp = await uploadFileWithProgress(
           uploadUrl,
           tempEncryptedFile,
           fileName,
+          quiet: quiet,
         );
       } else {
         // For small files: use existing in-memory approach
@@ -648,10 +757,16 @@ Future<void> main(List<String> arguments) async {
           quiet: quiet,
         );
 
+        // Notify user that encryption is complete and upload is starting
+        if (!quiet) {
+          print('✅ Encryption complete. Starting upload...');
+        }
+
         uploadResp = await uploadWithProgress(
           uploadUrl,
           encryptedBytes,
           fileName,
+          quiet: quiet,
         );
       }
 
