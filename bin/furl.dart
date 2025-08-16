@@ -480,6 +480,10 @@ Future<void> main(List<String> arguments) async {
     print(
       '  -s, --server <url>    Furl server URL (default: https://furl.host)',
     );
+    print(
+      '  -m, --message <text>  Custom message for recipient (max 140 chars)',
+    );
+    print('  --no-file-size        Hide file size on download page');
     print('  -h, --help            Show this help message');
     print('');
     print('TTL Examples:');
@@ -495,17 +499,20 @@ Future<void> main(List<String> arguments) async {
     print('  furl @alice document.pdf 30m -v');
     print('  furl @alice document.pdf 2d --quiet');
     print('  furl @alice document.pdf 2d --server http://localhost:8080');
+    print('  furl @alice document.pdf 12h -m "Here is the contract"');
+    print('  furl @alice document.pdf 1d --no-file-size');
     print(
       '  furl @alice document.pdf 12h --server https://my-furl-server.com -v',
     );
     print('');
     print('The program will:');
-    print('  1. Encrypt your file with AES-256-CTR (streaming optimized)');
+    print('  1. Encrypt your file with ChaCha20 (streaming optimized)');
     print('  2. Upload the encrypted file to filebin.net');
     print('  3. Store decryption metadata securely on the atPlatform');
     print('  4. Generate a secure URL for the recipient');
     print('  5. Generate a PIN for additional security');
-    print('  6. Display the expiration time based on TTL');
+    print('  6. Calculate SHA-512 hash for integrity verification');
+    print('  7. Display the expiration time based on TTL');
     exit(0);
   }
 
@@ -533,6 +540,8 @@ Future<void> main(List<String> arguments) async {
   // Parse optional arguments
   bool verbose = false;
   bool quiet = false;
+  bool hideFileSize = false;
+  String? customMessage;
   String serverUrl = 'https://furl.host';
 
   for (int i = 3; i < arguments.length; i++) {
@@ -540,10 +549,21 @@ Future<void> main(List<String> arguments) async {
       verbose = true;
     } else if (arguments[i] == '-q' || arguments[i] == '--quiet') {
       quiet = true;
+    } else if (arguments[i] == '--no-file-size') {
+      hideFileSize = true;
     } else if ((arguments[i] == '-s' || arguments[i] == '--server') &&
         i + 1 < arguments.length) {
       serverUrl = arguments[i + 1];
       i++; // Skip the next argument as it's the server URL
+    } else if ((arguments[i] == '-m' || arguments[i] == '--message') &&
+        i + 1 < arguments.length) {
+      customMessage = arguments[i + 1];
+      if (customMessage.length > 140) {
+        print('Error: Message cannot exceed 140 characters');
+        print('Current message length: ${customMessage.length}');
+        exit(1);
+      }
+      i++; // Skip the next argument as it's the message
     }
   }
 
@@ -698,6 +718,10 @@ Future<void> main(List<String> arguments) async {
       'cipher': 'chacha20', // Indicate which cipher was used
       'sha512_hash':
           sha512Hash, // SHA-512 hash of original file for integrity verification
+      if (customMessage != null)
+        'message': customMessage, // Custom message for recipient
+      if (!hideFileSize)
+        'file_size': fileSize, // File size in bytes (unless hidden)
     });
 
     // Get AtClient using the correct onboarding pattern from the demos
