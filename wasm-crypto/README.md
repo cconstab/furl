@@ -1,4 +1,4 @@
-# WASM Crypto Module Setup
+# WASM ChaCha20 Crypto Module Setup
 
 ## Prerequisites
 
@@ -43,18 +43,18 @@ After building, you'll have these files in `web/wasm/`:
 ## Usage in Browser
 
 ```javascript
-import init, { decrypt_aes_ctr, decrypt_aes_ctr_chunked } from './wasm/furl_crypto.js';
+import init, { decrypt_chacha20, decrypt_chacha20_chunked } from './wasm/furl_crypto.js';
 
 // Initialize WASM module
 await init();
 
 // Use for decryption
-const decryptedData = decrypt_aes_ctr(key, iv, encryptedData);
+const decryptedData = decrypt_chacha20(key, nonce, encryptedData);
 ```
 
 ## Performance Benefits
 
-- **Speed**: 2-10x faster than pure JavaScript
-- **Memory**: More efficient memory usage
-- **Threading**: Can be used with Web Workers
-- **Size**: Smaller than equivalent JS crypto libraries
+- **Speed**: 2-10x faster than pure JavaScript ChaCha20
+- **Memory**: More efficient memory usage for large files
+- **Streaming**: Chunked processing prevents memory issues
+- **Size**: Optimized WASM binary size

@@ -82,7 +82,7 @@ dart run bin/furl.dart @youratSign path/to/file.txt 1h
 ```
 
 This will:
-- Encrypt the file with AES-256
+- Encrypt the file with ChaCha20
 - Generate a 9-character PIN
 - Upload encrypted file to filebin.net
 - Store encrypted metadata on atPlatform
@@ -106,21 +106,21 @@ The recipient:
 
 ### Upload Process
 ```
-Original File → AES-256 Encrypt → Upload to filebin.net
+Original File → ChaCha20 Encrypt → Upload to filebin.net
                      ↓
-            AES Key → PIN Encrypt → Store on atPlatform
+            ChaCha20 Key → PIN Encrypt → Store on atPlatform
 ```
 
 ### Download Process
 ```
-atPlatform → Get Encrypted Metadata → PIN Decrypt → AES Key
-filebin.net → Get Encrypted File → AES Decrypt → Original File
+atPlatform → Get Encrypted Metadata → PIN Decrypt → ChaCha20 Key
+filebin.net → Get Encrypted File → ChaCha20 Decrypt → Original File
 ```
 
 ### Security Model
 
-1. **File Encryption**: Each file is encrypted with a unique 256-bit AES key
-2. **Key Protection**: The AES key is encrypted using a PIN-derived key  
+1. **File Encryption**: Each file is encrypted with a unique 256-bit ChaCha20 key
+2. **Key Protection**: The ChaCha20 key is encrypted using a PIN-derived key  
 3. **Separation**: File data and encryption keys are stored separately
 4. **Client-Side**: All decryption happens in the recipient's browser
 5. **Zero-Knowledge**: Servers never see plaintext files or PINs
@@ -130,6 +130,26 @@ filebin.net → Get Encrypted File → AES Decrypt → Original File
 - Dart SDK
 - Activated atSign (use `dart run at_activate --atsign @youratSign`)
 - Network connectivity for atPlatform and filebin.net
+- **Rust and wasm-pack** (required for browser decryption)
+
+### Initial Setup
+
+Before using the web interface, you must build the WASM module:
+
+```bash
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install wasm-pack
+cargo install wasm-pack
+
+# Build the WASM crypto module
+cd wasm-crypto
+wasm-pack build --target web --out-dir ../web/wasm
+cd ..
+
+# Now you can use both CLI and web interface
+```
 
 ## Command Line Usage
 
@@ -177,15 +197,15 @@ dart run bin/furl.dart @alice document.pdf 1h -v
 
 ## WebAssembly (WASM) High-Performance Decryption
 
-For improved performance with large files, furl includes an optional WebAssembly (WASM) module written in Rust that provides hardware-accelerated AES-CTR decryption. This can improve decryption speeds by 2-10x for files larger than 10MB.
+**REQUIRED**: Furl now uses pure WebAssembly (WASM) for all browser-based decryption to ensure optimal performance and consistent behavior. The web interface requires WASM support and will not fall back to JavaScript crypto APIs.
 
 ### WASM Prerequisites
 
-To build and use the WASM module, you'll need:
+To build and use the WASM module (required for browser decryption):
 
 1. **Rust**: Install from [rustup.rs](https://rustup.rs/)
 2. **wasm-pack**: Install with `cargo install wasm-pack`
-3. **Web server**: Required for loading WASM modules (CORS restrictions)
+3. **Modern Browser**: Chrome, Firefox, Safari, or Edge with WebAssembly support
 
 ### Building the WASM Module
 
@@ -194,41 +214,40 @@ To build and use the WASM module, you'll need:
 cd wasm-crypto
 
 # Build the WASM module for web browsers
-wasm-pack build --target web --out-dir pkg
+wasm-pack build --target web --out-dir ../web/wasm
 
-# The generated files will be in wasm-crypto/pkg/
+# The generated files will be in web/wasm/
 ```
 
 ### WASM Integration
 
-The web interface automatically detects and uses the WASM module if available:
+The web interface requires the WASM module for decryption:
 
-1. **Hybrid Approach**: Falls back to WebCrypto API if WASM loading fails
-2. **Chunked Processing**: Handles large files without memory issues
-3. **Progress Callbacks**: Real-time progress updates during decryption
-4. **Performance Monitoring**: Automatic selection of fastest decryption method
+1. **Pure WASM**: No JavaScript crypto fallbacks - ensures consistent performance
+2. **Memory Efficient**: Streaming decryption with chunked processing
+3. **File System API**: Large files can be streamed directly to disk (Chrome/Edge)
+4. **Progress Tracking**: Real-time progress updates during download and decryption
 
 ### Performance Benefits
 
-- **Small files (<1MB)**: Minimal difference, WebCrypto preferred
-- **Medium files (1-10MB)**: 2-3x faster with WASM
-- **Large files (>10MB)**: 5-10x faster with WASM
-- **Memory efficient**: Chunked processing prevents browser crashes
+- **All file sizes**: Consistent WASM-accelerated ChaCha20 decryption
+- **Memory efficient**: Constant memory usage regardless of file size
+- **Streaming**: Download and decrypt simultaneously for large files
+- **Direct to disk**: Files >10MB can bypass browser memory entirely
 
 ### Development Notes
 
 The WASM module source is in `wasm-crypto/src/lib.rs` and uses:
-- `aes` crate for AES encryption primitives
-- `ctr` crate for Counter mode implementation
+- `chacha20` crate for ChaCha20 encryption primitives
 - `wasm-bindgen` for JavaScript integration
 - `js-sys` for browser API access
 
-Build artifacts (wasm-crypto/pkg/) are excluded from the repository - you must build locally.
+**Important**: WASM module must be built before browser decryption will work. Build artifacts are excluded from the repository.
 
 ## Security Features
 
 ### Defense in Depth
-- **Layer 1**: AES-256 file encryption
+- **Layer 1**: ChaCha20 file encryption
 - **Layer 2**: PIN-protected key encryption  
 - **Layer 3**: Separate storage of files and metadata
 - **Layer 4**: Client-side decryption only
@@ -248,10 +267,10 @@ Build artifacts (wasm-crypto/pkg/) are excluded from the repository - you must b
 
 The **PIN serves as a shared secret** that enables secure key exchange:
 
-1. **Key Protection**: Protects the AES encryption key with an additional layer
+1. **Key Protection**: Protects the ChaCha20 encryption key with an additional layer
 2. **Zero-Knowledge**: PIN never leaves the recipient's browser  
 3. **Access Control**: Requires both URL and PIN for file access
-4. **Forward Secrecy**: Each file gets a unique PIN and AES key
+4. **Forward Secrecy**: Each file gets a unique PIN and ChaCha20 key
 
 ### PIN Security Process
 
@@ -259,8 +278,8 @@ The **PIN serves as a shared secret** that enables secure key exchange:
 ```
 1. Generate random 9-char PIN
 2. Derive key: PIN_Key = SHA256(PIN_bytes + Salt_bytes)  
-3. Encrypt: Encrypted_AES_Key = AES-256(AES_Key, PIN_Key)
-4. Store encrypted AES key + salt in atPlatform
+3. Encrypt: Encrypted_ChaCha20_Key = ChaCha20(ChaCha20_Key, PIN_Key)
+4. Store encrypted ChaCha20 key + salt in atPlatform
 5. Share URL + PIN with recipient
 ```
 
@@ -268,8 +287,8 @@ The **PIN serves as a shared secret** that enables secure key exchange:
 ```
 1. Enter PIN in browser
 2. Derive same key: PIN_Key = SHA256(PIN_bytes + Salt_bytes)
-3. Decrypt: AES_Key = AES-256-DECRYPT(Encrypted_AES_Key, PIN_Key)  
-4. Use AES_Key to decrypt the downloaded file
+3. Decrypt: ChaCha20_Key = ChaCha20-DECRYPT(Encrypted_ChaCha20_Key, PIN_Key)  
+4. Use ChaCha20_Key to decrypt the downloaded file
 ```
 
 ## File Structure
@@ -277,12 +296,13 @@ The **PIN serves as a shared secret** that enables secure key exchange:
 ```
 bin/
   furl.dart          # Main CLI tool for encryption/upload
-  furl_api.dart      # API server for atSign resolution and data proxy
-  furl_web.dart      # Static web server
+  furl_server.dart   # Unified server (API + Web)
 web/
-  furl.html          # Client-side decryption interface  
-lib/
-  furl.dart          # Core library (if needed)
+  furl.html          # Client-side decryption interface
+  wasm-crypto.js     # WASM crypto module loader
+  wasm/              # WebAssembly crypto module (built from wasm-crypto/)
+wasm-crypto/         # WASM source code (Rust)
+  src/lib.rs         # ChaCha20 WASM implementation
 test/
   furl_test.dart     # Tests
 SECURITY_DESIGN.md   # Detailed security analysis
@@ -296,6 +316,7 @@ SECURITY_DESIGN.md   # Detailed security analysis
 2. **"Could not fetch data"**: Ensure API server is running on correct port
 3. **"Failed to download file"**: Check network connectivity to filebin.net
 4. **"Invalid PIN"**: Ensure you're entering the exact 9-character PIN
+5. **"WASM module not available"**: Build the WASM module with `wasm-pack` first
 
 ### Debug Mode
 
@@ -343,7 +364,12 @@ furl/
 │   ├── furl.dart          # Main CLI tool for encryption/upload
 │   └── furl_server.dart   # Unified server (API + Web)
 ├── web/                   # Web interface
-│   └── furl.html          # Client-side decryption interface
+│   ├── furl.html          # Client-side decryption interface
+│   ├── wasm-crypto.js     # WASM crypto module loader
+│   └── wasm/              # WebAssembly crypto module (generated)
+├── wasm-crypto/           # WASM source code
+│   ├── src/lib.rs         # Rust ChaCha20 implementation
+│   └── Cargo.toml         # Rust dependencies
 ├── test/                  # Test suite
 │   └── furl_test.dart     # Security and integration tests
 ├── README.md              # This file
@@ -364,114 +390,3 @@ furl/
 ## License
 
 This project is provided as-is for educational and research purposes.
-
-```bash
-# Using compiled binary
-furl @youratSign <file_path> <ttl>
-
-# Using Dart
-dart run bin/furl.dart @youratSign <file_path> <ttl>
-```
-
-Example:
-```bash
-# Using compiled binary
-furl @alice document.pdf 1h
-
-# Using Dart
-dart run bin/furl.dart @alice document.pdf 1h
-```
-
-This will:
-- Encrypt the file with AES-256
-- Generate a 9-character PIN
-- Upload the encrypted file
-- Store secrets in atPlatform for 1 hour
-- Print a URL for the recipient
-
-### Receiving a File
-
-1. Open the URL provided by sender in a web browser
-2. Enter the 9-character PIN when prompted
-3. Click "Download & Decrypt File"
-4. The original file will be downloaded automatically
-
-## Security Features
-
-- **End-to-end encryption**: Files are encrypted before upload
-- **Ephemeral keys**: AES keys are generated fresh for each file
-- **PIN protection**: AES keys are encrypted with recipient's PIN
-- **Automatic expiration**: Secrets expire after configured TTL
-- **No persistent storage**: atPlatform only stores encrypted metadata
-
-## Configuration
-
-### atSign Setup
-
-1. Update `bin/furl.dart` to use your atSign instead of `@cconstab`
-2. Ensure your atSign keys are available at `~/.atsign/keys/`
-3. Set `useMockAtClient = false` for production use
-
-### File Hosting
-
-The current implementation includes example code for uploading to file hosting services. You can:
-
-1. Use transfer.sh (uncomment the relevant code)
-2. Use filebin.net (requires API adjustments)
-3. Implement your own file hosting solution
-
-## Development
-
-### Testing
-
-The application includes a test mode that simulates file upload and atPlatform storage locally:
-
-```bash
-# Using compiled binary
-furl @alice test_file.txt 10m
-
-# Using Dart
-dart run bin/furl.dart @alice test_file.txt 10m
-```
-
-Test the web interface:
-```bash
-cd web
-python -m http.server 8000
-# Open http://localhost:8000/?atSign=@cconstab&key=furl_1234567890
-```
-
-### Project Structure
-
-```
-furl/
-├── bin/
-│   └── furl.dart           # CLI application
-├── web/
-│   └── index.html          # Web decryption interface
-├── lib/
-│   └── furl.dart           # Library code
-├── test/
-│   └── furl_test.dart      # Tests
-└── pubspec.yaml            # Dependencies
-```
-
-## Dependencies
-
-- `at_client`: atPlatform client library
-- `encrypt`: AES encryption
-- `crypto`: Cryptographic functions
-- `http`: HTTP client for file uploads
-- `random_string`: PIN generation
-
-## Security Considerations
-
-- PINs are 9 characters (alphanumeric) providing ~10^13 combinations
-- AES-256 provides strong file encryption
-- atPlatform provides secure, decentralized secret storage
-- TTL ensures secrets don't persist indefinitely
-- No file content is stored in atPlatform (only metadata)
-
-## License
-
-This project is a demonstration of atPlatform capabilities for secure file transfer.

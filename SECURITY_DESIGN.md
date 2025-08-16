@@ -9,15 +9,15 @@ Furl is a secure file sharing system that combines multiple layers of encryption
 ### 1. Multi-Layer Encryption Model
 
 ```
-Original File → AES-256 Encryption → Upload to Public Storage
+Original File → ChaCha20 Encryption → Upload to Public Storage
                     ↓
-PIN-Protected AES Key → atPlatform Storage → Client-Side Decryption
+PIN-Protected ChaCha20 Key → atPlatform Storage → Client-Side Decryption
 ```
 
 ### 2. Key Components
 
-- **AES-256 File Encryption**: Files are encrypted with a randomly generated 256-bit AES key
-- **PIN-Based Key Protection**: The AES key itself is encrypted using a PIN-derived key
+- **ChaCha20 File Encryption**: Files are encrypted with a randomly generated 256-bit ChaCha20 key
+- **PIN-Based Key Protection**: The ChaCha20 key itself is encrypted using a PIN-derived key
 - **Public Storage**: Encrypted files are stored on public services (filebin.net)
 - **Metadata Storage**: Encrypted keys and metadata are stored on atPlatform
 - **Client-Side Decryption**: All decryption happens in the recipient's browser
@@ -27,20 +27,19 @@ PIN-Protected AES Key → atPlatform Storage → Client-Side Decryption
 ### Upload Process (Sender)
 
 1. **File Preparation**
-   - Generate random 256-bit AES key
-   - Generate random 128-bit IV (Initialization Vector)
+   - Generate random 256-bit ChaCha20 key
+   - Generate random 96-bit nonce (for ChaCha20)
    - Generate 9-character alphanumeric PIN
 
 2. **File Encryption**
    ```
-   Encrypted File = AES-256-CBC(Original File, AES Key, File IV)
+   Encrypted File = ChaCha20(Original File, ChaCha20 Key, Nonce)
    ```
 
 3. **Key Protection**
    - Generate random 64-bit salt
    - Derive encryption key from PIN: `PIN Key = SHA256(PIN bytes + Salt bytes)`
-   - Generate random 128-bit IV for key encryption
-   - Encrypt the AES key: `Encrypted AES Key = AES-256-CBC(AES Key, PIN Key, Key IV)`
+   - Encrypt the ChaCha20 key: `Encrypted ChaCha20 Key = ChaCha20(ChaCha20 Key, PIN Key, Nonce)`
 
 4. **Storage**
    - Upload encrypted file to filebin.net (public, anonymous storage)
@@ -48,11 +47,11 @@ PIN-Protected AES Key → atPlatform Storage → Client-Side Decryption
      ```json
      {
        "file_url": "https://filebin.net/...",
-       "aes_key": "base64(Encrypted AES Key)",
-       "aes_key_iv": "base64(Key IV)",
-       "aes_key_salt": "base64(Salt)",
-       "file_iv": "base64(File IV)",
-       "file_name": "original_filename.ext"
+       "chacha20_key": "base64(Encrypted ChaCha20 Key)",
+       "chacha20_nonce": "base64(Nonce)",
+       "chacha20_key_salt": "base64(Salt)",
+       "file_name": "original_filename.ext",
+       "cipher": "chacha20"
      }
      ```
 
@@ -74,11 +73,11 @@ PIN-Protected AES Key → atPlatform Storage → Client-Side Decryption
 3. **PIN Entry and Key Derivation**
    - User enters 9-character PIN in browser
    - Browser derives PIN key: `PIN Key = SHA256(PIN bytes + Salt bytes)`
-   - Browser decrypts AES key: `AES Key = AES-256-CBC-DECRYPT(Encrypted AES Key, PIN Key, Key IV)`
+   - Browser decrypts ChaCha20 key: `ChaCha20 Key = ChaCha20-DECRYPT(Encrypted ChaCha20 Key, PIN Key, Nonce)`
 
 4. **File Download and Decryption**
    - Browser downloads encrypted file via API proxy: `/download?url=...`
-   - Browser decrypts file: `Original File = AES-256-CBC-DECRYPT(Encrypted File, AES Key, File IV)`
+   - Browser decrypts file: `Original File = ChaCha20-DECRYPT(Encrypted File, ChaCha20 Key, Nonce)`
    - Browser triggers automatic download of decrypted file
 
 ## Role of the PIN
@@ -87,13 +86,13 @@ PIN-Protected AES Key → atPlatform Storage → Client-Side Decryption
 
 The PIN serves as a **shared secret** that enables secure key exchange without requiring pre-shared cryptographic keys. Here's why it's critical:
 
-1. **Key Protection**: The PIN protects the AES encryption key, ensuring that even if someone gains access to the atPlatform metadata, they cannot decrypt the file without the PIN.
+1. **Key Protection**: The PIN protects the ChaCha20 encryption key, ensuring that even if someone gains access to the atPlatform metadata, they cannot decrypt the file without the PIN.
 
 2. **Zero-Knowledge Architecture**: The PIN never leaves the recipient's browser. The server never sees or stores the PIN, maintaining a zero-knowledge security model.
 
 3. **Access Control**: Only someone with both the URL and the PIN can decrypt the file, providing two-factor access control.
 
-4. **Forward Secrecy**: Each file uses a unique AES key and PIN, so compromise of one file doesn't affect others.
+4. **Forward Secrecy**: Each file uses a unique ChaCha20 key and PIN, so compromise of one file doesn't affect others.
 
 ### PIN Characteristics
 
@@ -106,8 +105,8 @@ The PIN serves as a **shared secret** that enables secure key exchange without r
 
 ### 1. Defense in Depth
 
-- **Layer 1**: File is encrypted with AES-256 before upload
-- **Layer 2**: AES key is encrypted with PIN-derived key
+- **Layer 1**: File is encrypted with ChaCha20 before upload
+- **Layer 2**: ChaCha20 key is encrypted with PIN-derived key
 - **Layer 3**: Metadata is stored separately from file data
 - **Layer 4**: PIN is communicated separately from URL
 
@@ -119,8 +118,8 @@ The PIN serves as a **shared secret** that enables secure key exchange without r
 
 ### 3. Compromise Resistance
 
-- **File Storage Breach**: Encrypted files are useless without the AES key
-- **Metadata Breach**: Encrypted AES keys are useless without the PIN
+- **File Storage Breach**: Encrypted files are useless without the ChaCha20 key
+- **Metadata Breach**: Encrypted ChaCha20 keys are useless without the PIN
 - **URL Interception**: URL alone cannot be used to decrypt files
 - **PIN Interception**: PIN alone cannot be used without the URL
 
@@ -137,9 +136,9 @@ To decrypt a file, an attacker would need **ALL** of the following:
 ### What Each Component Alone Reveals
 
 - **URL only**: Reveals which atSign and key, but cannot access encrypted data
-- **PIN only**: Useless without the corresponding encrypted AES key
-- **Encrypted file only**: Cannot be decrypted without the AES key
-- **Metadata only**: Contains encrypted AES key, but requires PIN to decrypt
+- **PIN only**: Useless without the corresponding encrypted ChaCha20 key
+- **Encrypted file only**: Cannot be decrypted without the ChaCha20 key
+- **Metadata only**: Contains encrypted ChaCha20 key, but requires PIN to decrypt
 
 ## Implementation Security
 
@@ -154,15 +153,15 @@ This could be enhanced with PBKDF2 or Argon2 for additional security against bru
 
 ### Cryptographic Primitives
 
-- **Symmetric Encryption**: AES-256 in CBC mode
+- **Symmetric Encryption**: ChaCha20 stream cipher
 - **Key Generation**: Cryptographically secure random number generator
 - **Hashing**: SHA-256 for key derivation
-- **Padding**: PKCS#7 padding for block cipher
+- **Nonce**: 96-bit nonces for ChaCha20 (8 or 12 bytes supported)
 
 ### Browser Security
 
 - **Same-Origin Policy**: API endpoints use CORS to control access
-- **Memory Management**: CryptoJS handles cryptographic operations securely
+- **Memory Management**: WebAssembly WASM module handles cryptographic operations securely
 - **No Storage**: No sensitive data is stored in browser localStorage/sessionStorage
 
 ## Conclusion

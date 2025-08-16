@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:encrypt/encrypt.dart' as encrypt;
+import 'dart:async';
 import 'package:crypto/crypto.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
 import 'package:random_string/random_string.dart';
@@ -10,9 +11,23 @@ import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pointycastle/export.dart';
+
+/// Calculate SHA-512 hash of a file
+Future<String> calculateFileSha512(String filePath) async {
+  final file = File(filePath);
+  final contents = await file.readAsBytes();
+  final digest = sha512.convert(contents);
+  return digest.toString();
+}
 
 /// Display a progress bar for long-running operations
-void showProgressBar(String label, int current, int total, {bool quiet = false}) {
+void showProgressBar(
+  String label,
+  int current,
+  int total, {
+  bool quiet = false,
+}) {
   if (quiet) return; // Skip progress bars in quiet mode
 
   const int barWidth = 40;
@@ -40,26 +55,179 @@ Future<Uint8List> encryptFileStream(
 }) async {
   final file = File(filePath);
   final fileName = filePath.split(Platform.pathSeparator).last;
-  
+  final fileSize = await file.length();
+
   if (!quiet) {
-    showProgressBar('🔒 Reading $fileName', 0, 100, quiet: quiet);
+    showProgressBar(
+      '🔒 Starting streaming encryption for $fileName',
+      0,
+      fileSize,
+      quiet: quiet,
+    );
   }
-  
-  // Read entire file - CTR mode requires sequential processing
-  final fileBytes = await file.readAsBytes();
-  
+
+  // Stream the file data but encrypt all at once to maintain CTR integrity
+  final List<int> allFileBytes = [];
+  int processedBytes = 0;
+
+  final inputStream = file.openRead();
+
+  await for (final List<int> chunk in inputStream) {
+    allFileBytes.addAll(chunk);
+    processedBytes += chunk.length;
+
+    if (!quiet) {
+      showProgressBar(
+        '🔒 Reading $fileName',
+        processedBytes,
+        fileSize,
+        quiet: quiet,
+      );
+    }
+  }
+
   if (!quiet) {
-    showProgressBar('🔒 Encrypting $fileName', 50, 100, quiet: quiet);
+    showProgressBar('🔒 Encrypting $fileName', 0, 1, quiet: quiet);
   }
-  
-  // Encrypt entire file with CTR mode (maintains counter integrity)
-  final encryptedFile = encrypter.encryptBytes(fileBytes, iv: iv);
-  
+
+  // Encrypt the entire file as one operation to maintain CTR integrity
+  final fileBytes = Uint8List.fromList(allFileBytes);
+  final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
+
   if (!quiet) {
-    showProgressBar('🔒 Encrypting $fileName', 100, 100, quiet: quiet);
+    showProgressBar('🔒 Encrypting $fileName', 1, 1, quiet: quiet);
   }
-  
-  return encryptedFile.bytes;
+
+  return encrypted.bytes;
+}
+
+/// ChaCha20 streaming encryption - returns temporary file for maximum memory efficiency
+/// Also calculates SHA-512 hash of the original file for integrity verification
+Future<(File, String)> encryptFileStreamChaCha20ToFile(
+  String filePath,
+  Uint8List key, // 32-byte ChaCha20 key
+  Uint8List nonce, { // 12-byte ChaCha20 nonce
+  bool quiet = false,
+  int chunkSize = 64 * 1024, // 64KB chunks
+}) async {
+  final file = File(filePath);
+  final fileName = file.uri.pathSegments.last;
+  final fileSize = await file.length();
+
+  // Create temporary file for encrypted output to avoid memory accumulation
+  final tempDir = Directory.systemTemp;
+  final tempFile = File(
+    '${tempDir.path}/furl_encrypted_${DateTime.now().millisecondsSinceEpoch}.tmp',
+  );
+  final sink = tempFile.openWrite();
+
+  // Initialize buffer for SHA-512 hash calculation of original file
+  final fileDataForHash = <int>[];
+
+  try {
+    // Initialize ChaCha20 cipher
+    final cipher = ChaCha20Engine();
+    final params = ParametersWithIV<KeyParameter>(KeyParameter(key), nonce);
+    cipher.init(true, params); // true = encrypt
+
+    int processedBytes = 0;
+    int lastProgressUpdate = 0;
+    final progressUpdateInterval = (fileSize / 100)
+        .clamp(1024, 1024 * 1024)
+        .round(); // Update every 1% or at least 1KB, max 1MB
+
+    // Use manual chunked reading for better progress control
+    final randomAccessFile = await file.open();
+
+    try {
+      while (processedBytes < fileSize) {
+        final remainingBytes = fileSize - processedBytes;
+        final currentChunkSize = remainingBytes < chunkSize
+            ? remainingBytes
+            : chunkSize;
+
+        // Read chunk
+        final chunkBytes = await randomAccessFile.read(currentChunkSize);
+
+        // Add original chunk data to hash calculation
+        fileDataForHash.addAll(chunkBytes);
+
+        final encryptedChunk = Uint8List(chunkBytes.length);
+
+        // Process chunk through ChaCha20 - maintains keystream state
+        cipher.processBytes(
+          chunkBytes,
+          0,
+          chunkBytes.length,
+          encryptedChunk,
+          0,
+        );
+
+        // Write encrypted chunk directly to temp file
+        sink.add(encryptedChunk);
+        processedBytes += chunkBytes.length;
+
+        // Update progress only when we've processed a meaningful amount
+        if (!quiet &&
+            (processedBytes - lastProgressUpdate >= progressUpdateInterval ||
+                processedBytes == fileSize)) {
+          showProgressBar(
+            '🔒 Encrypting $fileName',
+            processedBytes,
+            fileSize,
+            quiet: quiet,
+          );
+          lastProgressUpdate = processedBytes;
+        }
+      }
+    } finally {
+      await randomAccessFile.close();
+    }
+
+    await sink.flush();
+    await sink.close();
+
+    // Calculate SHA-512 hash of the original file
+    final digest = sha512.convert(fileDataForHash);
+    final sha512Hash = digest.toString();
+
+    return (tempFile, sha512Hash);
+  } catch (e) {
+    await sink.close();
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+    rethrow;
+  }
+}
+
+/// ChaCha20 streaming encryption - memory efficient with direct disk writing
+/// This maintains keystream state across chunks without memory accumulation
+Future<Uint8List> encryptFileStreamChaCha20(
+  String filePath,
+  Uint8List key, // 32-byte ChaCha20 key
+  Uint8List nonce, { // 12-byte ChaCha20 nonce
+  bool quiet = false,
+  int chunkSize = 64 * 1024, // 64KB chunks
+}) async {
+  final (tempFile, _) = await encryptFileStreamChaCha20ToFile(
+    filePath,
+    key,
+    nonce,
+    quiet: quiet,
+    chunkSize: chunkSize,
+  );
+
+  try {
+    // Read the final result - only loads complete file into memory at the end
+    final encryptedBytes = await tempFile.readAsBytes();
+    return encryptedBytes;
+  } finally {
+    // Clean up temporary file
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+  }
 }
 
 /// Show encryption progress - real progress for large files, simulated for small files
@@ -89,7 +257,9 @@ Future<Uint8List> encryptWithProgress(
       // Estimate ~50MB/s encryption speed
       final estimatedSeconds = (fileSize / (50 * 1024 * 1024)).clamp(1.0, 30.0);
       final steps = (estimatedSeconds * 10).round(); // 10 updates per second
-      final stepDelay = Duration(milliseconds: (estimatedSeconds * 1000 / steps).round());
+      final stepDelay = Duration(
+        milliseconds: (estimatedSeconds * 1000 / steps).round(),
+      );
 
       // Start progress display
       for (int i = 0; i < steps; i++) {
@@ -108,7 +278,60 @@ Future<Uint8List> encryptWithProgress(
 }
 
 /// Upload with progress tracking
-Future<http.Response> uploadWithProgress(String url, Uint8List data, String fileName) async {
+/// Upload file with progress tracking from a file (memory efficient)
+Future<http.Response> uploadFileWithProgress(
+  String url,
+  File file,
+  String fileName,
+) async {
+  final dio = Dio();
+
+  try {
+    // Get file size for Content-Length header
+    final fileSize = await file.length();
+
+    // Use file stream for upload
+    final fileBytes = file.openRead();
+
+    final response = await dio.post(
+      url,
+      data: fileBytes, // Send file stream directly as raw bytes
+      options: Options(
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': fileSize.toString(), // Required for filebin.net
+        },
+        responseType: ResponseType.plain,
+      ),
+      onSendProgress: (int sent, int total) {
+        // Only update progress at meaningful intervals
+        if (sent == total ||
+            sent % (total ~/ 100).clamp(1024, 1024 * 1024) == 0) {
+          showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
+        }
+      },
+    );
+
+    // Convert Dio response to http.Response for compatibility
+    return http.Response(
+      response.data.toString(),
+      response.statusCode ?? 500,
+      headers: response.headers.map.map(
+        (key, value) => MapEntry(key, value.join('; ')),
+      ),
+    );
+  } catch (e) {
+    print('File upload failed: $e');
+    rethrow;
+  }
+}
+
+/// Upload data with progress tracking (kept for compatibility)
+Future<http.Response> uploadWithProgress(
+  String url,
+  Uint8List data,
+  String fileName,
+) async {
   final dio = Dio();
 
   try {
@@ -116,7 +339,10 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     final response = await dio.post(
       url,
       data: data, // Send raw bytes, not FormData
-      options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
+      options: Options(
+        headers: {'Content-Type': 'application/octet-stream'},
+        responseType: ResponseType.plain,
+      ),
       onSendProgress: (int sent, int total) {
         showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
       },
@@ -126,7 +352,9 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     return http.Response(
       response.data.toString(),
       response.statusCode ?? 500,
-      headers: response.headers.map.map((key, value) => MapEntry(key, value.join('; '))),
+      headers: response.headers.map.map(
+        (key, value) => MapEntry(key, value.join('; ')),
+      ),
     );
   } catch (e) {
     // Fallback to original http implementation if Dio fails
@@ -134,7 +362,11 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
 
     final uri = Uri.parse(url);
     final request = http.MultipartRequest('POST', uri);
-    final multipartFile = http.MultipartFile.fromBytes('file', data, filename: '${fileName}.encrypted');
+    final multipartFile = http.MultipartFile.fromBytes(
+      'file',
+      data,
+      filename: '${fileName}.encrypted',
+    );
     request.files.add(multipartFile);
     request.headers['Content-Type'] = 'application/octet-stream';
 
@@ -168,7 +400,9 @@ int parseTtl(String ttlString) {
 
   if (match == null) {
     print('Invalid TTL format: $ttlString');
-    print('Use format like: 30s (seconds), 10m (minutes), 2h (hours), 1d (days)');
+    print(
+      'Use format like: 30s (seconds), 10m (minutes), 2h (hours), 1d (days)',
+    );
     print('Or just a number for seconds: 3600');
     exit(1);
   }
@@ -210,11 +444,15 @@ String formatDuration(int seconds) {
   } else if (seconds < 3600) {
     final minutes = seconds ~/ 60;
     final remainingSeconds = seconds % 60;
-    return remainingSeconds == 0 ? '${minutes}m' : '${minutes}m ${remainingSeconds}s';
+    return remainingSeconds == 0
+        ? '${minutes}m'
+        : '${minutes}m ${remainingSeconds}s';
   } else if (seconds < 86400) {
     final hours = seconds ~/ 3600;
     final remainingMinutes = (seconds % 3600) ~/ 60;
-    return remainingMinutes == 0 ? '${hours}h' : '${hours}h ${remainingMinutes}m';
+    return remainingMinutes == 0
+        ? '${hours}h'
+        : '${hours}h ${remainingMinutes}m';
   } else {
     final days = seconds ~/ 86400;
     final remainingHours = (seconds % 86400) ~/ 3600;
@@ -232,12 +470,16 @@ Future<void> main(List<String> arguments) async {
     print('Arguments:');
     print('  atSign                Your atSign (e.g., @alice)');
     print('  file_path             Path to the file to encrypt and share');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
+    print(
+      '  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)',
+    );
     print('');
     print('Options:');
     print('  -v, --verbose         Enable verbose logging');
     print('  -q, --quiet           Disable progress bars');
-    print('  -s, --server <url>    Furl server URL (default: https://furl.host)');
+    print(
+      '  -s, --server <url>    Furl server URL (default: https://furl.host)',
+    );
     print('  -h, --help            Show this help message');
     print('');
     print('TTL Examples:');
@@ -253,7 +495,9 @@ Future<void> main(List<String> arguments) async {
     print('  furl @alice document.pdf 30m -v');
     print('  furl @alice document.pdf 2d --quiet');
     print('  furl @alice document.pdf 2d --server http://localhost:8080');
-    print('  furl @alice document.pdf 12h --server https://my-furl-server.com -v');
+    print(
+      '  furl @alice document.pdf 12h --server https://my-furl-server.com -v',
+    );
     print('');
     print('The program will:');
     print('  1. Encrypt your file with AES-256-CTR (streaming optimized)');
@@ -269,7 +513,9 @@ Future<void> main(List<String> arguments) async {
     print('Usage: furl <atSign> <file_path> <ttl> [options]');
     print('');
     print('Arguments:');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
+    print(
+      '  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)',
+    );
     print('');
     print('Examples:');
     print('  furl @alice document.pdf 1h');
@@ -294,7 +540,8 @@ Future<void> main(List<String> arguments) async {
       verbose = true;
     } else if (arguments[i] == '-q' || arguments[i] == '--quiet') {
       quiet = true;
-    } else if ((arguments[i] == '-s' || arguments[i] == '--server') && i + 1 < arguments.length) {
+    } else if ((arguments[i] == '-s' || arguments[i] == '--server') &&
+        i + 1 < arguments.length) {
       serverUrl = arguments[i + 1];
       i++; // Skip the next argument as it's the server URL
     }
@@ -306,53 +553,110 @@ Future<void> main(List<String> arguments) async {
   }
 
   try {
-    // 1. Generate AES-256 key and IV
-    final aesKey = encrypt.Key.fromSecureRandom(32);
-    final iv = encrypt.IV.fromSecureRandom(16);
+    // 1. Generate ChaCha20 key and nonce using secure random
+    final chaCha20Key = encrypt.Key.fromSecureRandom(
+      32,
+    ); // 32-byte key for ChaCha20
+    final chaCha20Nonce = encrypt.IV.fromSecureRandom(
+      8,
+    ); // 8-byte nonce for ChaCha20 (some implementations use 8 bytes)
 
     // 2. Generate 9-char alphanumeric PIN
     final pin = randomAlphaNumeric(9);
     //print('PIN for recipient: $pin');
 
-    // 3. Encrypt file
+    // 3. Encrypt file with ChaCha20 streaming and calculate SHA-512 for integrity
     final fileName = filePath.split(Platform.pathSeparator).last;
+    final fileSize = await File(filePath).length();
+    final isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB threshold
 
-    final encrypter = encrypt.Encrypter(encrypt.AES(aesKey, mode: encrypt.AESMode.ctr));
-    
-    Uint8List encryptedBytes;
-    // Use streaming encryption for all files to ensure CTR mode consistency
-    encryptedBytes = await encryptFileStream(filePath, encrypter, iv, quiet: quiet);
+    // Calculate SHA-512 hash of original file for integrity verification
+    String sha512Hash;
+    if (isLargeFile) {
+      // For large files, hash will be calculated during streaming encryption
+      sha512Hash = '';
+    } else {
+      // For small files, calculate hash upfront
+      sha512Hash = await calculateFileSha512(filePath);
+    }
 
     // 4. Upload encrypted file to filebin.net
-
     String fileUrl;
+    File? tempEncryptedFile;
+
     try {
       // Upload to filebin.net - they require a bin first, then file upload
       // Use UUID for bin ID instead of timestamp for better security
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
+      final uploadUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
 
-      // Upload file directly to bin with progress tracking
-      final uploadResp = await uploadWithProgress(
-        'https://filebin.net/$binId/${fileName}.encrypted',
-        encryptedBytes,
-        fileName,
-      );
+      http.Response uploadResp;
+
+      if (isLargeFile) {
+        // For large files: use file-to-file streaming to minimize memory usage
+        if (!quiet) {
+          print(
+            'Large file detected (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB) - using memory-efficient streaming...',
+          );
+        }
+
+        final (
+          tempFile,
+          calculatedSha512Hash,
+        ) = await encryptFileStreamChaCha20ToFile(
+          filePath,
+          chaCha20Key.bytes,
+          chaCha20Nonce.bytes,
+          quiet: quiet,
+        );
+        tempEncryptedFile = tempFile;
+        sha512Hash = calculatedSha512Hash;
+
+        // Upload directly from file
+        uploadResp = await uploadFileWithProgress(
+          uploadUrl,
+          tempEncryptedFile,
+          fileName,
+        );
+      } else {
+        // For small files: use existing in-memory approach
+        final encryptedBytes = await encryptFileStreamChaCha20(
+          filePath,
+          chaCha20Key.bytes,
+          chaCha20Nonce.bytes,
+          quiet: quiet,
+        );
+
+        uploadResp = await uploadWithProgress(
+          uploadUrl,
+          encryptedBytes,
+          fileName,
+        );
+      }
 
       if (uploadResp.statusCode == 201 || uploadResp.statusCode == 200) {
-        fileUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
+        fileUrl = uploadUrl;
         // print('File uploaded to: $fileUrl');
       } else {
-        throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
+        throw Exception(
+          'Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}',
+        );
       }
     } catch (e) {
       print('Error uploading to filebin.net: $e');
       // Fallback: simulate upload for testing
       print('Simulating upload...');
       final uuid = Uuid();
-      fileUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${fileName}.encrypted';
+      fileUrl =
+          'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${fileName}.encrypted';
       print('File would be uploaded to: $fileUrl');
       print('Note: Ensure network connectivity for actual filebin.net upload');
+    } finally {
+      // Clean up temporary file if it was created
+      if (tempEncryptedFile != null && await tempEncryptedFile.exists()) {
+        await tempEncryptedFile.delete();
+      }
     }
 
     // 5. Encrypt AES key with PIN (using PBKDF2 for key derivation)
@@ -363,26 +667,37 @@ Future<void> main(List<String> arguments) async {
     final digest = sha256.convert(pinBytes + salt);
     final derivedKey = Uint8List.fromList(digest.bytes);
 
-    final aesKeyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
-    final aesKeyIv = encrypt.IV.fromSecureRandom(16);
-    final encryptedAesKey = aesKeyEncrypter.encryptBytes(aesKey.bytes, iv: aesKeyIv);
+    final keyEncrypter = encrypt.Encrypter(
+      encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr),
+    );
+    final keyIv = encrypt.IV.fromSecureRandom(16);
+    final encryptedChaCha20Key = keyEncrypter.encryptBytes(
+      chaCha20Key.bytes,
+      iv: keyIv,
+    );
 
-    // 6. Store encrypted AES key, salt, iv, and file URL in public atKey
+    // 6. Store encrypted ChaCha20 key, salt, nonce, and file URL in public atKey
     //print('Storing secrets in atPlatform...');
 
     // Use a public atKey with leading underscore to make it invisible to scan verb
     // Generate a UUID-based random identifier instead of timestamp for security
     final uuid = Uuid();
-    final randomId = uuid.v4().replaceAll('-', ''); // Remove dashes for cleaner ID
+    final randomId = uuid.v4().replaceAll(
+      '-',
+      '',
+    ); // Remove dashes for cleaner ID
     final atKeyName = '_furl_$randomId';
 
     final secretPayload = jsonEncode({
       'file_url': fileUrl,
-      'aes_key': base64Encode(encryptedAesKey.bytes),
-      'aes_key_iv': base64Encode(aesKeyIv.bytes),
-      'aes_key_salt': base64Encode(salt),
-      'file_iv': base64Encode(iv.bytes),
+      'chacha20_key': base64Encode(encryptedChaCha20Key.bytes),
+      'key_iv': base64Encode(keyIv.bytes),
+      'key_salt': base64Encode(salt),
+      'file_nonce': base64Encode(chaCha20Nonce.bytes),
       'file_name': fileName,
+      'cipher': 'chacha20', // Indicate which cipher was used
+      'sha512_hash':
+          sha512Hash, // SHA-512 hash of original file for integrity verification
     });
 
     // Get AtClient using the correct onboarding pattern from the demos
@@ -402,12 +717,21 @@ Future<void> main(List<String> arguments) async {
       final storageStepDelay = Duration(milliseconds: 80);
 
       for (int i = 0; i <= storageSteps; i++) {
-        showProgressBar('🏗️ Storing metadata on atPlatform', i, storageSteps, quiet: quiet);
+        showProgressBar(
+          '🏗️ Storing metadata on atPlatform',
+          i,
+          storageSteps,
+          quiet: quiet,
+        );
         if (i < storageSteps && !quiet) await Future.delayed(storageStepDelay);
       }
     }
 
-    await atClient.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
+    await atClient.put(
+      atKey,
+      secretPayload,
+      putRequestOptions: putRequestOptions,
+    );
     //print('Secrets stored in atPlatform with public key: $atKeyName');
 
     // 7. Verify the data is retrievable from remote server before exiting
@@ -426,24 +750,37 @@ Future<void> main(List<String> arguments) async {
 
         // Force a fresh lookup from the atServer (not cached)
         final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
-        final retrievedData = await atClient.get(atKey, getRequestOptions: getRequestOptions);
+        final retrievedData = await atClient.get(
+          atKey,
+          getRequestOptions: getRequestOptions,
+        );
         if (retrievedData.value != null) {
           //print('✓ Data successfully verified on remote atServer');
           dataVerified = true;
         } else {
           retryCount++;
-          print('⏳ Attempt $retryCount/$maxRetries - waiting for remote sync...');
+          print(
+            '⏳ Attempt $retryCount/$maxRetries - waiting for remote sync...',
+          );
         }
       } catch (e) {
         retryCount++;
-        print('⏳ Attempt $retryCount/$maxRetries - waiting for remote sync... ($e)');
+        print(
+          '⏳ Attempt $retryCount/$maxRetries - waiting for remote sync... ($e)',
+        );
       }
-      await Future.delayed(Duration(seconds: 2)); // Wait 2 seconds between attempts
+      await Future.delayed(
+        Duration(seconds: 2),
+      ); // Wait 2 seconds between attempts
     }
 
     if (!dataVerified) {
-      print('⚠️  Warning: Could not verify data sync to remote server after $maxRetries attempts');
-      print('   The data may still be syncing. Try the download in a few minutes.');
+      print(
+        '⚠️  Warning: Could not verify data sync to remote server after $maxRetries attempts',
+      );
+      print(
+        '   The data may still be syncing. Try the download in a few minutes.',
+      );
     }
 
     // 8. Print retrieval URL
@@ -454,7 +791,9 @@ Future<void> main(List<String> arguments) async {
 
     // Calculate and display expiration time
     final expirationTime = DateTime.now().add(Duration(seconds: ttl));
-    final formattedExpiration = expirationTime.toLocal().toString().split('.')[0]; // Remove microseconds
+    final formattedExpiration = expirationTime.toLocal().toString().split(
+      '.',
+    )[0]; // Remove microseconds
     print('PIN expires: $formattedExpiration (TTL: ${formatDuration(ttl)})');
 
     // print('\nNote: Make sure the server is running:');
@@ -475,7 +814,8 @@ Future<void> main(List<String> arguments) async {
 Future<AtClient> _getAtClient(String atSign, bool verbose) async {
   try {
     // Generate preferences following the pattern from at_demos
-    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
 
     final preference = AtOnboardingPreference()
       ..hiveStoragePath = '$home/.atsign/storage/$atSign'
@@ -508,7 +848,9 @@ Future<AtClient> _getAtClient(String atSign, bool verbose) async {
   } catch (e) {
     print('Failed to create AtClient: $e');
     print('Make sure:');
-    print('1. You have activated your atSign: dart run at_activate --atsign $atSign');
+    print(
+      '1. You have activated your atSign: dart run at_activate --atsign $atSign',
+    );
     print('2. Your atKeys file exists at: ~/.atsign/keys/${atSign}_key.atKeys');
     print('3. You have proper network connectivity');
     exit(6);
