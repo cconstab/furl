@@ -198,10 +198,15 @@
             <strong>Privacy:</strong> Your PIN never leaves your browser - all decryption happens locally.
         </div>
 
-        <div id="urlParams" class="params-info" style="display: none;">
-            <strong>Parameters:</strong><br>
-            atSign: <span id="paramAtSign"></span><br>
-            key: <span id="paramKey"></span>
+        <div id="messageInfo" class="info" style="display: none; background: #f0f8ff; border-left: 4px solid #4CAF50;">
+            <strong id="messageHeader">📝 Message from sender:</strong><br>
+            <span id="senderMessage"></span>
+        </div>
+
+        <div id="fileInfo" class="info" style="display: none; background: #f9f9f9; border-left: 4px solid #2196F3;">
+            <strong>📁 File information:</strong><br>
+            <span id="fileName"></span><br>
+            <span id="fileSize"></span>
         </div>
 
         <div class="form-group">
@@ -267,10 +272,8 @@
                 }
             }, 1000); // Give WASM time to initialize
 
-            // Show URL parameters for debugging
-            document.getElementById('paramAtSign').textContent = atSign;
-            document.getElementById('paramKey').textContent = keyName;
-            document.getElementById('urlParams').style.display = 'block';
+            // Load and display file metadata immediately
+            loadFileMetadata();
 
             // Focus on PIN input
             document.getElementById('pin').focus();
@@ -354,6 +357,57 @@
             const hashHex = Array.from(hashArray).map(byte => 
                 byte.toString(16).padStart(2, '0')).join('');
             return hashHex;
+        }
+
+        // Load and display file metadata (message, filename, file size) before PIN entry
+        async function loadFileMetadata() {
+            try {
+                const atSignName = atSign.startsWith('@') ? atSign.substring(1) : atSign;
+                const fetchUrl = `${API_BASE_URL}/api/fetch/${atSignName}/${keyName}`;
+                
+                const secretsResponse = await fetch(fetchUrl);
+                if (!secretsResponse.ok) {
+                    // Don't show error for metadata fetch failure - PIN might still work
+                    console.log('Could not fetch metadata, file info will be shown after PIN entry');
+                    return;
+                }
+
+                const secrets = await secretsResponse.json();
+                
+                // Display message and file information if available
+                if (secrets.message) {
+                    document.getElementById('messageHeader').textContent = `📝 Message from ${atSign}:`;
+                    document.getElementById('senderMessage').textContent = secrets.message;
+                    document.getElementById('messageInfo').style.display = 'block';
+                }
+                
+                if (secrets.file_name) {
+                    let fileInfoText = `Name: ${secrets.file_name}`;
+                    
+                    if (secrets.file_size) {
+                        const size = secrets.file_size;
+                        let sizeText;
+                        
+                        if (size < 1024) {
+                            sizeText = `${size} bytes`;
+                        } else if (size < 1024 * 1024) {
+                            sizeText = `${(size / 1024).toFixed(1)} KB`;
+                        } else if (size < 1024 * 1024 * 1024) {
+                            sizeText = `${(size / (1024 * 1024)).toFixed(2)} MB`;
+                        } else {
+                            sizeText = `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+                        }
+                        
+                        fileInfoText += `\nSize: ${sizeText}`;
+                    }
+                    
+                    document.getElementById('fileName').innerHTML = fileInfoText.replace(/\n/g, '<br>');
+                    document.getElementById('fileInfo').style.display = 'block';
+                }
+            } catch (error) {
+                // Silently handle metadata fetch errors - not critical for functionality
+                console.log('Metadata fetch failed:', error.message);
+            }
         }
 
         async function downloadAndDecrypt() {
