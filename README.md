@@ -145,7 +145,16 @@ cargo install wasm-pack
 
 # Build the WASM crypto module
 cd wasm-crypto
-wasm-pack build --target web --out-dir ../web/wasm
+
+# On Linux/macOS:
+./build.sh
+
+# On Windows:
+build.bat
+
+# Or manually with wasm-pack:
+# wasm-pack build --target web --out-dir ../web/wasm
+
 cd ..
 
 # Now you can use both CLI and web interface
@@ -213,11 +222,47 @@ To build and use the WASM module (required for browser decryption):
 # Navigate to the WASM crypto directory
 cd wasm-crypto
 
-# Build the WASM module for web browsers
+# On Linux/macOS - use the build script:
+./build.sh
+
+# On Windows - use the batch script:
+build.bat
+
+# Or manually with wasm-pack:
 wasm-pack build --target web --out-dir ../web/wasm
 
 # The generated files will be in web/wasm/
 ```
+
+### WASM Build Troubleshooting
+
+**Permission denied on macOS/Linux:**
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+**Missing Rust/wasm-pack:**
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install wasm-pack
+cargo install wasm-pack
+```
+
+**Build fails with target error:**
+```bash
+# Add the wasm32 target
+rustup target add wasm32-unknown-unknown
+```
+
+**Module not found in browser:**
+Check that files were generated in `web/wasm/` directory:
+- `wasm_crypto.js`
+- `wasm_crypto_bg.wasm`
+- `package.json`
 
 ### WASM Integration
 
