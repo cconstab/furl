@@ -56,9 +56,9 @@ class FurlServer {
   Future<void> _handleRequest(HttpRequest request) async {
     final requestId = DateTime.now().millisecondsSinceEpoch.toString().substring(8); // Last 5 digits
     final startTime = DateTime.now();
-    
+
     print('🔄 [$requestId] ${request.method} ${request.uri.path} - Started');
-    
+
     // Add CORS headers for web access
     request.response.headers.add('Access-Control-Allow-Origin', '*');
     request.response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -81,7 +81,7 @@ class FurlServer {
         // Static file serving
         await _handleStaticFile(request, uri);
       }
-      
+
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       print('✅ [$requestId] ${request.method} ${request.uri.path} - Completed in ${duration}ms');
     } catch (e) {
@@ -138,7 +138,7 @@ class FurlServer {
       request.response.headers.contentLength = fileSize;
 
       request.response.statusCode = 200;
-      
+
       // Stream the file instead of loading into memory
       final fileStream = file.openRead();
       await fileStream.pipe(request.response);
