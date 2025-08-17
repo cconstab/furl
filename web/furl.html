@@ -564,11 +564,19 @@
                 // Step 3: Download entire file and decrypt as one stream
                 const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}&atSign=${encodeURIComponent(atSign)}&keyName=${encodeURIComponent(keyName)}`;
                 
-                updateProgress(5, 'Requesting file from server...');
+                const fetchStartTime = Date.now();
+                updateProgress(5, 'Downloading file from server...');
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);
                 }
+                
+                const fetchTime = Date.now() - fetchStartTime;
+                console.log(`Fetch completed in ${fetchTime}ms`);
+                
+                // If we get here quickly, the server supports streaming
+                // If it took a while, the file might have been fully downloaded already
+                updateProgress(8, 'Received response, checking file info...');
                 
                 // Check content length to determine approach
                 const contentLength = fileResponse.headers.get('content-length');
@@ -576,12 +584,12 @@
                 
                 console.log('Encrypted file size:', fileSize, 'bytes');
                 
-                // Update progress bar with file info
+                // Update progress - we now have response headers, about to start downloading body
                 if (fileSize > 0) {
                     const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
-                    updateProgress(10, `Starting download... (${mbTotal}MB)`);
+                    updateProgress(5, `Starting download... (${mbTotal}MB)`);
                 } else {
-                    updateProgress(10, 'Starting download...');
+                    updateProgress(5, 'Starting download...');
                 }
                 
                 // Use streaming decryption for better memory efficiency
@@ -605,7 +613,7 @@
                             }]
                         });
                         writerStream = await fileHandle.createWritable();
-                        updateProgress(10, 'File dialog completed, streaming to disk...');
+                        updateProgress(5, 'File dialog completed, streaming to disk...');
                     } catch (error) {
                         console.log('File System Access API not available or user cancelled, using blob download');
                         fileHandle = null;
@@ -649,17 +657,27 @@
                 let decryptedChunks = [];
                 
                 // Stream processing
+                console.log('Starting to read response stream...');
+                const streamStartTime = Date.now();
+                let firstChunkTime = null;
+                
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     
+                    // Log timing for first chunk to understand streaming behavior
+                    if (firstChunkTime === null) {
+                        firstChunkTime = Date.now();
+                        console.log(`First chunk received after ${firstChunkTime - streamStartTime}ms`);
+                    }
+                    
                     receivedLength += value.length;
                     chunkCount++;
                     
-                    // Update download progress (10-40% range)
+                    // Update download progress (5-95% range)
                     if (fileSize > 0) {
                         const downloadPercent = Math.min((receivedLength / fileSize) * 100, 100);
-                        const progress = 10 + Math.round(downloadPercent * 0.3); // Map to 10-40%
+                        const progress = 5 + Math.round(downloadPercent * 0.9); // Map to 5-95%
                         
                         if (chunkCount % 3 === 0 || downloadPercent > 95) {
                             const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
@@ -669,7 +687,11 @@
                             const speed = elapsed > 0 ? (receivedLength / 1024 / 1024) / elapsed : 0;
                             const speedText = speed > 1 ? `${speed.toFixed(1)} MB/s` : `${(speed * 1024).toFixed(0)} KB/s`;
                             
-                            updateProgress(progress, `Downloading... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
+                            // Indicate whether this is likely streaming or buffered
+                            const isLikelyStreaming = fetchTime < 1000; // If fetch was fast, probably streaming
+                            const actionText = isLikelyStreaming ? 'Downloading' : 'Processing';
+                            
+                            updateProgress(progress, `${actionText}... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
                         }
                     }
                     
@@ -682,9 +704,9 @@
                             // Write directly to file
                             await writerStream.write(decryptedChunk);
                             
-                            // Update decryption progress (40-90% range)
+                            // Update streaming progress (5-95% range, same as download since simultaneous)
                             const decryptProgress = Math.min((receivedLength / fileSize) * 100, 100);
-                            const totalProgress = 40 + Math.round(decryptProgress * 0.5);
+                            const totalProgress = 5 + Math.round(decryptProgress * 0.9);
                             
                             if (chunkCount % 5 === 0) {
                                 updateProgress(totalProgress, `Pure WASM streaming... ${(receivedLength / 1024 / 1024).toFixed(1)}MB`);
@@ -726,7 +748,7 @@
                     
                 } else {
                     // Batch mode - process all chunks at once
-                    updateProgress(40, 'Download complete, assembling file...');
+                    updateProgress(95, 'Download complete, assembling file...');
                     
                     const encryptedArrayBuffer = new Uint8Array(receivedLength);
                     let position = 0;
@@ -741,10 +763,10 @@
                     console.log('IV/Nonce size:', ivOrNonce.byteLength);
                     
                     // Decrypt in pure WASM batch mode with progress
-                    updateProgress(50, 'Starting pure WASM decryption...');
+                    updateProgress(95, 'Starting pure WASM decryption...');
                     
                     const progressCallback = (progress) => {
-                        const totalProgress = 50 + Math.round(progress * 0.5);
+                        const totalProgress = 95 + Math.round(progress * 0.05); // Map to 95-100%
                         updateProgress(totalProgress, `Pure WASM ${cipherType.toUpperCase()} decrypting... ${progress}%`);
                     };
                     
