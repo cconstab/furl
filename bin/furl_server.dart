@@ -46,11 +46,19 @@ class FurlServer {
     print('');
 
     await for (HttpRequest request in _server!) {
-      await _handleRequest(request);
+      // Handle each request concurrently (non-blocking)
+      _handleRequest(request).catchError((error) {
+        print('❌ Unhandled error in request handler: $error');
+      });
     }
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString().substring(8); // Last 5 digits
+    final startTime = DateTime.now();
+    
+    print('🔄 [$requestId] ${request.method} ${request.uri.path} - Started');
+    
     // Add CORS headers for web access
     request.response.headers.add('Access-Control-Allow-Origin', '*');
     request.response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -73,7 +81,12 @@ class FurlServer {
         // Static file serving
         await _handleStaticFile(request, uri);
       }
+      
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      print('✅ [$requestId] ${request.method} ${request.uri.path} - Completed in ${duration}ms');
     } catch (e) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      print('❌ [$requestId] ${request.method} ${request.uri.path} - Failed in ${duration}ms: $e');
       await _handleError(request, e);
     }
   }
@@ -117,16 +130,20 @@ class FurlServer {
     final file = File('$webRoot/$filePath');
 
     if (await file.exists()) {
-      final fileBytes = await file.readAsBytes();
+      final fileSize = await file.length();
 
-      // Set appropriate content type
+      // Set appropriate content type and content length
       final contentType = _getContentType(filePath);
       request.response.headers.contentType = contentType;
+      request.response.headers.contentLength = fileSize;
 
       request.response.statusCode = 200;
-      request.response.add(fileBytes);
+      
+      // Stream the file instead of loading into memory
+      final fileStream = file.openRead();
+      await fileStream.pipe(request.response);
 
-      print('📄 Served: /$filePath (${fileBytes.length} bytes)');
+      print('📄 Served: /$filePath ($fileSize bytes)');
     } else {
       request.response.statusCode = 404;
       request.response.headers.contentType = ContentType.html;
