@@ -268,7 +268,7 @@ class FurlServer {
       print('🌐 Fetching from atServer: $atServerUrl');
 
       // Use curl to fetch the data since it handles SSL properly
-      final result = await Process.run('curl', ['-s', atServerUrl]);
+      final result = await Process.run('curl', ['-s', '--url', atServerUrl]);
 
       if (result.exitCode == 0) {
         String responseBody = result.stdout.toString().trim();
@@ -367,145 +367,159 @@ class FurlServer {
   }
 
   Future<void> _handleFileDownload(HttpRequest request, String fileUrl, {String? atSign, String? keyName}) async {
-    File? tempFile;
     try {
-      print('📁 Proxying file download: $fileUrl');
+      print('📁 Proxying file download with streaming: $fileUrl');
 
-      // Create a more unique temp file name using URL components or atSign/keyName if available
-      final tempDir = Directory.systemTemp;
+      // Parse and re-encode the URL to handle spaces and special characters properly
+      final uri = Uri.parse(fileUrl);
+      final encodedUrl = uri.toString();
+      print('🔗 Encoded URL: $encodedUrl');
 
-      // Extract filename from URL for better traceability
-      String filename = 'unknown';
-      try {
-        final uri = Uri.parse(fileUrl);
-        if (uri.pathSegments.isNotEmpty) {
-          filename = uri.pathSegments.last;
-          // Remove .encrypted extension if present for cleaner naming
-          if (filename.endsWith('.encrypted')) {
-            filename = filename.substring(0, filename.length - 10);
-          }
-          // Make filename safe for filesystem
-          filename = filename.replaceAll(RegExp(r'[^\w\-\.]'), '_');
-        }
-      } catch (e) {
-        // Keep default 'unknown' if URL parsing fails
-      }
-
-      // Generate a random suffix to prevent collisions when multiple users download the same file
-      final random = DateTime.now().microsecondsSinceEpoch.toString().substring(7); // Last 6 digits for uniqueness
-
-      String uniqueId;
-
-      // Prefer atSign and keyName if available for better traceability
-      if (atSign != null && keyName != null) {
-        // Extract UUID from keyName (pattern: _furl_<UUID>)
-        final uuidMatch = RegExp(r'_furl_([a-f0-9]+)').firstMatch(keyName);
-        if (uuidMatch != null) {
-          final uuid = uuidMatch.group(1)!;
-          // Truncate UUID to first 8 chars and include filename
-          final shortUuid = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
-          final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
-          uniqueId = '${safeAtSign}_${shortUuid}_${filename}_${random}';
-          print('📋 Using atSign, short UUID and filename for temp file: $uniqueId');
-        } else {
-          // Fallback to atSign and keyName
-          final safeAtSign = atSign.replaceAll(RegExp(r'[^\w]'), '_');
-          final safeKeyName = keyName.replaceAll(RegExp(r'[^\w\-]'), '_');
-          uniqueId = '${safeAtSign}_${safeKeyName}_${filename}_${random}';
-          print('📋 Using atSign, keyName and filename for temp file: $uniqueId');
-        }
-      } else {
-        // Extract unique identifier from fileUrl to avoid collisions
-        try {
-          final uri = Uri.parse(fileUrl);
-          final pathSegments = uri.pathSegments;
-
-          if (pathSegments.isNotEmpty) {
-            // Extract the bin ID from filebin URLs (e.g., furl340e4ecf3f8541a69d43aa632ac884b5)
-            final binId = pathSegments[0];
-
-            // Use bin ID and filename for better traceability
-            uniqueId = '${binId.replaceAll(RegExp(r'[^\w\-]'), '_')}_${filename}_${random}';
-          } else {
-            // Fallback to URL hash if parsing fails
-            uniqueId = '${fileUrl.hashCode.abs().toString()}_${filename}_${random}';
-          }
-        } catch (e) {
-          // Fallback to URL hash if URL parsing fails
-          uniqueId = '${fileUrl.hashCode.abs().toString()}_${filename}_${random}';
-        }
-        print('📋 Using URL-based identifier and filename for temp file: $uniqueId');
-      }
-
-      // Ensure the temp file name is unique - regenerate if it already exists
-      String baseUniqueId = uniqueId;
-      int attempt = 0;
-      do {
-        if (attempt > 0) {
-          // Generate a new random suffix if file exists
-          final newRandom = DateTime.now().microsecondsSinceEpoch.toString().substring(7);
-          uniqueId = '${baseUniqueId}_${newRandom}';
-          print('🔄 Temp file exists, trying new name: $uniqueId');
-        }
-        tempFile = File('${tempDir.path}/${uniqueId}.tmp');
-        attempt++;
-      } while (await tempFile.exists() && attempt < 10); // Safety limit of 10 attempts
-
-      if (await tempFile.exists()) {
-        throw Exception('Unable to generate unique temp file name after 10 attempts');
-      }
-
-      print('📁 Using temp file: ${tempFile.path}');
-
-      // Use curl to download directly to temp file (no memory buffering)
-      final result = await Process.run('curl', [
+      // First, get the content length with a HEAD request
+      print('🔍 Getting file info...');
+      final headResult = await Process.run('curl', [
+        '-I', // HEAD request only
         '-s', // Silent
         '-L', // Follow redirects
-        '-o', tempFile.path, // Output to file
-        fileUrl,
+        '-f', // Fail on HTTP errors
+        '--max-time', '30', // 30 second timeout
+        '--connect-timeout', '10', // 10 second connect timeout
+        '--url', encodedUrl, // Use encoded URL for safer handling
       ]);
 
-      if (result.exitCode == 0 && await tempFile.exists()) {
-        final fileSize = await tempFile.length();
-        print('📦 Downloaded ${fileSize} bytes to temp file via curl');
-
-        // Set response headers
-        request.response.statusCode = 200;
-        request.response.headers.contentType = ContentType.binary;
-        request.response.headers.contentLength = fileSize;
-
-        // Stream the file directly from disk to response (no memory buffering)
-        final fileStream = tempFile.openRead();
-        await fileStream.pipe(request.response);
-
-        print('✅ Successfully streamed ${fileSize} bytes from temp file');
+      int? contentLength;
+      if (headResult.exitCode == 0) {
+        final headers = headResult.stdout.toString();
+        print('📄 HEAD response headers:');
+        print(headers);
+        final contentLengthMatch = RegExp(r'content-length:\s*(\d+)', caseSensitive: false).firstMatch(headers);
+        if (contentLengthMatch != null) {
+          contentLength = int.tryParse(contentLengthMatch.group(1)!);
+          print('📏 Parsed Content-Length: $contentLength bytes');
+        } else {
+          print('⚠️ No Content-Length found in HEAD response');
+        }
       } else {
-        throw Exception('Curl failed with exit code ${result.exitCode}: ${result.stderr}');
+        print('❌ HEAD request failed with exit code ${headResult.exitCode}');
+        print('❌ HEAD stderr: ${headResult.stderr}');
       }
-    } catch (e) {
-      print('❌ Error downloading file from $fileUrl: $e');
-      request.response.statusCode = 404;
-      request.response.headers.contentType = ContentType.json;
-      request.response.write(
-        jsonEncode({
-          'error': 'Could not download file',
-          'url': fileUrl,
-          'details': e.toString(),
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
+
+      // Set response headers for streaming
+      request.response.statusCode = 200;
+      request.response.headers.contentType = ContentType.binary;
+
+      // Set content length if we got it from HEAD request
+      if (contentLength != null) {
+        request.response.headers.contentLength = contentLength;
+        print('📊 Set Content-Length header: $contentLength');
+      } else {
+        // Use chunked encoding if we don't know the length
+        request.response.headers.set('Transfer-Encoding', 'chunked');
+        print('🔄 Using chunked transfer encoding');
+      }
+
+      // Add headers to indicate streaming content
+      request.response.headers.set('Cache-Control', 'no-cache');
+
+      // Start curl process for streaming download
+      final curlProcess = await Process.start('curl', [
+        '-s', // Silent (no progress bar)
+        '-L', // Follow redirects
+        '-f', // Fail on HTTP errors
+        '--max-time', '300', // 5 minute timeout
+        '--connect-timeout', '30', // 30 second connect timeout
+        '--url', encodedUrl, // Use encoded URL for safer handling
+      ]);
+
+      // Stream the curl stdout directly to the response
+      print('🚀 Starting direct stream from curl to client');
+
+      // Create a subscription to monitor the streaming
+      int bytesStreamed = 0;
+      final stopwatch = Stopwatch()..start();
+
+      final streamSubscription = curlProcess.stdout.listen(
+        (List<int> data) {
+          bytesStreamed += data.length;
+          request.response.add(data);
+
+          // Log progress every MB for large files
+          if (contentLength != null && bytesStreamed % (1024 * 1024) == 0) {
+            final percent = (bytesStreamed / contentLength * 100).toStringAsFixed(1);
+            print('📦 Streamed ${(bytesStreamed / 1024 / 1024).toStringAsFixed(1)}MB (${percent}%)');
+          }
+        },
+        onError: (error) {
+          print('❌ Stream error: $error');
+        },
+        onDone: () {
+          stopwatch.stop();
+          print('✅ Streaming completed: ${bytesStreamed} bytes in ${stopwatch.elapsedMilliseconds}ms');
+        },
       );
-    } finally {
-      // Clean up temp file
-      if (tempFile != null && await tempFile.exists()) {
-        try {
-          await tempFile.delete();
-          print('🗑️ Cleaned up temp file');
-        } catch (e) {
-          print('⚠️ Failed to delete temp file: $e');
+
+      // Monitor stderr for curl errors
+      final stderrBuffer = <int>[];
+      curlProcess.stderr.listen((List<int> data) {
+        stderrBuffer.addAll(data);
+      });
+
+      // Wait for curl process to complete
+      final exitCode = await curlProcess.exitCode;
+
+      // Cancel the stream subscription
+      await streamSubscription.cancel();
+
+      if (exitCode == 0) {
+        print('✅ Successfully streamed ${bytesStreamed} bytes directly from source');
+      } else {
+        final errorMessage = String.fromCharCodes(stderrBuffer);
+        print('❌ Curl failed with exit code $exitCode: $errorMessage');
+
+        // If we haven't sent any data yet, we can send an error response
+        if (bytesStreamed == 0) {
+          request.response.statusCode = 404;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode({
+              'error': 'Could not download file',
+              'url': fileUrl,
+              'details': 'Curl failed with exit code $exitCode: $errorMessage',
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          );
         }
       }
+    } catch (e) {
+      print('❌ Error in streaming download from $fileUrl: $e');
+
+      // Only send error response if we haven't started streaming yet
+      try {
+        if (request.response.statusCode == 200) {
+          // We've already started sending data, can't change status code
+          print('⚠️ Cannot send error response - streaming already started');
+        } else {
+          request.response.statusCode = 500;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode({
+              'error': 'Internal server error during streaming',
+              'url': fileUrl,
+              'details': e.toString(),
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          );
+        }
+      } catch (responseError) {
+        print('❌ Error sending error response: $responseError');
+      }
     }
-    await request.response.close();
+
+    try {
+      await request.response.close();
+    } catch (e) {
+      print('⚠️ Error closing response: $e');
+    }
   }
 
   Future<Map<String, dynamic>> _queryAtDirectory(String atSign) async {

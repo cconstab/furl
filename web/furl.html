@@ -152,6 +152,11 @@
             position: relative;
             overflow: hidden;
         }
+        .progress-text {
+            position: relative;
+            z-index: 1;
+            transition: opacity 0.3s ease;
+        }
         .progress-bar::before {
             content: '';
             position: absolute;
@@ -301,14 +306,39 @@
         function updateProgress(progress, message = null) {
             const progressBar = document.querySelector('.progress-bar');
             const progressText = document.querySelector('.progress-text');
-            const messageDiv = document.querySelector('.progress div');
+            const messageDiv = document.querySelector('.progress div:first-child');
+            
+            console.log('Updating progress:', progress, '%', message);
             
             if (progressBar) {
                 progressBar.style.width = `${progress}%`;
-                progressText.textContent = `${progress}%`;
+                if (progressText) {
+                    const roundedProgress = Math.round(progress);
+                    progressText.textContent = `${roundedProgress}%`;
+                    
+                    // Only show percentage text if progress bar is wide enough
+                    // Calculate the actual width in pixels
+                    const progressContainer = progressBar.parentElement;
+                    if (progressContainer) {
+                        const containerWidth = progressContainer.offsetWidth;
+                        const progressBarWidth = (progress / 100) * containerWidth;
+                        
+                        // Need at least 45px for "100%" text to be readable
+                        const minWidthForText = 45;
+                        
+                        if (progressBarWidth >= minWidthForText) {
+                            progressText.style.opacity = '1';
+                        } else {
+                            progressText.style.opacity = '0';
+                        }
+                    }
+                }
                 if (message && messageDiv) {
                     messageDiv.textContent = message;
+                    console.log('Updated message:', message);
                 }
+            } else {
+                console.log('Progress bar not found');
             }
         }
 
@@ -428,7 +458,13 @@
                 return;
             }
 
-            setButtonState(true, 'Processing...');
+            setButtonState(true, 'Downloading...');
+
+            // Hide the download button completely once pressed
+            const downloadBtn = document.getElementById('downloadBtn');
+            if (downloadBtn) {
+                downloadBtn.style.display = 'none';
+            }
 
             try {
                 // Step 1: Fetch encrypted data from atPlatform via our API proxy
@@ -564,32 +600,44 @@
                 // Step 3: Download entire file and decrypt as one stream
                 const proxyUrl = `${API_BASE_URL}/api/download?url=${encodeURIComponent(secrets.file_url)}&atSign=${encodeURIComponent(atSign)}&keyName=${encodeURIComponent(keyName)}`;
                 
+                console.log('🚀 Starting fetch to:', proxyUrl);
                 const fetchStartTime = Date.now();
-                updateProgress(5, 'Downloading file from server...');
+                updateProgress(1, 'Connecting to server...');
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);
                 }
                 
                 const fetchTime = Date.now() - fetchStartTime;
-                console.log(`Fetch completed in ${fetchTime}ms`);
+                console.log(`Fetch response received in ${fetchTime}ms`);
                 
-                // If we get here quickly, the server supports streaming
-                // If it took a while, the file might have been fully downloaded already
-                updateProgress(8, 'Received response, checking file info...');
+                // Connection established, maintain progress at 1% until download starts
+                updateProgress(1, 'Connected, preparing download...');
                 
-                // Check content length to determine approach
-                const contentLength = fileResponse.headers.get('content-length');
-                const fileSize = contentLength ? parseInt(contentLength) : 0;
+                // Use the actual file size from secrets instead of HTTP Content-Length
+                // The HTTP header might be wrong due to compression, encoding, or proxy issues
+                const fileSize = secrets.file_size ? parseInt(secrets.file_size) : 0;
+                const httpContentLength = fileResponse.headers.get('content-length');
                 
-                console.log('Encrypted file size:', fileSize, 'bytes');
+                console.log('📊 File size comparison:');
+                console.log(`  Actual file size (from secrets): ${fileSize} bytes`);
+                console.log(`  HTTP Content-Length header: ${httpContentLength}`);
+                console.log('  Transfer-Encoding:', fileResponse.headers.get('transfer-encoding'));
+                console.log('  Content-Type:', fileResponse.headers.get('content-type'));
+                
+                if (httpContentLength && parseInt(httpContentLength) !== fileSize) {
+                    console.log('⚠️ WARNING: HTTP Content-Length differs from actual file size!');
+                    console.log(`  Using actual file size: ${fileSize} bytes`);
+                }
                 
                 // Update progress - we now have response headers, about to start downloading body
                 if (fileSize > 0) {
                     const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
-                    updateProgress(5, `Starting download... (${mbTotal}MB)`);
+                    updateProgress(1, `Starting download... (${mbTotal}MB total)`);
+                    console.log(`📏 Using actual file size: ${mbTotal}MB`);
                 } else {
-                    updateProgress(5, 'Starting download...');
+                    updateProgress(1, 'Starting download... (size unknown)');
+                    console.log('⚠️ File size unknown - using unknown size progress');
                 }
                 
                 // Use streaming decryption for better memory efficiency
@@ -613,7 +661,8 @@
                             }]
                         });
                         writerStream = await fileHandle.createWritable();
-                        updateProgress(5, 'File dialog completed, streaming to disk...');
+                        console.log('📁 File dialog completed, will stream directly to disk');
+                        // Don't reset progress - we're already at 10%
                     } catch (error) {
                         console.log('File System Access API not available or user cancelled, using blob download');
                         fileHandle = null;
@@ -657,29 +706,52 @@
                 let decryptedChunks = [];
                 
                 // Stream processing
-                console.log('Starting to read response stream...');
+                console.log('🌊 Starting to read response stream...');
                 const streamStartTime = Date.now();
                 let firstChunkTime = null;
                 
                 while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+                    let readerResult;
+                    try {
+                        readerResult = await reader.read();
+                    } catch (readerError) {
+                        console.error('❌ Reader.read() failed:', readerError);
+                        throw readerError;
+                    }
+                    
+                    const { done, value } = readerResult;
+                    if (done) {
+                        console.log('✅ Stream reading completed');
+                        break;
+                    }
                     
                     // Log timing for first chunk to understand streaming behavior
                     if (firstChunkTime === null) {
                         firstChunkTime = Date.now();
-                        console.log(`First chunk received after ${firstChunkTime - streamStartTime}ms`);
+                        console.log(`📦 First chunk received after ${firstChunkTime - streamStartTime}ms (size: ${value.length} bytes)`);
                     }
                     
                     receivedLength += value.length;
                     chunkCount++;
                     
-                    // Update download progress (5-95% range)
+                    // Log every 10th chunk to monitor progress
+                    if (chunkCount % 10 === 0) {
+                        console.log(`📦 Chunk ${chunkCount}: ${value.length} bytes (total: ${receivedLength} bytes)`);
+                    }
+                    
+                    // Update download progress - handle both known and unknown file sizes
                     if (fileSize > 0) {
+                        // We know the file size, show percentage progress
+                        // Map download progress from 1% to 100% (never go below 1% after connection)
                         const downloadPercent = Math.min((receivedLength / fileSize) * 100, 100);
-                        const progress = 5 + Math.round(downloadPercent * 0.9); // Map to 5-95%
+                        const progress = Math.max(1, downloadPercent); // Ensure progress never goes below 1%
                         
-                        if (chunkCount % 3 === 0 || downloadPercent > 95) {
+                        // Update progress more frequently for better user experience
+                        // Update every chunk for the first 10 chunks, then every 2nd chunk, 
+                        // or if significant progress change, or near completion
+                        if (chunkCount <= 10 || chunkCount % 2 === 0 || downloadPercent >= 99 || Math.abs(progress - (window.lastLoggedProgress || 0)) > 2) {
+                            window.lastLoggedProgress = progress;
+                            
                             const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
                             const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
                             
@@ -689,9 +761,33 @@
                             
                             // Indicate whether this is likely streaming or buffered
                             const isLikelyStreaming = fetchTime < 1000; // If fetch was fast, probably streaming
-                            const actionText = isLikelyStreaming ? 'Downloading' : 'Processing';
+                            const actionText = isLikelyStreaming ? 'Streaming' : 'Downloading';
                             
-                            updateProgress(progress, `${actionText}... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
+                            // DEBUG: Show detailed calculation
+                            console.log(`� PROGRESS DEBUG:`);
+                            console.log(`   receivedLength: ${receivedLength} bytes (${mbReceived}MB)`);
+                            console.log(`   fileSize: ${fileSize} bytes (${mbTotal}MB)`);
+                            console.log(`   downloadPercent: ${downloadPercent.toFixed(2)}%`);
+                            console.log(`   calculated progress: ${progress.toFixed(1)}%`);
+                            console.log(`   formula: downloadPercent = ${progress.toFixed(1)}%`);
+                            
+                            updateProgress(Math.round(progress), `${actionText}... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
+                        }
+                    } else {
+                        // Unknown file size, show data received and let progress bar grow continuously
+                        if (chunkCount % 5 === 0) {
+                            const mbReceived = (receivedLength / 1024 / 1024).toFixed(1);
+                            const elapsed = (Date.now() - startTime) / 1000;
+                            const speed = elapsed > 0 ? (receivedLength / 1024 / 1024) / elapsed : 0;
+                            const speedText = speed > 1 ? `${speed.toFixed(1)} MB/s` : `${(speed * 1024).toFixed(0)} KB/s`;
+                            
+                            // Use a growing progress bar that never reaches 100% until complete
+                            const progress = Math.min(10 + Math.log10(receivedLength / 1024) * 10, 85);
+                            const isLikelyStreaming = fetchTime < 1000;
+                            const actionText = isLikelyStreaming ? 'Streaming' : 'Downloading';
+                            
+                            console.log(`📊 Progress (unknown size): ${progress.toFixed(0)}% - ${actionText}... ${mbReceived}MB (${speedText})`);
+                            updateProgress(Math.round(progress), `${actionText}... ${mbReceived}MB (${speedText})`);
                         }
                     }
                     
@@ -704,13 +800,9 @@
                             // Write directly to file
                             await writerStream.write(decryptedChunk);
                             
-                            // Update streaming progress (5-95% range, same as download since simultaneous)
-                            const decryptProgress = Math.min((receivedLength / fileSize) * 100, 100);
-                            const totalProgress = 5 + Math.round(decryptProgress * 0.9);
-                            
-                            if (chunkCount % 5 === 0) {
-                                updateProgress(totalProgress, `Pure WASM streaming... ${(receivedLength / 1024 / 1024).toFixed(1)}MB`);
-                            }
+                            // Note: Progress is handled above in the main download loop
+                            // No need for separate progress updates here since streaming decryption
+                            // happens simultaneously with download
                             
                         } catch (error) {
                             console.error('Streaming decryption failed, falling back to batch mode:', error);
@@ -748,7 +840,7 @@
                     
                 } else {
                     // Batch mode - process all chunks at once
-                    updateProgress(95, 'Download complete, assembling file...');
+                    updateProgress(100, 'Download complete, decrypting...');
                     
                     const encryptedArrayBuffer = new Uint8Array(receivedLength);
                     let position = 0;
@@ -762,12 +854,13 @@
                     console.log('Encrypted file size:', encryptedArrayBuffer.byteLength);
                     console.log('IV/Nonce size:', ivOrNonce.byteLength);
                     
-                    // Decrypt in pure WASM batch mode with progress
-                    updateProgress(95, 'Starting pure WASM decryption...');
-                    
+                    // Decrypt in pure WASM batch mode (decryption is fast, jump to 100% when done)
                     const progressCallback = (progress) => {
-                        const totalProgress = 95 + Math.round(progress * 0.05); // Map to 95-100%
-                        updateProgress(totalProgress, `Pure WASM ${cipherType.toUpperCase()} decrypting... ${progress}%`);
+                        // Since decryption is very fast, don't show intermediate progress
+                        // Just keep at 95% during decryption, will jump to 100% when complete
+                        if (progress === 100) {
+                            updateProgress(100, 'Decryption complete!');
+                        }
                     };
                     
                     const decryptedBytes = await hybridDecryptFile(
@@ -781,9 +874,9 @@
                     console.log('✅ Pure WASM decryption completed successfully');
                     console.log('Decrypted size:', decryptedBytes.length);
                     
-                    // Verify SHA-512 hash if available
+                    // Verify SHA-512 hash if available (keep at 95% since it's fast)
                     if (secrets.sha512_hash) {
-                        updateProgress(95, 'Verifying file integrity...');
+                        // updateProgress(95, 'Verifying file integrity...'); // Commented - too fast to show
                         const calculatedHash = await calculateSha512(decryptedBytes);
                         
                         if (calculatedHash === secrets.sha512_hash) {
@@ -807,20 +900,29 @@
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
 
-                    updateProgress(100, 'Pure WASM decryption complete!');
+                    updateProgress(100, 'Download and decryption complete!');
                     setTimeout(() => {
-                        setStatus(`File "${secrets.file_name}" decrypted with pure WASM and downloaded!`, 'success');
+                        setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
                     }, 500);
                 }
 
-                updateProgress(100, 'Download complete!');
-                setTimeout(() => {
-                    setStatus(`File "${secrets.file_name}" downloaded and decrypted successfully!`, 'success');
-                }, 500);
+                // Final completion (in case neither path above was taken)
+                if (!writerStream) {
+                    updateProgress(100, 'Complete!');
+                    setTimeout(() => {
+                        setStatus(`File "${secrets.file_name}" processed successfully!`, 'success');
+                    }, 500);
+                }
 
             } catch (error) {
                 console.error('Download error:', error);
                 setStatus(`Error: ${error.message}`, 'error');
+                
+                // Show the button again on error so user can retry
+                const downloadBtn = document.getElementById('downloadBtn');
+                if (downloadBtn) {
+                    downloadBtn.style.display = 'block';
+                }
             } finally {
                 setButtonState(false, 'Download & Decrypt File');
             }
