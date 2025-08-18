@@ -255,24 +255,17 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
+            // Disable download button initially until everything is ready
+            document.getElementById('downloadBtn').disabled = true;
+            
             if (!atSign || !keyName) {
                 document.getElementById('status').innerHTML = 
                     '<div class="error">❌ Invalid URL - missing atSign or key parameters</div>';
-                document.getElementById('downloadBtn').disabled = true;
                 return;
             }
 
-            // Check WASM availability immediately
-            setTimeout(() => {
-                if (!window.wasmCrypto || !window.wasmCrypto.isAvailable()) {
-                    document.getElementById('status').innerHTML = 
-                        '<div class="error">❌ WASM module required but not available. Please ensure your browser supports WebAssembly and refresh the page.</div>';
-                    document.getElementById('downloadBtn').disabled = true;
-                    return;
-                } else {
-                    console.log('✅ WASM crypto module is available for pure WASM decryption');
-                }
-            }, 1000); // Give WASM time to initialize
+            // Wait for WASM to initialize properly
+            initializeWasm();
 
             // Load and display file metadata immediately
             loadFileMetadata();
@@ -280,6 +273,35 @@
             // Focus on PIN input
             document.getElementById('pin').focus();
         });
+
+        async function initializeWasm() {
+            setStatus('Initializing cryptographic modules...', 'progress');
+            
+            try {
+                // Wait for WASM to be ready
+                if (window.wasmCrypto) {
+                    const wasmReady = await window.wasmCrypto.waitForReady();
+                    
+                    if (wasmReady && window.wasmCrypto.isAvailable()) {
+                        console.log('✅ WASM crypto module is ready for high-performance decryption');
+                        setStatus('✅ Ready for secure file decryption', 'success');
+                        document.getElementById('downloadBtn').disabled = false;
+                    } else {
+                        console.warn('⚠️ WASM module failed to initialize, but continuing with fallback');
+                        setStatus('⚠️ Using fallback decryption (may be slower for large files)', 'info');
+                        document.getElementById('downloadBtn').disabled = false;
+                    }
+                } else {
+                    console.warn('⚠️ WASM module not found, using fallback');
+                    setStatus('⚠️ Using fallback decryption (may be slower for large files)', 'info');
+                    document.getElementById('downloadBtn').disabled = false;
+                }
+            } catch (error) {
+                console.error('Failed to initialize WASM:', error);
+                setStatus('⚠️ Using fallback decryption (may be slower for large files)', 'info');
+                document.getElementById('downloadBtn').disabled = false;
+            }
+        }
 
         function setStatus(message, type = 'progress') {
             const statusDiv = document.getElementById('status');
@@ -456,6 +478,19 @@
                 setStatus('❌ Web Crypto API not available. This application requires HTTPS or localhost.', 'error');
                 setButtonState(false, 'Download & Decrypt File');
                 return;
+            }
+
+            setButtonState(true, 'Initializing...');
+
+            // Ensure WASM is ready before proceeding
+            try {
+                if (window.wasmCrypto) {
+                    setStatus('Waiting for cryptographic modules to be ready...', 'progress');
+                    await window.wasmCrypto.waitForReady();
+                    console.log('WASM ready check completed');
+                }
+            } catch (error) {
+                console.warn('WASM initialization warning:', error);
             }
 
             setButtonState(true, 'Downloading...');

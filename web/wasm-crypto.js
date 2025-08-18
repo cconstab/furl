@@ -5,6 +5,7 @@ class WasmCrypto {
     constructor() {
         this.wasmModule = null;
         this.initialized = false;
+        this.initPromise = null;
     }
 
     /**
@@ -12,6 +13,16 @@ class WasmCrypto {
      * @returns {Promise<boolean>} True if initialization succeeded
      */
     async init() {
+        // Return existing promise if already initializing
+        if (this.initPromise) {
+            return this.initPromise;
+        }
+
+        this.initPromise = this._doInit();
+        return this.initPromise;
+    }
+
+    async _doInit() {
         try {
             // Dynamic import of the WASM module
             const wasmModule = await import('./wasm/furl_crypto.js');
@@ -30,6 +41,17 @@ class WasmCrypto {
             console.log('Falling back to WebCrypto API');
             return false;
         }
+    }
+
+    /**
+     * Wait for WASM to be ready (or fail)
+     * @returns {Promise<boolean>} True if WASM is available
+     */
+    async waitForReady() {
+        if (this.initPromise) {
+            return await this.initPromise;
+        }
+        return this.isAvailable();
     }
 
     /**
@@ -210,8 +232,11 @@ const wasmCrypto = new WasmCrypto();
 async function hybridDecryptFile(key, ivOrNonce, encryptedData, cipher = 'aes-ctr', progressCallback = null) {
     console.log(`Pure WASM decrypting with cipher: ${cipher}`);
     
+    // Wait for WASM to be ready
+    const wasmReady = await wasmCrypto.waitForReady();
+    
     // Ensure WASM is available - no fallbacks
-    if (!wasmCrypto.isAvailable()) {
+    if (!wasmReady || !wasmCrypto.isAvailable()) {
         throw new Error('WASM module required but not available. Please ensure WASM is supported and loaded.');
     }
     
@@ -243,8 +268,9 @@ async function hybridDecryptAesCtr(key, iv, encryptedData, progressCallback = nu
     return await hybridDecryptFile(key, iv, encryptedData, 'aes-ctr', progressCallback);
 }
 
-// Initialize WASM when module loads
+// Start initialization immediately when module loads
 (async () => {
+    console.log('Starting WASM crypto initialization...');
     await wasmCrypto.init();
 })();
 
