@@ -460,6 +460,12 @@
 
             setButtonState(true, 'Downloading...');
 
+            // Hide the download button completely once pressed
+            const downloadBtn = document.getElementById('downloadBtn');
+            if (downloadBtn) {
+                downloadBtn.style.display = 'none';
+            }
+
             try {
                 // Step 1: Fetch encrypted data from atPlatform via our API proxy
                 setStatus('Retrieving encrypted data from atPlatform...');
@@ -911,6 +917,12 @@
             } catch (error) {
                 console.error('Download error:', error);
                 setStatus(`Error: ${error.message}`, 'error');
+                
+                // Show the button again on error so user can retry
+                const downloadBtn = document.getElementById('downloadBtn');
+                if (downloadBtn) {
+                    downloadBtn.style.display = 'block';
+                }
             } finally {
                 setButtonState(false, 'Download & Decrypt File');
             }
