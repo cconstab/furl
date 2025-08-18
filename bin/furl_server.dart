@@ -407,7 +407,7 @@ class FurlServer {
       // Set response headers for streaming
       request.response.statusCode = 200;
       request.response.headers.contentType = ContentType.binary;
-      
+
       // Set content length if we got it from HEAD request
       if (contentLength != null) {
         request.response.headers.contentLength = contentLength;
@@ -442,7 +442,7 @@ class FurlServer {
         (List<int> data) {
           bytesStreamed += data.length;
           request.response.add(data);
-          
+
           // Log progress every MB for large files
           if (contentLength != null && bytesStreamed % (1024 * 1024) == 0) {
             final percent = (bytesStreamed / contentLength * 100).toStringAsFixed(1);
