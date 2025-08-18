@@ -152,6 +152,11 @@
             position: relative;
             overflow: hidden;
         }
+        .progress-text {
+            position: relative;
+            z-index: 1;
+            transition: opacity 0.3s ease;
+        }
         .progress-bar::before {
             content: '';
             position: absolute;
@@ -308,7 +313,25 @@
             if (progressBar) {
                 progressBar.style.width = `${progress}%`;
                 if (progressText) {
-                    progressText.textContent = `${Math.round(progress)}%`;
+                    const roundedProgress = Math.round(progress);
+                    progressText.textContent = `${roundedProgress}%`;
+                    
+                    // Only show percentage text if progress bar is wide enough
+                    // Calculate the actual width in pixels
+                    const progressContainer = progressBar.parentElement;
+                    if (progressContainer) {
+                        const containerWidth = progressContainer.offsetWidth;
+                        const progressBarWidth = (progress / 100) * containerWidth;
+                        
+                        // Need at least 45px for "100%" text to be readable
+                        const minWidthForText = 45;
+                        
+                        if (progressBarWidth >= minWidthForText) {
+                            progressText.style.opacity = '1';
+                        } else {
+                            progressText.style.opacity = '0';
+                        }
+                    }
                 }
                 if (message && messageDiv) {
                     messageDiv.textContent = message;
@@ -573,7 +596,7 @@
                 
                 console.log('🚀 Starting fetch to:', proxyUrl);
                 const fetchStartTime = Date.now();
-                updateProgress(0, 'Connecting to server...');
+                updateProgress(1, 'Connecting to server...');
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);
@@ -582,8 +605,8 @@
                 const fetchTime = Date.now() - fetchStartTime;
                 console.log(`Fetch response received in ${fetchTime}ms`);
                 
-                // Connection established, show status but keep progress at 0% until download starts
-                updateProgress(0, 'Connected, preparing download...');
+                // Connection established, maintain progress at 1% until download starts
+                updateProgress(1, 'Connected, preparing download...');
                 
                 // Use the actual file size from secrets instead of HTTP Content-Length
                 // The HTTP header might be wrong due to compression, encoding, or proxy issues
@@ -604,10 +627,10 @@
                 // Update progress - we now have response headers, about to start downloading body
                 if (fileSize > 0) {
                     const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
-                    updateProgress(0, `Starting download... (${mbTotal}MB total)`);
+                    updateProgress(1, `Starting download... (${mbTotal}MB total)`);
                     console.log(`📏 Using actual file size: ${mbTotal}MB`);
                 } else {
-                    updateProgress(0, 'Starting download... (size unknown)');
+                    updateProgress(1, 'Starting download... (size unknown)');
                     console.log('⚠️ File size unknown - using unknown size progress');
                 }
                 
@@ -713,9 +736,9 @@
                     // Update download progress - handle both known and unknown file sizes
                     if (fileSize > 0) {
                         // We know the file size, show percentage progress
-                        // Map download progress directly to 0-100%
+                        // Map download progress from 1% to 100% (never go below 1% after connection)
                         const downloadPercent = Math.min((receivedLength / fileSize) * 100, 100);
-                        const progress = downloadPercent; // Direct mapping of download progress
+                        const progress = Math.max(1, downloadPercent); // Ensure progress never goes below 1%
                         
                         // Update progress more frequently for better user experience
                         // Update every chunk for the first 10 chunks, then every 2nd chunk, 

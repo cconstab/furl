@@ -255,7 +255,7 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
     final fileSize = await file.length();
 
     if (!quiet) {
-      print('📤 Starting upload of ${fileName}.encrypted (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB)...');
+      print('📤 Starting upload of $fileName (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB)...');
     }
 
     // Use file stream for upload
@@ -292,8 +292,8 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
 
           if (!quiet) {
             final progressMsg = timeSinceLastUpdate > 0 && sent < total
-                ? '📤 Uploading ${fileName}.encrypted (${speedMBps.toStringAsFixed(1)} MB/s)'
-                : '📤 Uploading ${fileName}.encrypted';
+                ? '📤 Uploading $fileName (${speedMBps.toStringAsFixed(1)} MB/s)'
+                : '📤 Uploading $fileName';
             showProgressBar(progressMsg, sent, total);
           }
 
@@ -362,7 +362,7 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
       data: data, // Send raw bytes, not FormData
       options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
       onSendProgress: (int sent, int total) {
-        showProgressBar('📤 Uploading ${fileName}.encrypted', sent, total);
+        showProgressBar('📤 Uploading $fileName', sent, total);
       },
     );
 
@@ -411,7 +411,7 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     request.headers['Content-Type'] = 'application/octet-stream';
 
     final streamedResponse = await request.send();
-    showProgressBar('📤 Uploading ${fileName}.encrypted', 1, 1);
+    showProgressBar('📤 Uploading $fileName', 1, 1);
 
     return await http.Response.fromStream(streamedResponse);
   }
