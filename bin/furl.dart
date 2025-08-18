@@ -324,13 +324,13 @@ Future<http.Response> uploadFileWithProgress(
       ),
       onSendProgress: (int sent, int total) {
         final now = DateTime.now();
-        final timeSinceLastUpdate = now.difference(lastProgressTime).inSeconds;
+        final timeSinceLastUpdate = now.difference(lastProgressTime).inMilliseconds / 1000.0;
 
         // Update progress more frequently for large files and show speed
         final shouldUpdate =
             sent == total ||
-            sent % (total ~/ 200).clamp(1024, 512 * 1024) == 0 ||
-            timeSinceLastUpdate >= 5; // Force update every 5 seconds
+            sent % (total ~/ 500).clamp(256, 128 * 1024) == 0 ||
+            timeSinceLastUpdate >= 0.5; // Force update every 500ms for smooth progress
 
         if (shouldUpdate) {
           // Calculate upload speed
