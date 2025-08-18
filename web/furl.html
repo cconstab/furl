@@ -435,7 +435,7 @@
                 return;
             }
 
-            setButtonState(true, 'Processing...');
+            setButtonState(true, 'Downloading...');
 
             try {
                 // Step 1: Fetch encrypted data from atPlatform via our API proxy
@@ -573,7 +573,7 @@
                 
                 console.log('🚀 Starting fetch to:', proxyUrl);
                 const fetchStartTime = Date.now();
-                updateProgress(2, 'Connecting to server...');
+                updateProgress(0, 'Connecting to server...');
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
                     throw new Error('Could not download encrypted file from: ' + secrets.file_url);
@@ -582,8 +582,8 @@
                 const fetchTime = Date.now() - fetchStartTime;
                 console.log(`Fetch response received in ${fetchTime}ms`);
                 
-                // Connection is fast, so minimal progress for setup
-                updateProgress(5, 'Connected, starting download...');
+                // Connection established, show status but keep progress at 0% until download starts
+                updateProgress(0, 'Connected, preparing download...');
                 
                 // Use the actual file size from secrets instead of HTTP Content-Length
                 // The HTTP header might be wrong due to compression, encoding, or proxy issues
@@ -604,10 +604,10 @@
                 // Update progress - we now have response headers, about to start downloading body
                 if (fileSize > 0) {
                     const mbTotal = (fileSize / 1024 / 1024).toFixed(1);
-                    updateProgress(5, `Starting download... (${mbTotal}MB total)`);
+                    updateProgress(0, `Starting download... (${mbTotal}MB total)`);
                     console.log(`📏 Using actual file size: ${mbTotal}MB`);
                 } else {
-                    updateProgress(5, 'Starting download... (size unknown)');
+                    updateProgress(0, 'Starting download... (size unknown)');
                     console.log('⚠️ File size unknown - using unknown size progress');
                 }
                 
@@ -713,9 +713,9 @@
                     // Update download progress - handle both known and unknown file sizes
                     if (fileSize > 0) {
                         // We know the file size, show percentage progress
-                        // Map download progress to 5-99% (leaving 1% for instant completion)
+                        // Map download progress directly to 0-100%
                         const downloadPercent = Math.min((receivedLength / fileSize) * 100, 100);
-                        const progress = 5 + (downloadPercent * 0.94); // Map 0-100% download to 5-99% progress
+                        const progress = downloadPercent; // Direct mapping of download progress
                         
                         // Update progress more frequently for better user experience
                         // Update every chunk for the first 10 chunks, then every 2nd chunk, 
@@ -732,7 +732,7 @@
                             
                             // Indicate whether this is likely streaming or buffered
                             const isLikelyStreaming = fetchTime < 1000; // If fetch was fast, probably streaming
-                            const actionText = isLikelyStreaming ? 'Streaming' : 'Processing';
+                            const actionText = isLikelyStreaming ? 'Streaming' : 'Downloading';
                             
                             // DEBUG: Show detailed calculation
                             console.log(`� PROGRESS DEBUG:`);
@@ -740,7 +740,7 @@
                             console.log(`   fileSize: ${fileSize} bytes (${mbTotal}MB)`);
                             console.log(`   downloadPercent: ${downloadPercent.toFixed(2)}%`);
                             console.log(`   calculated progress: ${progress.toFixed(1)}%`);
-                            console.log(`   formula: 5 + (${downloadPercent.toFixed(2)} * 0.94) = ${progress.toFixed(1)}%`);
+                            console.log(`   formula: downloadPercent = ${progress.toFixed(1)}%`);
                             
                             updateProgress(Math.round(progress), `${actionText}... ${mbReceived}MB / ${mbTotal}MB (${speedText})`);
                         }
@@ -755,7 +755,7 @@
                             // Use a growing progress bar that never reaches 100% until complete
                             const progress = Math.min(10 + Math.log10(receivedLength / 1024) * 10, 85);
                             const isLikelyStreaming = fetchTime < 1000;
-                            const actionText = isLikelyStreaming ? 'Streaming' : 'Processing';
+                            const actionText = isLikelyStreaming ? 'Streaming' : 'Downloading';
                             
                             console.log(`📊 Progress (unknown size): ${progress.toFixed(0)}% - ${actionText}... ${mbReceived}MB (${speedText})`);
                             updateProgress(Math.round(progress), `${actionText}... ${mbReceived}MB (${speedText})`);

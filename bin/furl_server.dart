@@ -268,7 +268,7 @@ class FurlServer {
       print('🌐 Fetching from atServer: $atServerUrl');
 
       // Use curl to fetch the data since it handles SSL properly
-      final result = await Process.run('curl', ['-s', atServerUrl]);
+      final result = await Process.run('curl', ['-s', '--url', atServerUrl]);
 
       if (result.exitCode == 0) {
         String responseBody = result.stdout.toString().trim();
@@ -370,6 +370,11 @@ class FurlServer {
     try {
       print('📁 Proxying file download with streaming: $fileUrl');
 
+      // Parse and re-encode the URL to handle spaces and special characters properly
+      final uri = Uri.parse(fileUrl);
+      final encodedUrl = uri.toString();
+      print('🔗 Encoded URL: $encodedUrl');
+
       // First, get the content length with a HEAD request
       print('🔍 Getting file info...');
       final headResult = await Process.run('curl', [
@@ -379,7 +384,7 @@ class FurlServer {
         '-f', // Fail on HTTP errors
         '--max-time', '30', // 30 second timeout
         '--connect-timeout', '10', // 10 second connect timeout
-        fileUrl,
+        '--url', encodedUrl, // Use encoded URL for safer handling
       ]);
 
       int? contentLength;
@@ -423,7 +428,7 @@ class FurlServer {
         '-f', // Fail on HTTP errors
         '--max-time', '300', // 5 minute timeout
         '--connect-timeout', '30', // 30 second connect timeout
-        fileUrl,
+        '--url', encodedUrl, // Use encoded URL for safer handling
       ]);
 
       // Stream the curl stdout directly to the response
