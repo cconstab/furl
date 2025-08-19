@@ -284,7 +284,7 @@
                     
                     if (wasmReady && window.wasmCrypto.isAvailable()) {
                         console.log('✅ WASM crypto module is ready for high-performance decryption');
-                        setStatus('✅ Ready for secure file decryption', 'success');
+                        setStatus('Ready for secure file decryption', 'success');
                         document.getElementById('downloadBtn').disabled = false;
                     } else {
                         console.warn('⚠️ WASM module failed to initialize, but continuing with fallback');
