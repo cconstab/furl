@@ -500,15 +500,20 @@ String formatDuration(int seconds) {
 }
 
 /// Validate atSign authentication early before doing expensive operations
-Future<void> validateAtSignAuthentication(String atSign, bool verbose, {String? customAtKeysPath, String? customRootDomain}) async {
+Future<void> validateAtSignAuthentication(
+  String atSign,
+  bool verbose, {
+  String? customAtKeysPath,
+  String? customRootDomain,
+}) async {
   if (verbose) {
     print('🔐 Validating atSign authentication for $atSign...');
   }
-  
+
   try {
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
     final atKeysFilePath = customAtKeysPath ?? '$home/.atsign/keys/${atSign}_key.atKeys';
-    
+
     // Check if .atKeys file exists
     final atKeysFile = File(atKeysFilePath);
     if (!await atKeysFile.exists()) {
@@ -516,11 +521,11 @@ Future<void> validateAtSignAuthentication(String atSign, bool verbose, {String? 
       print('   Expected location: $atKeysFilePath');
       print('');
       print('💡 To fix this:');
-      print('   1. Activate your atSign first: dart run at_activate --atsign $atSign');
+      print('   1. Activate your atSign: dart run at_activate --atsign $atSign');
       print('   2. Or ensure your .atKeys file is in the correct location');
       exit(2);
     }
-    
+
     // Try a quick authentication test
     final preference = AtOnboardingPreference()
       ..hiveStoragePath = '$home/.atsign/storage/$atSign'
@@ -543,13 +548,12 @@ Future<void> validateAtSignAuthentication(String atSign, bool verbose, {String? 
       print('   3. Try activating again: dart run at_activate --atsign $atSign');
       exit(3);
     }
-    
+
     if (verbose) {
       print('✅ atSign authentication validated successfully');
     }
-    
+
     // The onboarding service will clean up automatically
-    
   } catch (e) {
     print('❌ atSign validation failed: $e');
     print('');
@@ -573,7 +577,7 @@ void _printUsage(ArgParser parser) {
   print('');
   print('TTL Examples:');
   print('  30s                   30 seconds');
-  print('  10m                   10 minutes'); 
+  print('  10m                   10 minutes');
   print('  2h                    2 hours');
   print('  1d                    1 day');
   print('  6d                    6 days (maximum)');
@@ -602,49 +606,19 @@ void _printUsage(ArgParser parser) {
 Future<void> main(List<String> arguments) async {
   // Set up argument parser with standard atSign CLI options
   final parser = ArgParser()
-    ..addOption('atsign', 
-        abbr: 'a', 
-        help: 'Your atSign (e.g., @alice)', 
-        mandatory: true)
-    ..addOption('file', 
-        abbr: 'f', 
-        help: 'Path to the file to encrypt and share', 
-        mandatory: true)
-    ..addOption('ttl', 
-        abbr: 't', 
-        help: 'Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number, default: 1h)')
-    ..addOption('message', 
-        abbr: 'm', 
-        help: 'Custom message for recipient (max 140 chars)')
-    ..addOption('server', 
-        abbr: 's', 
-        help: 'Furl server URL', 
-        defaultsTo: 'https://furl.host')
-    ..addOption('filebin-server', 
-        help: 'Filebin server URL for file uploads', 
-        defaultsTo: 'https://filebin.net')
-    ..addOption('atsign-file', 
-        help: 'Path to atSign keys file (overrides default location)')
-    ..addOption('root-domain', 
-        help: 'Root domain for atSign lookup', 
-        defaultsTo: 'root.atsign.org')
-    ..addOption('storage-path', 
-        help: 'Path for local storage (overrides default)')
-    ..addFlag('verbose', 
-        abbr: 'v', 
-        help: 'Enable verbose logging', 
-        negatable: false)
-    ..addFlag('quiet', 
-        abbr: 'q', 
-        help: 'Disable progress bars', 
-        negatable: false)
-    ..addFlag('no-file-size', 
-        help: 'Hide file size on download page', 
-        negatable: false)
-    ..addFlag('help', 
-        abbr: 'h', 
-        help: 'Show this help message', 
-        negatable: false);
+    ..addOption('atsign', abbr: 'a', help: 'Your atSign (e.g., @alice)', mandatory: true)
+    ..addOption('file', abbr: 'f', help: 'Path to the file to encrypt and share', mandatory: true)
+    ..addOption('ttl', abbr: 't', help: 'Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number, default: 1h)')
+    ..addOption('message', abbr: 'm', help: 'Custom message for recipient (max 140 chars)')
+    ..addOption('server', abbr: 's', help: 'Furl server URL', defaultsTo: 'https://furl.host')
+    ..addOption('filebin-server', help: 'Filebin server URL for file uploads', defaultsTo: 'https://filebin.net')
+    ..addOption('atsign-file', help: 'Path to atSign keys file (overrides default location)')
+    ..addOption('root-domain', help: 'Root domain for atSign lookup', defaultsTo: 'root.atsign.org')
+    ..addOption('storage-path', help: 'Path for local storage (overrides default)')
+    ..addFlag('verbose', abbr: 'v', help: 'Enable verbose logging', negatable: false)
+    ..addFlag('quiet', abbr: 'q', help: 'Disable progress bars', negatable: false)
+    ..addFlag('no-file-size', help: 'Hide file size on download page', negatable: false)
+    ..addFlag('help', abbr: 'h', help: 'Show this help message', negatable: false);
 
   // Parse arguments
   late ArgResults parsedArgs;
@@ -861,7 +835,13 @@ Future<void> main(List<String> arguments) async {
     });
 
     // Get AtClient using the correct onboarding pattern from the demos
-    final atClient = await _getAtClient(atSign, verbose, customAtKeysPath: atSignFile, customRootDomain: rootDomain, customStoragePath: storagePath);
+    final atClient = await _getAtClient(
+      atSign,
+      verbose,
+      customAtKeysPath: atSignFile,
+      customRootDomain: rootDomain,
+      customStoragePath: storagePath,
+    );
     final atKey = AtKey()
       ..key = atKeyName
       ..metadata = (Metadata()
@@ -947,7 +927,13 @@ Future<void> main(List<String> arguments) async {
 }
 
 // Helper to get AtClient using the pattern from at_demos
-Future<AtClient> _getAtClient(String atSign, bool verbose, {String? customAtKeysPath, String? customRootDomain, String? customStoragePath}) async {
+Future<AtClient> _getAtClient(
+  String atSign,
+  bool verbose, {
+  String? customAtKeysPath,
+  String? customRootDomain,
+  String? customStoragePath,
+}) async {
   try {
     // Generate preferences following the pattern from at_demos
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
