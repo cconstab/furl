@@ -10,6 +10,7 @@ import 'package:random_string/random_string.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:args/args.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pointycastle/export.dart';
 
@@ -362,7 +363,9 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
       data: data, // Send raw bytes, not FormData
       options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
       onSendProgress: (int sent, int total) {
-        showProgressBar('📤 Uploading $fileName', sent, total);
+        if (!quiet) {
+          showProgressBar('📤 Uploading $fileName', sent, total);
+        }
       },
     );
 
@@ -411,7 +414,9 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     request.headers['Content-Type'] = 'application/octet-stream';
 
     final streamedResponse = await request.send();
-    showProgressBar('📤 Uploading $fileName', 1, 1);
+    if (!quiet) {
+      showProgressBar('📤 Uploading $fileName', 1, 1);
+    }
 
     return await http.Response.fromStream(streamedResponse);
   }
@@ -494,105 +499,231 @@ String formatDuration(int seconds) {
   }
 }
 
-Future<void> main(List<String> arguments) async {
-  // Check for help flag first
-  if (arguments.contains('-h') || arguments.contains('--help')) {
-    print('Furl - Secure File Sharing with atPlatform');
-    print('');
-    print('Usage: furl <atSign> <file_path> <ttl> [options]');
-    print('');
-    print('Arguments:');
-    print('  atSign                Your atSign (e.g., @alice)');
-    print('  file_path             Path to the file to encrypt and share');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
-    print('');
-    print('Options:');
-    print('  -v, --verbose         Enable verbose logging');
-    print('  -q, --quiet           Disable progress bars');
-    print('  -s, --server <url>    Furl server URL (default: https://furl.host)');
-    print('  -m, --message <text>  Custom message for recipient (max 140 chars)');
-    print('  --no-file-size        Hide file size on download page');
-    print('  -h, --help            Show this help message');
-    print('');
-    print('TTL Examples:');
-    print('  30s                   30 seconds');
-    print('  10m                   10 minutes');
-    print('  2h                    2 hours');
-    print('  1d                    1 day');
-    print('  6d                    6 days (maximum)');
-    print('  3600                  3600 seconds (1 hour)');
-    print('');
-    print('Examples:');
-    print('  furl @alice document.pdf 1h');
-    print('  furl @alice document.pdf 30m -v');
-    print('  furl @alice document.pdf 2d --quiet');
-    print('  furl @alice document.pdf 2d --server http://localhost:8080');
-    print('  furl @alice document.pdf 12h -m "Here is the contract"');
-    print('  furl @alice document.pdf 1d --no-file-size');
-    print('  furl @alice document.pdf 12h --server https://my-furl-server.com -v');
-    print('');
-    print('The program will:');
-    print('  1. Encrypt your file with ChaCha20 (streaming optimized)');
-    print('  2. Upload the encrypted file to filebin.net');
-    print('  3. Store decryption metadata securely on the atPlatform');
-    print('  4. Generate a secure URL for the recipient');
-    print('  5. Generate a PIN for additional security');
-    print('  6. Calculate SHA-512 hash for integrity verification');
-    print('  7. Display the expiration time based on TTL');
-    exit(0);
+/// Validate atSign authentication early before doing expensive operations
+Future<void> validateAtSignAuthentication(String atSign, bool verbose, {String? customAtKeysPath, String? customRootDomain}) async {
+  if (verbose) {
+    print('🔐 Validating atSign authentication for $atSign...');
   }
+  
+  try {
+    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
+    final atKeysFilePath = customAtKeysPath ?? '$home/.atsign/keys/${atSign}_key.atKeys';
+    
+    // Check if .atKeys file exists
+    final atKeysFile = File(atKeysFilePath);
+    if (!await atKeysFile.exists()) {
+      print('❌ Authentication failed: .atKeys file not found');
+      print('   Expected location: $atKeysFilePath');
+      print('');
+      print('💡 To fix this:');
+      print('   1. Activate your atSign first: dart run at_activate --atsign $atSign');
+      print('   2. Or ensure your .atKeys file is in the correct location');
+      exit(2);
+    }
+    
+    // Try a quick authentication test
+    final preference = AtOnboardingPreference()
+      ..hiveStoragePath = '$home/.atsign/storage/$atSign'
+      ..namespace = 'furl'
+      ..commitLogPath = '$home/.atsign/storage/$atSign/commitLog'
+      ..isLocalStoreRequired = false
+      ..downloadPath = '$home/.atsign/files/$atSign'
+      ..rootDomain = customRootDomain ?? 'root.atsign.org'
+      ..atKeysFilePath = atKeysFilePath;
 
-  if (arguments.length < 3) {
-    print('Usage: furl <atSign> <file_path> <ttl> [options]');
+    final onboardingService = AtOnboardingServiceImpl(atSign, preference);
+    final isAuthenticated = await onboardingService.authenticate();
+
+    if (!isAuthenticated) {
+      print('❌ Authentication failed for $atSign');
+      print('');
+      print('💡 Possible solutions:');
+      print('   1. Check your internet connection');
+      print('   2. Verify your .atKeys file is valid');
+      print('   3. Try activating again: dart run at_activate --atsign $atSign');
+      exit(3);
+    }
+    
+    if (verbose) {
+      print('✅ atSign authentication validated successfully');
+    }
+    
+    // The onboarding service will clean up automatically
+    
+  } catch (e) {
+    print('❌ atSign validation failed: $e');
     print('');
-    print('Arguments:');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
+    print('💡 Make sure:');
+    print('   1. You have activated your atSign: dart run at_activate --atsign $atSign');
+    print('   2. Your .atKeys file exists and is valid');
+    print('   3. You have proper network connectivity');
+    exit(4);
+  }
+}
+
+/// Print usage information
+void _printUsage(ArgParser parser) {
+  print('Furl - Secure File Sharing with atPlatform');
+  print('');
+  print('Usage: furl [options]');
+  print('');
+  print('Standard atSign application with modern CLI options:');
+  print('');
+  print(parser.usage);
+  print('');
+  print('TTL Examples:');
+  print('  30s                   30 seconds');
+  print('  10m                   10 minutes'); 
+  print('  2h                    2 hours');
+  print('  1d                    1 day');
+  print('  6d                    6 days (maximum)');
+  print('  3600                  3600 seconds (1 hour)');
+  print('');
+  print('Examples:');
+  print('  furl -a @alice -f document.pdf');
+  print('  furl -a @alice -f document.pdf -t 1h');
+  print('  furl --atsign @alice --file document.pdf --ttl 30m --verbose');
+  print('  furl -a @alice -f document.pdf -t 2d --quiet');
+  print('  furl -a @alice -f document.pdf -t 2d --server http://localhost:8080');
+  print('  furl -a @alice -f document.pdf -t 12h -m "Here is the contract"');
+  print('  furl -a @alice -f document.pdf -t 1d --no-file-size');
+  print('  furl -a @alice -f document.pdf --filebin-server https://myfilebin.com');
+  print('');
+  print('The program will:');
+  print('  1. Encrypt your file with ChaCha20 (streaming optimized)');
+  print('  2. Upload the encrypted file to the specified filebin server');
+  print('  3. Store decryption metadata securely on the atPlatform');
+  print('  4. Generate a secure URL for the recipient');
+  print('  5. Generate a PIN for additional security');
+  print('  6. Calculate SHA-512 hash for integrity verification');
+  print('  7. Display the expiration time based on TTL');
+}
+
+Future<void> main(List<String> arguments) async {
+  // Set up argument parser with standard atSign CLI options
+  final parser = ArgParser()
+    ..addOption('atsign', 
+        abbr: 'a', 
+        help: 'Your atSign (e.g., @alice)', 
+        mandatory: true)
+    ..addOption('file', 
+        abbr: 'f', 
+        help: 'Path to the file to encrypt and share', 
+        mandatory: true)
+    ..addOption('ttl', 
+        abbr: 't', 
+        help: 'Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number, default: 1h)')
+    ..addOption('message', 
+        abbr: 'm', 
+        help: 'Custom message for recipient (max 140 chars)')
+    ..addOption('server', 
+        abbr: 's', 
+        help: 'Furl server URL', 
+        defaultsTo: 'https://furl.host')
+    ..addOption('filebin-server', 
+        help: 'Filebin server URL for file uploads', 
+        defaultsTo: 'https://filebin.net')
+    ..addOption('atsign-file', 
+        help: 'Path to atSign keys file (overrides default location)')
+    ..addOption('root-domain', 
+        help: 'Root domain for atSign lookup', 
+        defaultsTo: 'root.atsign.org')
+    ..addOption('storage-path', 
+        help: 'Path for local storage (overrides default)')
+    ..addFlag('verbose', 
+        abbr: 'v', 
+        help: 'Enable verbose logging', 
+        negatable: false)
+    ..addFlag('quiet', 
+        abbr: 'q', 
+        help: 'Disable progress bars', 
+        negatable: false)
+    ..addFlag('no-file-size', 
+        help: 'Hide file size on download page', 
+        negatable: false)
+    ..addFlag('help', 
+        abbr: 'h', 
+        help: 'Show this help message', 
+        negatable: false);
+
+  // Parse arguments
+  late ArgResults parsedArgs;
+  try {
+    parsedArgs = parser.parse(arguments);
+  } catch (e) {
+    if (e.toString().contains('mandatory')) {
+      print('Error: Missing required parameter.');
+    } else {
+      print('Error: $e');
+    }
     print('');
-    print('Examples:');
-    print('  furl @alice document.pdf 1h');
-    print('  furl @alice document.pdf 30m -v');
-    print('  furl @alice document.pdf 2d --server http://localhost:8080');
-    print('');
-    print('Use --help for detailed information.');
+    _printUsage(parser);
     exit(1);
   }
 
-  final atSign = arguments[0];
-  final filePath = arguments[1];
-  final ttl = parseTtl(arguments[2]);
+  // Check for help flag
+  if (parsedArgs['help'] as bool) {
+    _printUsage(parser);
+    exit(0);
+  }
 
-  // Parse optional arguments
-  bool verbose = false;
-  bool quiet = false;
-  bool hideFileSize = false;
-  String? customMessage;
-  String serverUrl = 'https://furl.host';
+  // Check required arguments
+  if (!parsedArgs.wasParsed('atsign')) {
+    print('Error: Missing required parameter --atsign (-a)');
+    print('');
+    _printUsage(parser);
+    exit(1);
+  }
+  if (!parsedArgs.wasParsed('file')) {
+    print('Error: Missing required parameter --file (-f)');
+    print('');
+    _printUsage(parser);
+    exit(1);
+  }
 
-  for (int i = 3; i < arguments.length; i++) {
-    if (arguments[i] == '-v' || arguments[i] == '--verbose') {
-      verbose = true;
-    } else if (arguments[i] == '-q' || arguments[i] == '--quiet') {
-      quiet = true;
-    } else if (arguments[i] == '--no-file-size') {
-      hideFileSize = true;
-    } else if ((arguments[i] == '-s' || arguments[i] == '--server') && i + 1 < arguments.length) {
-      serverUrl = arguments[i + 1];
-      i++; // Skip the next argument as it's the server URL
-    } else if ((arguments[i] == '-m' || arguments[i] == '--message') && i + 1 < arguments.length) {
-      customMessage = arguments[i + 1];
-      if (customMessage.length > 140) {
-        print('Error: Message cannot exceed 140 characters');
-        print('Current message length: ${customMessage.length}');
-        exit(1);
-      }
-      i++; // Skip the next argument as it's the message
-    }
+  // Extract values
+  final atSign = parsedArgs['atsign'] as String;
+  final filePath = parsedArgs['file'] as String;
+  final ttlString = parsedArgs['ttl'] as String? ?? '1h'; // Default to 1 hour if not specified
+  final customMessage = parsedArgs['message'] as String?;
+  final serverUrl = parsedArgs['server'] as String;
+  final filebinServerUrl = parsedArgs['filebin-server'] as String;
+  final verbose = parsedArgs['verbose'] as bool;
+  final quiet = parsedArgs['quiet'] as bool;
+  final hideFileSize = parsedArgs['no-file-size'] as bool;
+  final atSignFile = parsedArgs['atsign-file'] as String?;
+  final rootDomain = parsedArgs['root-domain'] as String;
+  final storagePath = parsedArgs['storage-path'] as String?;
+
+  final ttl = parseTtl(ttlString);
+
+  // Validate atSign format early
+  if (!atSign.startsWith('@')) {
+    print('Error: atSign must start with @ (e.g., @alice)');
+    exit(1);
+  }
+
+  // Validate file exists before doing anything else
+  final file = File(filePath);
+  if (!await file.exists()) {
+    print('Error: File does not exist: $filePath');
+    exit(1);
+  }
+
+  // Validate message length
+  if (customMessage != null && customMessage.length > 140) {
+    print('Error: Message cannot exceed 140 characters');
+    print('Current message length: ${customMessage.length}');
+    exit(1);
   }
 
   // Set logging level based on verbose flag
   if (!verbose) {
     AtSignLogger.root_level = 'severe'; // Only show errors
   }
+
+  // Validate atSign authentication BEFORE doing expensive file operations
+  await validateAtSignAuthentication(atSign, verbose, customAtKeysPath: atSignFile, customRootDomain: rootDomain);
 
   try {
     // 1. Generate ChaCha20 key and nonce using secure random
@@ -639,7 +770,7 @@ Future<void> main(List<String> arguments) async {
       // Use UUID for bin ID instead of timestamp for better security
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
-      final uploadUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
+      final uploadUrl = '$filebinServerUrl/$binId/${fileName}.encrypted';
 
       http.Response uploadResp;
 
@@ -660,14 +791,6 @@ Future<void> main(List<String> arguments) async {
         tempEncryptedFile = tempFile;
         sha512Hash = calculatedSha512Hash;
 
-        // Notify user that encryption is complete and upload is starting
-        if (!quiet) {
-          print('✅ Encryption complete. Starting upload...');
-          if (isSuperLargeFile) {
-            print('   Upload progress will be shown below. Large uploads may take considerable time.');
-          }
-        }
-
         // Upload directly from file
         uploadResp = await uploadFileWithProgress(uploadUrl, tempEncryptedFile, fileName, quiet: quiet);
       } else {
@@ -679,11 +802,6 @@ Future<void> main(List<String> arguments) async {
           quiet: quiet,
         );
 
-        // Notify user that encryption is complete and upload is starting
-        if (!quiet) {
-          print('✅ Encryption complete. Starting upload...');
-        }
-
         uploadResp = await uploadWithProgress(uploadUrl, encryptedBytes, fileName, quiet: quiet);
       }
 
@@ -694,13 +812,13 @@ Future<void> main(List<String> arguments) async {
         throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
       }
     } catch (e) {
-      print('Error uploading to filebin.net: $e');
+      print('Error uploading to $filebinServerUrl: $e');
       // Fallback: simulate upload for testing
       print('Simulating upload...');
       final uuid = Uuid();
-      fileUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${fileName}.encrypted';
+      fileUrl = '$filebinServerUrl/simulated/${uuid.v4().replaceAll('-', '')}_${fileName}.encrypted';
       print('File would be uploaded to: $fileUrl');
-      print('Note: Ensure network connectivity for actual filebin.net upload');
+      print('Note: Ensure network connectivity for actual filebin upload');
     } finally {
       // Clean up temporary file if it was created
       if (tempEncryptedFile != null && await tempEncryptedFile.exists()) {
@@ -743,7 +861,7 @@ Future<void> main(List<String> arguments) async {
     });
 
     // Get AtClient using the correct onboarding pattern from the demos
-    final atClient = await _getAtClient(atSign, verbose);
+    final atClient = await _getAtClient(atSign, verbose, customAtKeysPath: atSignFile, customRootDomain: rootDomain, customStoragePath: storagePath);
     final atKey = AtKey()
       ..key = atKeyName
       ..metadata = (Metadata()
@@ -829,20 +947,21 @@ Future<void> main(List<String> arguments) async {
 }
 
 // Helper to get AtClient using the pattern from at_demos
-Future<AtClient> _getAtClient(String atSign, bool verbose) async {
+Future<AtClient> _getAtClient(String atSign, bool verbose, {String? customAtKeysPath, String? customRootDomain, String? customStoragePath}) async {
   try {
     // Generate preferences following the pattern from at_demos
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
+    final baseStoragePath = customStoragePath ?? '$home/.atsign/storage/$atSign';
 
     final preference = AtOnboardingPreference()
-      ..hiveStoragePath = '$home/.atsign/storage/$atSign'
+      ..hiveStoragePath = baseStoragePath
       ..namespace = 'furl'
-      ..commitLogPath = '$home/.atsign/storage/$atSign/commitLog'
+      ..commitLogPath = '$baseStoragePath/commitLog'
       ..isLocalStoreRequired =
           false // We don't need local storage for a simple put
       ..downloadPath = '$home/.atsign/files/$atSign'
-      ..rootDomain = 'root.atsign.org'
-      ..atKeysFilePath = '$home/.atsign/keys/${atSign}_key.atKeys';
+      ..rootDomain = customRootDomain ?? 'root.atsign.org'
+      ..atKeysFilePath = customAtKeysPath ?? '$home/.atsign/keys/${atSign}_key.atKeys';
 
     // Use AtOnboardingServiceImpl exactly like the working demos
     final onboardingService = AtOnboardingServiceImpl(atSign, preference);

@@ -8,16 +8,15 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-  at_client: ^3.4.2
-  #at_cli: ^3.1.1
-  at_cli_commons: ^2.1.0
-  at_onboarding_cli: ^1.1.2
+  at_client: ^3.7.0
+  at_onboarding_cli: ^1.12.0
+  args: ^2.6.0
   encrypt: ^5.0.3
   http: ^1.2.1
   dio: ^5.4.0
   crypto: ^3.0.3
   random_string: ^2.3.1
-  uuid: ^3.0.7
+  uuid: ^4.0.0
   pointycastle: ^3.9.1
 
 dev_dependencies:
