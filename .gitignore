@@ -33,6 +33,8 @@ test_*.dart
 secrets_*
 *.log
 *.tmp
+*.exe
+furl
 
 # Rust and WASM build artifacts
 wasm-crypto/target/
