@@ -52,7 +52,7 @@ Each release includes:
 
 - **Lint:** Code quality checks
   - Format verification with `dart format`
-  - Strict analysis with `--fatal-infos`
+  - Less Strict analysis with `--fatal-warnings `
   - Dependency validation
 
 #### Test Exclusions:

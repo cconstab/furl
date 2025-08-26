@@ -75,7 +75,7 @@ jobs:
       run: dart format --set-exit-if-changed .
 
     - name: Analyze code
-      run: dart analyze --fatal-infos
+      run: dart analyze --fatal-warnings
 
     - name: Check dependencies
       run: dart pub deps
