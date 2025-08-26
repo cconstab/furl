@@ -100,9 +100,19 @@ if exist build\furl-server.exe (
     )
 )
 
+REM Generate checksums
+echo 🔐 Generating checksums...
+cd build
+certutil -hashfile furl.exe SHA256 > furl.sha256
+if exist furl-server.exe (
+    certutil -hashfile furl-server.exe SHA256 > furl-server.sha256
+)
+cd ..
+echo ✓ Generated SHA256 checksums
+
 REM Create archive (using PowerShell)
 echo 📦 Creating archive...
-powershell -Command "Compress-Archive -Path 'build\furl.exe', 'build\furl-server.exe', 'build\web', 'build\wasm-crypto' -DestinationPath 'build\furl-local-build.zip' -Force"
+powershell -Command "Compress-Archive -Path 'build\furl.exe', 'build\furl-server.exe', 'build\web', 'build\wasm-crypto', 'build\*.sha256' -DestinationPath 'build\furl-local-build.zip' -Force"
 
 echo ✓ Build complete! Artifacts in build\ directory
 echo.
@@ -110,11 +120,15 @@ echo 📊 Build Summary:
 echo   - Executables: build\furl.exe, build\furl-server.exe
 echo   - Web assets: build\web\
 echo   - WASM crypto: build\wasm-crypto\
+echo   - Checksums: build\*.sha256
 echo   - Archive: build\furl-local-build.zip
 echo.
 echo 🚀 To test your build:
 echo   build\furl.exe --help
 echo   build\furl-server.exe
+echo.
+echo 🔐 To verify checksums:
+echo   certutil -hashfile build\furl.exe SHA256
 echo.
 echo 🐳 To test Docker build:
 echo   docker build -t furl-local .

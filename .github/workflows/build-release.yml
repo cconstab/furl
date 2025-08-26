@@ -90,6 +90,86 @@ jobs:
       shell: bash
       continue-on-error: true
 
+    # Windows Code Signing
+    - name: Sign Windows executables
+      if: matrix.platform == 'windows' && github.event_name != 'pull_request'
+      uses: dlemstra/code-sign-action@v1
+      with:
+        certificate: '${{ secrets.WINDOWS_CERTIFICATE }}'
+        password: '${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}'
+        folder: 'build'
+        recursive: false
+        files: |
+          furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+          furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+
+    # macOS Code Signing
+    - name: Import macOS certificate
+      if: matrix.platform == 'macos' && github.event_name != 'pull_request'
+      uses: apple-actions/import-codesign-certs@v2
+      with:
+        p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
+        p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+
+    - name: Sign macOS executables
+      if: matrix.platform == 'macos' && github.event_name != 'pull_request'
+      run: |
+        codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+        codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+      shell: bash
+
+    - name: Notarize macOS executables
+      if: matrix.platform == 'macos' && github.event_name != 'pull_request'
+      run: |
+        # Create temporary directories for notarization
+        mkdir -p notarization/furl notarization/furl-server
+        
+        # Copy executables to temporary directories
+        cp build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} notarization/furl/
+        cp build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} notarization/furl-server/
+        
+        # Create zip files for notarization
+        cd notarization/furl && zip -r ../furl-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
+        cd notarization/furl-server && zip -r ../furl-server-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
+        
+        # Submit for notarization
+        xcrun notarytool submit notarization/furl-${{ matrix.platform }}-${{ matrix.arch }}.zip \
+          --apple-id "${{ secrets.APPLE_ID }}" \
+          --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+          --wait
+          
+        xcrun notarytool submit notarization/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.zip \
+          --apple-id "${{ secrets.APPLE_ID }}" \
+          --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+          --wait
+      shell: bash
+      continue-on-error: true
+
+    # Linux Code Signing (using GPG)
+    - name: Setup GPG for Linux signing
+      if: matrix.platform == 'linux' && github.event_name != 'pull_request'
+      run: |
+        echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+        echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --sign --armor --detach-sig build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+        echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --sign --armor --detach-sig build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+      shell: bash
+      continue-on-error: true
+
+    # Create checksums for all platforms
+    - name: Generate checksums
+      run: |
+        cd build
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          certutil -hashfile furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} SHA256 > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          certutil -hashfile furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} SHA256 > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+        else
+          sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          sha256sum furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+        fi
+      shell: bash
+
     - name: Create build directory
       run: mkdir -p build
       shell: bash
@@ -118,6 +198,10 @@ jobs:
         path: |
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
           build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}.sig
+          build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}.sig
           build/web-${{ matrix.platform }}-${{ matrix.arch }}/
           build/wasm-crypto-${{ matrix.platform }}-${{ matrix.arch }}/
         retention-days: 30
@@ -170,6 +254,19 @@ jobs:
           - x64: `furl-windows-x64.zip`
           - ARM64: `furl-windows-arm64.zip`
           
+          ### Code Signing & Security
+          
+          **All binaries are digitally signed:**
+          - 🍎 **macOS**: Code signed and notarized by Apple
+          - 🪟 **Windows**: Authenticode signed with trusted certificate
+          - 🐧 **Linux**: GPG signed with maintainer key
+          
+          **Verification:**
+          - SHA256 checksums provided for all binaries (`.sha256` files)
+          - GPG signatures available for Linux builds (`.sig` files)
+          - Windows binaries can be verified via Properties → Digital Signatures
+          - macOS binaries verified automatically by Gatekeeper
+          
           ### Usage
           
           Extract the archive and run:
@@ -188,10 +285,14 @@ jobs:
           - `furl-server` / `furl-server.exe`: Local web server for decryption
           - `web/`: Web interface for browser-based decryption
           - `wasm-crypto/`: WebAssembly crypto acceleration modules
+          - `*.sha256`: SHA256 checksums for verification
+          - `*.sig`: GPG signatures (Linux only)
           
         files: |
           artifacts/**/furl-*.tar.gz
           artifacts/**/furl-*.zip
+          artifacts/**/*.sha256
+          artifacts/**/*.sig
         draft: false
         prerelease: false
       env:

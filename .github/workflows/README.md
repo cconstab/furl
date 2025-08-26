@@ -16,10 +16,18 @@ This directory contains GitHub Actions workflows for automated building, testing
 - **Windows:** x64, ARM64
 
 #### Outputs:
-- Individual platform binaries
+- Individual platform binaries (digitally signed)
 - Compressed archives (`.tar.gz` for Unix, `.zip` for Windows)
+- SHA256 checksums for all binaries
+- GPG signatures for Linux binaries
 - Docker images (multi-arch)
 - GitHub releases for tagged versions
+
+#### Code Signing:
+- **Windows**: Authenticode signing with trusted certificate
+- **macOS**: Apple code signing and notarization
+- **Linux**: GPG detached signatures
+- **Verification**: SHA256 checksums for all platforms
 
 #### Release Assets:
 Each release includes:
@@ -96,6 +104,26 @@ docker run -it -v /path/to/files:/shared furl ./furl --help
 
 ### Secrets
 - `GITHUB_TOKEN` - Automatically provided for releases
+
+#### Code Signing Secrets (Optional - for signed releases):
+
+**Windows:**
+- `WINDOWS_CERTIFICATE` - Base64 encoded code signing certificate
+- `WINDOWS_CERTIFICATE_PASSWORD` - Certificate password
+
+**macOS:**
+- `MACOS_CERTIFICATE` - Base64 encoded Apple Developer certificate
+- `MACOS_CERTIFICATE_PASSWORD` - Certificate password
+- `MACOS_SIGNING_IDENTITY` - Signing identity string
+- `APPLE_ID` - Apple ID for notarization
+- `APPLE_APP_PASSWORD` - App-specific password
+- `APPLE_TEAM_ID` - Apple Developer Team ID
+
+**Linux:**
+- `GPG_PRIVATE_KEY` - GPG private key in ASCII armor format
+- `GPG_PASSPHRASE` - GPG key passphrase
+
+📋 **See `CODE_SIGNING.md` for detailed setup instructions**
 
 ### Dependencies
 - Dart SDK (stable channel)

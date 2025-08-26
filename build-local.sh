@@ -109,10 +109,20 @@ else
     print_warning "furl-server executable test failed"
 fi
 
+# Generate checksums
+echo "🔐 Generating checksums..."
+cd build
+sha256sum furl > furl.sha256
+if [ -f "furl-server" ]; then
+    sha256sum furl-server > furl-server.sha256
+fi
+cd ..
+print_status "Generated SHA256 checksums"
+
 # Create archive
 echo "📦 Creating archive..."
 cd build
-tar -czf furl-local-build.tar.gz furl furl-server web/ wasm-crypto/
+tar -czf furl-local-build.tar.gz furl furl-server web/ wasm-crypto/ *.sha256
 cd ..
 
 print_status "Build complete! Artifacts in build/ directory"
@@ -121,11 +131,15 @@ echo "📊 Build Summary:"
 echo "  - Executables: build/furl, build/furl-server"
 echo "  - Web assets: build/web/"
 echo "  - WASM crypto: build/wasm-crypto/"
+echo "  - Checksums: build/*.sha256"
 echo "  - Archive: build/furl-local-build.tar.gz"
 echo
 echo "🚀 To test your build:"
 echo "  ./build/furl --help"
 echo "  ./build/furl-server &"
+echo
+echo "🔐 To verify checksums:"
+echo "  cd build && sha256sum -c furl.sha256"
 echo
 echo "🐳 To test Docker build:"
 echo "  docker build -t furl-local ."

@@ -45,20 +45,20 @@ String generateStrongPin(int length) {
   // Excludes: 0, O, 1, l, I for readability
   // Excludes: quotes, spaces, and URL-problematic characters
   const String chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
-  
+
   final random = SecureRandom('AES/CTR/AUTO-SEED-PRNG');
   final seed = Uint8List(32);
   for (int i = 0; i < 32; i++) {
     seed[i] = DateTime.now().millisecondsSinceEpoch % 256;
   }
   random.seed(KeyParameter(seed));
-  
+
   String result = '';
   for (int i = 0; i < length; i++) {
     final randomIndex = random.nextUint32() % chars.length;
     result += chars.substring(randomIndex, randomIndex + 1);
   }
-  
+
   return result;
 }
 
