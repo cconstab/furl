@@ -1,0 +1,47 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Dart
+.dart_tool/
+build/
+*.exe
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+CHANGELOG.md
+LICENSE
+
+# Test files
+test/
+*.test.*
+run_tests.sh
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Local development
+.env
+.env.local
+
+# Build artifacts
+furl.exe
+furl-server.exe
+
+# Example files
+*.jpg
+*.png
+*.pdf
+view.*
+webcrypto_test.txt

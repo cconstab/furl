@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, autobuild ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test and Build
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+
+    - name: Install dependencies
+      run: dart pub get
+
+    - name: Analyze code
+      run: dart analyze
+
+    - name: Run tests
+      run: dart test
+
+    - name: Build executable (Unix)
+      if: runner.os != 'Windows'
+      run: dart compile exe bin/furl.dart -o furl
+
+    - name: Build executable (Windows)
+      if: runner.os == 'Windows'
+      run: dart compile exe bin/furl.dart -o furl.exe
+
+    - name: Test executable (Unix)
+      if: runner.os != 'Windows'
+      run: ./furl --help || true
+
+    - name: Test executable (Windows)
+      if: runner.os == 'Windows'
+      run: .\furl.exe --help || true
+      shell: cmd
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+
+    - name: Install dependencies
+      run: dart pub get
+
+    - name: Check formatting
+      run: dart format --set-exit-if-changed .
+
+    - name: Analyze code
+      run: dart analyze --fatal-infos
+
+    - name: Check dependencies
+      run: dart pub deps

@@ -1,0 +1,247 @@
+name: Build Multi-Platform Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds
+          - platform: linux
+            arch: x64
+            os: ubuntu-latest
+            dart-arch: x64
+            binary-ext: ''
+            
+          - platform: linux
+            arch: arm64
+            os: ubuntu-latest
+            dart-arch: arm64
+            binary-ext: ''
+            
+          - platform: linux
+            arch: riscv64
+            os: ubuntu-latest
+            dart-arch: riscv64
+            binary-ext: ''
+            
+          # macOS builds
+          - platform: macos
+            arch: x64
+            os: macos-latest
+            dart-arch: x64
+            binary-ext: ''
+            
+          - platform: macos
+            arch: arm64
+            os: macos-latest
+            dart-arch: arm64
+            binary-ext: ''
+            
+          # Windows builds
+          - platform: windows
+            arch: x64
+            os: windows-latest
+            dart-arch: x64
+            binary-ext: '.exe'
+            
+          - platform: windows
+            arch: arm64
+            os: windows-latest
+            dart-arch: arm64
+            binary-ext: '.exe'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+        architecture: ${{ matrix.dart-arch }}
+
+    - name: Install dependencies
+      run: dart pub get
+
+    - name: Run tests
+      run: dart test
+      continue-on-error: true
+
+    - name: Build executable
+      run: |
+        dart compile exe bin/furl.dart -o build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+      shell: bash
+
+    - name: Build server executable
+      run: |
+        dart compile exe bin/furl_server.dart -o build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+      shell: bash
+      continue-on-error: true
+
+    - name: Create build directory
+      run: mkdir -p build
+      shell: bash
+
+    - name: Copy web assets
+      run: |
+        cp -r web build/web-${{ matrix.platform }}-${{ matrix.arch }}
+        cp -r wasm-crypto build/wasm-crypto-${{ matrix.platform }}-${{ matrix.arch }}
+      shell: bash
+      continue-on-error: true
+
+    - name: Create release archive
+      run: |
+        cd build
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          7z a furl-${{ matrix.platform }}-${{ matrix.arch }}.zip furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} web-${{ matrix.platform }}-${{ matrix.arch }}/ wasm-crypto-${{ matrix.platform }}-${{ matrix.arch }}/
+        else
+          tar -czf furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} web-${{ matrix.platform }}-${{ matrix.arch }}/ wasm-crypto-${{ matrix.platform }}-${{ matrix.arch }}/
+        fi
+      shell: bash
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: furl-${{ matrix.platform }}-${{ matrix.arch }}
+        path: |
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+          build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+          build/web-${{ matrix.platform }}-${{ matrix.arch }}/
+          build/wasm-crypto-${{ matrix.platform }}-${{ matrix.arch }}/
+        retention-days: 30
+
+    - name: Upload release archive
+      uses: actions/upload-artifact@v4
+      with:
+        name: furl-archive-${{ matrix.platform }}-${{ matrix.arch }}
+        path: |
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.zip
+        retention-days: 30
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Furl ${{ github.ref_name }}
+          
+          Secure file sharing with multi-layer encryption and client-side decryption.
+          
+          ### Downloads
+          
+          **Linux:**
+          - x64: `furl-linux-x64.tar.gz`
+          - ARM64: `furl-linux-arm64.tar.gz`
+          - RISC-V 64: `furl-linux-riscv64.tar.gz`
+          
+          **macOS:**
+          - x64 (Intel): `furl-macos-x64.tar.gz`
+          - ARM64 (Apple Silicon): `furl-macos-arm64.tar.gz`
+          
+          **Windows:**
+          - x64: `furl-windows-x64.zip`
+          - ARM64: `furl-windows-arm64.zip`
+          
+          ### Usage
+          
+          Extract the archive and run:
+          ```bash
+          ./furl "@username" file.txt 7d -m "Your message"
+          ```
+          
+          For Windows:
+          ```cmd
+          furl.exe "@username" file.txt 7d -m "Your message"
+          ```
+          
+          ### What's Included
+          
+          - `furl` / `furl.exe`: Main CLI application
+          - `furl-server` / `furl-server.exe`: Local web server for decryption
+          - `web/`: Web interface for browser-based decryption
+          - `wasm-crypto/`: WebAssembly crypto acceleration modules
+          
+        files: |
+          artifacts/**/furl-*.tar.gz
+          artifacts/**/furl-*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+
+    - name: Download Linux x64 artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: furl-linux-x64
+        path: docker-build
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

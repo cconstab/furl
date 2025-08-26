@@ -1,0 +1,63 @@
+name: WASM Build
+
+on:
+  push:
+    paths:
+      - 'wasm-crypto/**'
+      - 'web/**'
+      - '.github/workflows/wasm.yml'
+  pull_request:
+    paths:
+      - 'wasm-crypto/**'
+      - 'web/**'
+
+jobs:
+  wasm-build:
+    name: Build WASM Components
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: wasm32-unknown-unknown
+        override: true
+
+    - name: Install wasm-pack
+      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+    - name: Build WASM crypto module
+      working-directory: wasm-crypto
+      run: |
+        if [ -f "Cargo.toml" ]; then
+          wasm-pack build --target web --out-dir pkg
+        else
+          echo "No Cargo.toml found, skipping WASM build"
+        fi
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Test web components
+      working-directory: web
+      run: |
+        if [ -f "package.json" ]; then
+          npm ci
+          npm test
+        else
+          echo "No package.json found, skipping npm tests"
+        fi
+
+    - name: Upload WASM artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-crypto
+        path: wasm-crypto/pkg/
+        retention-days: 7
+      continue-on-error: true
