@@ -1,3 +1,6 @@
+@Tags(['performance'])
+library;
+
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
@@ -28,7 +31,9 @@ void main() {
       ];
 
       for (final fileSize in fileSizes) {
-        final testFile = File('${tempDir.path}/perf_test_${fileSize['name']}.bin');
+        final testFile = File(
+          '${tempDir.path}/perf_test_${fileSize['name']}.bin',
+        );
         final testData = Uint8List(fileSize['size'] as int);
 
         // Fill with random-ish data
@@ -42,7 +47,9 @@ void main() {
         // Simulate the encryption process
         final key = encrypt.Key.fromSecureRandom(32);
         final iv = encrypt.IV.fromSecureRandom(16);
-        final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+        final encrypter = encrypt.Encrypter(
+          encrypt.AES(key, mode: encrypt.AESMode.ctr),
+        );
 
         final fileBytes = await testFile.readAsBytes();
         final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
@@ -52,14 +59,20 @@ void main() {
 
         expect(decrypted, equals(fileBytes));
 
-        final throughputMBps = (fileSize['size'] as int) / (1024 * 1024) / (stopwatch.elapsedMilliseconds / 1000);
-        print('${fileSize['name']}: ${stopwatch.elapsedMilliseconds}ms (${throughputMBps.toStringAsFixed(2)} MB/s)');
+        final throughputMBps =
+            (fileSize['size'] as int) /
+            (1024 * 1024) /
+            (stopwatch.elapsedMilliseconds / 1000);
+        print(
+          '${fileSize['name']}: ${stopwatch.elapsedMilliseconds}ms (${throughputMBps.toStringAsFixed(2)} MB/s)',
+        );
 
         // Performance expectations (adjust based on hardware)
         expect(
           stopwatch.elapsedMilliseconds,
           lessThan(10000),
-          reason: '${fileSize['name']} encryption took too long: ${stopwatch.elapsedMilliseconds}ms',
+          reason:
+              '${fileSize['name']} encryption took too long: ${stopwatch.elapsedMilliseconds}ms',
         );
       }
     });
@@ -72,7 +85,9 @@ void main() {
       ];
 
       for (final fileSize in fileSizes) {
-        final testFile = File('${tempDir.path}/hash_perf_${fileSize['name']}.bin');
+        final testFile = File(
+          '${tempDir.path}/hash_perf_${fileSize['name']}.bin',
+        );
         final testData = Uint8List(fileSize['size'] as int);
 
         // Fill with pattern data
@@ -88,7 +103,10 @@ void main() {
 
         expect(hash.toString().length, equals(128)); // SHA-512 hex length
 
-        final throughputMBps = (fileSize['size'] as int) / (1024 * 1024) / (stopwatch.elapsedMilliseconds / 1000);
+        final throughputMBps =
+            (fileSize['size'] as int) /
+            (1024 * 1024) /
+            (stopwatch.elapsedMilliseconds / 1000);
         print(
           'Hash ${fileSize['name']}: ${stopwatch.elapsedMilliseconds}ms (${throughputMBps.toStringAsFixed(2)} MB/s)',
         );
@@ -97,7 +115,8 @@ void main() {
         expect(
           stopwatch.elapsedMilliseconds,
           lessThan(5000),
-          reason: '${fileSize['name']} hash took too long: ${stopwatch.elapsedMilliseconds}ms',
+          reason:
+              '${fileSize['name']} hash took too long: ${stopwatch.elapsedMilliseconds}ms',
         );
       }
     });
@@ -123,7 +142,9 @@ void main() {
 
       final key = encrypt.Key.fromSecureRandom(32);
       final iv = encrypt.IV.fromSecureRandom(16);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.ctr),
+      );
 
       final stopwatch = Stopwatch()..start();
       final fileBytes = await largeFile.readAsBytes();
@@ -137,7 +158,10 @@ void main() {
       print('Memory increase: ${memoryIncrease / (1024 * 1024)}MB');
 
       expect(encrypted.bytes.length, greaterThan(largeSize - 1000));
-      expect(stopwatch.elapsedMilliseconds, lessThan(30000)); // Should complete in 30s
+      expect(
+        stopwatch.elapsedMilliseconds,
+        lessThan(30000),
+      ); // Should complete in 30s
     });
 
     test('Concurrent encryption performance', () async {
@@ -155,9 +179,12 @@ void main() {
       stopwatch.stop();
 
       final totalDataMB = (numFiles * fileSize) / (1024 * 1024);
-      final throughputMBps = totalDataMB / (stopwatch.elapsedMilliseconds / 1000);
+      final throughputMBps =
+          totalDataMB / (stopwatch.elapsedMilliseconds / 1000);
 
-      print('Concurrent encryption of ${numFiles}x1MB: ${stopwatch.elapsedMilliseconds}ms');
+      print(
+        'Concurrent encryption of ${numFiles}x1MB: ${stopwatch.elapsedMilliseconds}ms',
+      );
       print('Total throughput: ${throughputMBps.toStringAsFixed(2)} MB/s');
 
       expect(stopwatch.elapsedMilliseconds, lessThan(15000));
@@ -216,12 +243,16 @@ void main() {
         expect(result.statusCode, equals(200));
       }
 
-      final requestsPerSecond = numRequests / (stopwatch.elapsedMilliseconds / 1000);
+      final requestsPerSecond =
+          numRequests / (stopwatch.elapsedMilliseconds / 1000);
       print(
         'Sequential requests: $numRequests in ${stopwatch.elapsedMilliseconds}ms (${requestsPerSecond.toStringAsFixed(1)} req/s)',
       );
 
-      expect(requestsPerSecond, greaterThan(10)); // Should handle at least 10 req/s
+      expect(
+        requestsPerSecond,
+        greaterThan(10),
+      ); // Should handle at least 10 req/s
     });
 
     test('Server handles burst concurrent requests', () async {
@@ -242,12 +273,16 @@ void main() {
         expect(result.statusCode, equals(200));
       }
 
-      final requestsPerSecond = numRequests / (stopwatch.elapsedMilliseconds / 1000);
+      final requestsPerSecond =
+          numRequests / (stopwatch.elapsedMilliseconds / 1000);
       print(
         'Concurrent requests: $numRequests in ${stopwatch.elapsedMilliseconds}ms (${requestsPerSecond.toStringAsFixed(1)} req/s)',
       );
 
-      expect(requestsPerSecond, greaterThan(5)); // Should handle concurrent load
+      expect(
+        requestsPerSecond,
+        greaterThan(5),
+      ); // Should handle concurrent load
     });
 
     test('Server stability under sustained load', () async {
@@ -260,7 +295,9 @@ void main() {
 
       while (DateTime.now().isBefore(endTime)) {
         try {
-          final response = await dio.get('http://localhost:$testPort/api/health');
+          final response = await dio.get(
+            'http://localhost:$testPort/api/health',
+          );
           if (response.statusCode == 200) {
             requestCount++;
           } else {
@@ -277,7 +314,10 @@ void main() {
       print('Sustained load: $requestCount successful, $errorCount errors');
 
       expect(requestCount, greaterThan(20)); // Should handle many requests
-      expect(errorCount / (requestCount + errorCount), lessThan(0.1)); // Less than 10% error rate
+      expect(
+        errorCount / (requestCount + errorCount),
+        lessThan(0.1),
+      ); // Less than 10% error rate
     });
 
     test('Memory stability under load', () async {
@@ -308,10 +348,15 @@ void main() {
       final finalMemory = _getMemoryUsage();
       final memoryIncrease = finalMemory - initialMemory;
 
-      print('Memory increase during stress test: ${memoryIncrease / (1024 * 1024)}MB');
+      print(
+        'Memory increase during stress test: ${memoryIncrease / (1024 * 1024)}MB',
+      );
 
       // Memory increase should be reasonable
-      expect(memoryIncrease, lessThan(500 * 1024 * 1024)); // Less than 500MB increase
+      expect(
+        memoryIncrease,
+        lessThan(500 * 1024 * 1024),
+      ); // Less than 500MB increase
     });
   });
 }
@@ -327,7 +372,9 @@ Future<void> _encryptTestFile(Directory tempDir, int index, int size) async {
 
   final key = encrypt.Key.fromSecureRandom(32);
   final iv = encrypt.IV.fromSecureRandom(16);
-  final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+  final encrypter = encrypt.Encrypter(
+    encrypt.AES(key, mode: encrypt.AESMode.ctr),
+  );
 
   final fileBytes = await testFile.readAsBytes();
   final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
@@ -348,7 +395,9 @@ bool _uint8ListsEqual(Uint8List a, Uint8List b) {
 
 int _getMemoryUsage() {
   // Simple memory usage estimation (this is approximate)
-  return Platform.resolvedExecutable.length; // Placeholder - real implementation would use process memory
+  return Platform
+      .resolvedExecutable
+      .length; // Placeholder - real implementation would use process memory
 }
 
 Future<int> _findAvailablePort([int startPort = 9180]) async {

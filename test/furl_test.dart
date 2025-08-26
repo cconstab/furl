@@ -23,7 +23,9 @@ void main() {
       final iv = encrypt.IV.fromSecureRandom(16); // 128-bit IV
 
       // Encrypt
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.cbc));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.cbc),
+      );
       final encrypted = encrypter.encryptBytes(plaintextBytes, iv: iv);
 
       // Decrypt
@@ -84,7 +86,9 @@ void main() {
       final fileIV = encrypt.IV.fromSecureRandom(16);
 
       // Step 2: Encrypt file
-      final fileEncrypter = encrypt.Encrypter(encrypt.AES(fileKey, mode: encrypt.AESMode.cbc));
+      final fileEncrypter = encrypt.Encrypter(
+        encrypt.AES(fileKey, mode: encrypt.AESMode.cbc),
+      );
       final encryptedFile = fileEncrypter.encrypt(originalData, iv: fileIV);
 
       // Step 3: Generate salt and derive PIN key
@@ -95,22 +99,41 @@ void main() {
 
       // Step 4: Encrypt the file key with PIN-derived key
       final keyIV = encrypt.IV.fromSecureRandom(16);
-      final keyEncrypter = encrypt.Encrypter(encrypt.AES(pinKey, mode: encrypt.AESMode.cbc));
-      final encryptedFileKey = keyEncrypter.encryptBytes(fileKey.bytes, iv: keyIV);
+      final keyEncrypter = encrypt.Encrypter(
+        encrypt.AES(pinKey, mode: encrypt.AESMode.cbc),
+      );
+      final encryptedFileKey = keyEncrypter.encryptBytes(
+        fileKey.bytes,
+        iv: keyIV,
+      );
 
       // Simulate decryption workflow
       // Step 5: Derive PIN key again (recipient side)
       final recoveredDigest = sha256.convert(pinBytes + salt);
-      final recoveredPinKey = encrypt.Key(Uint8List.fromList(recoveredDigest.bytes));
+      final recoveredPinKey = encrypt.Key(
+        Uint8List.fromList(recoveredDigest.bytes),
+      );
 
       // Step 6: Decrypt the file key
-      final recoveredKeyEncrypter = encrypt.Encrypter(encrypt.AES(recoveredPinKey, mode: encrypt.AESMode.cbc));
-      final recoveredFileKeyBytes = recoveredKeyEncrypter.decryptBytes(encryptedFileKey, iv: keyIV);
-      final recoveredFileKey = encrypt.Key(Uint8List.fromList(recoveredFileKeyBytes));
+      final recoveredKeyEncrypter = encrypt.Encrypter(
+        encrypt.AES(recoveredPinKey, mode: encrypt.AESMode.cbc),
+      );
+      final recoveredFileKeyBytes = recoveredKeyEncrypter.decryptBytes(
+        encryptedFileKey,
+        iv: keyIV,
+      );
+      final recoveredFileKey = encrypt.Key(
+        Uint8List.fromList(recoveredFileKeyBytes),
+      );
 
       // Step 7: Decrypt the file
-      final recoveredFileEncrypter = encrypt.Encrypter(encrypt.AES(recoveredFileKey, mode: encrypt.AESMode.cbc));
-      final decryptedData = recoveredFileEncrypter.decrypt(encryptedFile, iv: fileIV);
+      final recoveredFileEncrypter = encrypt.Encrypter(
+        encrypt.AES(recoveredFileKey, mode: encrypt.AESMode.cbc),
+      );
+      final decryptedData = recoveredFileEncrypter.decrypt(
+        encryptedFile,
+        iv: fileIV,
+      );
 
       expect(decryptedData, equals(originalData));
     });

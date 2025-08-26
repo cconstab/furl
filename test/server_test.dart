@@ -1,3 +1,6 @@
+@Tags(['e2e'])
+library;
+
 import 'dart:io';
 import 'dart:async';
 import 'package:test/test.dart';
@@ -57,7 +60,10 @@ void main() {
     });
 
     test('Server serves furl.html for root path', () async {
-      final response = await dio.get('http://localhost:$testPort/', options: Options(followRedirects: false));
+      final response = await dio.get(
+        'http://localhost:$testPort/',
+        options: Options(followRedirects: false),
+      );
 
       expect(response.statusCode, equals(200));
       expect(response.headers['content-type']?.first, contains('text/html'));
@@ -107,7 +113,10 @@ void main() {
 
     test('Server handles malformed requests gracefully', () async {
       try {
-        await dio.post('http://localhost:$testPort/api/atsign/test', data: {'invalid': 'data'});
+        await dio.post(
+          'http://localhost:$testPort/api/atsign/test',
+          data: {'invalid': 'data'},
+        );
         fail('Should have handled malformed request');
       } catch (e) {
         expect(e, isA<DioException>());
@@ -150,7 +159,10 @@ void main() {
         // Server should handle large requests gracefully
         expect(e, isA<DioException>());
         final dioError = e as DioException;
-        expect(dioError.response?.statusCode, anyOf([413, 404, 405])); // Payload too large or method not allowed
+        expect(
+          dioError.response?.statusCode,
+          anyOf([413, 404, 405]),
+        ); // Payload too large or method not allowed
       }
     });
 
@@ -170,9 +182,19 @@ void main() {
       final port1 = await _findAvailablePort();
       final port2 = await _findAvailablePort(port1 + 1);
 
-      final server1 = await Process.start('dart', ['run', 'bin/furl_server.dart', '--port', port1.toString()]);
+      final server1 = await Process.start('dart', [
+        'run',
+        'bin/furl_server.dart',
+        '--port',
+        port1.toString(),
+      ]);
 
-      final server2 = await Process.start('dart', ['run', 'bin/furl_server.dart', '--port', port2.toString()]);
+      final server2 = await Process.start('dart', [
+        'run',
+        'bin/furl_server.dart',
+        '--port',
+        port2.toString(),
+      ]);
 
       try {
         await _waitForServerStart(port1);
@@ -198,12 +220,22 @@ void main() {
       final testPort = await _findAvailablePort();
 
       // Start first server
-      final server1 = await Process.start('dart', ['run', 'bin/furl_server.dart', '--port', testPort.toString()]);
+      final server1 = await Process.start('dart', [
+        'run',
+        'bin/furl_server.dart',
+        '--port',
+        testPort.toString(),
+      ]);
 
       await _waitForServerStart(testPort);
 
       // Try to start second server on same port
-      final server2 = await Process.start('dart', ['run', 'bin/furl_server.dart', '--port', testPort.toString()]);
+      final server2 = await Process.start('dart', [
+        'run',
+        'bin/furl_server.dart',
+        '--port',
+        testPort.toString(),
+      ]);
 
       // Second server should fail to start
       final exitCode = await server2.exitCode.timeout(Duration(seconds: 5));

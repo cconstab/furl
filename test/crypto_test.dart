@@ -45,7 +45,9 @@ void main() {
       for (final testData in testCases) {
         final key = encrypt.Key.fromSecureRandom(32);
         final iv = encrypt.IV.fromSecureRandom(16);
-        final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+        final encrypter = encrypt.Encrypter(
+          encrypt.AES(key, mode: encrypt.AESMode.ctr),
+        );
 
         final encrypted = encrypter.encrypt(testData, iv: iv);
         final decrypted = encrypter.decrypt(encrypted, iv: iv);
@@ -53,7 +55,8 @@ void main() {
         expect(
           decrypted,
           equals(testData),
-          reason: 'Failed for data: "${testData.length > 50 ? testData.substring(0, 50) + "..." : testData}"',
+          reason:
+              'Failed for data: "${testData.length > 50 ? testData.substring(0, 50) + "..." : testData}"',
         );
       }
     });
@@ -98,8 +101,12 @@ void main() {
       final wrongKey = encrypt.Key.fromSecureRandom(32);
       final iv = encrypt.IV.fromSecureRandom(16);
 
-      final encrypter = encrypt.Encrypter(encrypt.AES(correctKey, mode: encrypt.AESMode.ctr));
-      final wrongEncrypter = encrypt.Encrypter(encrypt.AES(wrongKey, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(correctKey, mode: encrypt.AESMode.ctr),
+      );
+      final wrongEncrypter = encrypt.Encrypter(
+        encrypt.AES(wrongKey, mode: encrypt.AESMode.ctr),
+      );
 
       final encrypted = encrypter.encrypt(plaintext, iv: iv);
 
@@ -116,7 +123,9 @@ void main() {
     test('IV uniqueness for multiple encryptions', () {
       final plaintext = 'Same message';
       final key = encrypt.Key.fromSecureRandom(32);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.ctr),
+      );
 
       final encryptedResults = <String>[];
       for (int i = 0; i < 100; i++) {
@@ -134,7 +143,9 @@ void main() {
       final largeData = 'x' * (1024 * 1024); // 1MB of data
       final key = encrypt.Key.fromSecureRandom(32);
       final iv = encrypt.IV.fromSecureRandom(16);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.ctr),
+      );
 
       final stopwatch = Stopwatch()..start();
       final encrypted = encrypter.encrypt(largeData, iv: iv);
@@ -159,7 +170,9 @@ void main() {
     test('Non-empty data encryption', () {
       final key = encrypt.Key.fromSecureRandom(32);
       final iv = encrypt.IV.fromSecureRandom(16);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.ctr),
+      );
 
       final testData = 'test data';
       final encrypted = encrypter.encrypt(testData, iv: iv);
@@ -169,10 +182,13 @@ void main() {
     });
 
     test('Special characters and unicode handling', () {
-      final specialChars = 'Special chars: !@#\$%^&*()_+-=[]{}|;:,.<>?`~"\'\\/ and unicode: 🔒🚀📊🌐💻🔑';
+      final specialChars =
+          'Special chars: !@#\$%^&*()_+-=[]{}|;:,.<>?`~"\'\\/ and unicode: 🔒🚀📊🌐💻🔑';
       final key = encrypt.Key.fromSecureRandom(32);
       final iv = encrypt.IV.fromSecureRandom(16);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.ctr),
+      );
 
       final encrypted = encrypter.encrypt(specialChars, iv: iv);
       final decrypted = encrypter.decrypt(encrypted, iv: iv);
@@ -196,7 +212,9 @@ void main() {
       final binaryData = Uint8List.fromList(List.generate(256, (i) => i));
       final key = encrypt.Key.fromSecureRandom(32);
       final iv = encrypt.IV.fromSecureRandom(16);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(key, mode: encrypt.AESMode.ctr),
+      );
 
       final encrypted = encrypter.encryptBytes(binaryData, iv: iv);
       final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
