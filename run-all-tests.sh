@@ -12,8 +12,8 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}📋 Running core tests...${NC}"
-if dart test --exclude=test/performance_test.dart --exclude=test/e2e_test.dart; then
+echo -e "${BLUE}Running core tests (CI-compatible)...${NC}"
+if dart test --exclude-tags=performance --exclude-tags=e2e; then
     echo -e "${GREEN}✅ Core tests passed${NC}"
     CORE_PASSED=true
 else

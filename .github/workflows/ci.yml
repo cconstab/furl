@@ -31,7 +31,7 @@ jobs:
       run: dart analyze
 
     - name: Run tests
-      run: dart test --exclude=test/performance_test.dart --exclude=test/e2e_test.dart
+      run: dart test --exclude-tags=performance --exclude-tags=e2e
 
     - name: Run performance tests (manual trigger only)
       if: github.event_name == 'workflow_dispatch'

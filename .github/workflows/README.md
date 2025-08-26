@@ -45,7 +45,7 @@ Each release includes:
 #### Jobs:
 - **Test:** Runs on Ubuntu, macOS, Windows
   - Code analysis with `dart analyze`
-  - Unit tests with `dart test` (excludes performance and E2E tests)
+  - Unit tests with `dart test --exclude-tags=performance --exclude-tags=e2e`
   - Build verification
   - Basic executable testing
   - Optional performance tests (manual workflow trigger only)

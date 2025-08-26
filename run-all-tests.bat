@@ -5,8 +5,8 @@ REM Use this for local development and testing
 echo 🧪 Running Furl Test Suite
 echo ==========================
 
-echo 📋 Running core tests...
-dart test --exclude=test/performance_test.dart --exclude=test/e2e_test.dart
+echo Running core tests (CI-compatible)...
+dart test --exclude-tags=performance --exclude-tags=e2e
 if %errorlevel% == 0 (
     echo ✅ Core tests passed
     set CORE_PASSED=1

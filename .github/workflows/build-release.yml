@@ -76,7 +76,7 @@ jobs:
       run: dart pub get
 
     - name: Run tests
-      run: dart test --exclude=test/performance_test.dart --exclude=test/e2e_test.dart
+      run: dart test --exclude-tags=performance --exclude-tags=e2e
       continue-on-error: true
 
     - name: Build executable
