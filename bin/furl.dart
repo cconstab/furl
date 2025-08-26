@@ -11,6 +11,7 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pointycastle/export.dart';
+import '../lib/validation.dart';
 
 /// Calculate SHA-512 hash of a file
 Future<String> calculateFileSha512(String filePath) async {
@@ -583,6 +584,20 @@ Future<void> main(List<String> arguments) async {
   final atSign = arguments[0];
   final filePath = arguments[1];
   final ttl = parseTtl(arguments[2]);
+
+  // Validate atSign format
+  if (!validateAtSign(atSign)) {
+    print('Error: Invalid atSign format "$atSign"');
+    print('atSign must:');
+    print('  - Start with @ symbol');
+    print('  - Contain only letters, numbers, dots, hyphens, and underscores');
+    print('  - Not start or end with special characters');
+    print('  - Have only one @ symbol');
+    print('');
+    print('Valid examples: @alice, @bob123, @user.name, @test-user');
+    print('Invalid examples: alice, @@alice, @alice@bob, @.alice, @alice.');
+    exit(1);
+  }
 
   // Parse optional arguments
   bool verbose = false;
