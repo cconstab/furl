@@ -413,8 +413,11 @@ run-all-tests.bat
 
 #### Individual Test Suites
 ```bash
-# Core functionality tests
-dart test test/crypto_test.dart test/server_test.dart test/cli_validation_test.dart
+# Core functionality tests (crypto and CLI validation only)
+dart test test/crypto_test.dart test/cli_validation_test.dart test/furl_test.dart
+
+# Server integration tests (requires process spawning)
+dart test test/server_test.dart
 
 # Performance tests (local development only)
 dart test test/performance_test.dart

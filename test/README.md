@@ -7,7 +7,7 @@ This directory contains comprehensive tests for the Furl secure file sharing app
 ### Core Test Files
 
 - **`crypto_test.dart`** - Cryptographic functions and security tests
-- **`server_test.dart`** - HTTP server functionality tests  
+- **`server_test.dart`** - HTTP server functionality tests (tagged as e2e)  
 - **`e2e_test.dart`** - End-to-end integration tests
 - **`performance_test.dart`** - Performance and stress tests
 - **`cli_validation_test.dart`** - Command-line interface validation tests
