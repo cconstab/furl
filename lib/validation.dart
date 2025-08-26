@@ -24,7 +24,9 @@ bool validateAtSign(String atSign) {
 
   // Username validation: alphanumeric, dots, hyphens, underscores
   // But cannot start or end with dot, hyphen, or underscore
-  final validUsernameRegex = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$');
+  final validUsernameRegex = RegExp(
+    r'^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$',
+  );
 
   return validUsernameRegex.hasMatch(username);
 }

@@ -22,7 +22,9 @@ bool validateAtSign(String atSign) {
 
   // Username validation: alphanumeric, dots, hyphens, underscores
   // But cannot start or end with dot, hyphen, or underscore
-  final validUsernameRegex = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$');
+  final validUsernameRegex = RegExp(
+    r'^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$',
+  );
 
   return validUsernameRegex.hasMatch(username);
 }
@@ -30,10 +32,20 @@ bool validateAtSign(String atSign) {
 void main() {
   group('CLI Argument Validation Tests', () {
     test('Valid atSign formats are accepted', () {
-      final validAtSigns = ['@alice', '@bob123', '@test_user', '@user-name', '@company.user'];
+      final validAtSigns = [
+        '@alice',
+        '@bob123',
+        '@test_user',
+        '@user-name',
+        '@company.user',
+      ];
 
       for (final atSign in validAtSigns) {
-        expect(validateAtSign(atSign), isTrue, reason: 'Valid atSign $atSign should be accepted');
+        expect(
+          validateAtSign(atSign),
+          isTrue,
+          reason: 'Valid atSign $atSign should be accepted',
+        );
       }
     });
 
@@ -49,7 +61,11 @@ void main() {
       ];
 
       for (final atSign in invalidAtSigns) {
-        expect(validateAtSign(atSign), isFalse, reason: 'Invalid atSign $atSign should be rejected');
+        expect(
+          validateAtSign(atSign),
+          isFalse,
+          reason: 'Invalid atSign $atSign should be rejected',
+        );
       }
     });
   });

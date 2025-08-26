@@ -23,7 +23,10 @@ void main() {
 
     test('CLI basic syntax check', () async {
       // Test that CLI runs without crashing
-      final result = await Process.run('dart', ['run', 'bin/furl.dart'], workingDirectory: Directory.current.path);
+      final result = await Process.run('dart', [
+        'run',
+        'bin/furl.dart',
+      ], workingDirectory: Directory.current.path);
 
       // Should exit with error for missing arguments, but not crash
       expect(result.exitCode, isNot(equals(0)));
