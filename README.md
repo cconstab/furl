@@ -36,7 +36,7 @@ dart run bin/furl.dart @youratsign document.pdf 1h
 ## Features
 
 - **Zero-Knowledge Security**: Files are encrypted before upload, decrypted in recipient's browser
-- **PIN Protection**: 9-character PIN protects encryption keys
+- **PIN Protection**: 9-character strong PIN with special characters protects encryption keys
 - **Public Storage**: Uses public services (filebin.net) for encrypted file storage
 - **atPlatform Integration**: Metadata stored securely on atPlatform
 - **Client-Side Decryption**: All decryption happens in the browser for maximum privacy
@@ -83,7 +83,7 @@ dart run bin/furl.dart @youratSign path/to/file.txt 1h
 
 This will:
 - Encrypt the file with ChaCha20
-- Generate a 9-character PIN
+- Generate a 9-character strong PIN with special characters
 - Upload encrypted file to filebin.net
 - Store encrypted metadata on atPlatform
 - Display a URL and PIN for the recipient
