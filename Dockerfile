@@ -4,8 +4,9 @@ FROM dart:stable AS builder
 # Set working directory
 WORKDIR /app
 
-# Copy pubspec files
-COPY pubspec.yaml pubspec.lock ./
+# Copy pubspec files first for better caching
+COPY pubspec.yaml ./
+COPY pubspec.lock ./
 
 # Get dependencies
 RUN dart pub get

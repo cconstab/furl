@@ -323,14 +323,24 @@ jobs:
         name: furl-linux-x64
         path: docker-build
 
+    - name: Debug - List files in build context
+      run: |
+        echo "Repository root files:"
+        ls -la
+        echo "Docker build directory:"
+        ls -la docker-build/
+        echo "Checking pubspec files:"
+        ls -la pubspec.*
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         file: Dockerfile
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # Temporarily disable cache to fix cache key issues
+        # cache-from: type=gha
+        # cache-to: type=gha,mode=max
