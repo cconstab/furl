@@ -206,8 +206,8 @@
         </div>
 
         <div class="form-group">
-            <label for="pin">🔑 PIN (9 characters):</label>
-            <input type="password" id="pin" placeholder="Enter the PIN provided by sender" maxlength="9" autocomplete="off">
+            <label for="pin">🔑 Strong PIN (9 characters with special chars):</label>
+            <input type="password" id="pin" placeholder="Enter the strong PIN provided by sender" maxlength="9" autocomplete="off">
         </div>
 
         <div class="form-group">
@@ -469,7 +469,7 @@
             const pin = document.getElementById('pin').value;
 
             if (!pin || pin.length !== 9) {
-                setStatus('Please enter a valid 9-character PIN', 'error');
+                setStatus('Please enter a valid 9-character strong PIN', 'error');
                 return;
             }
 

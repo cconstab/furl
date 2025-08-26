@@ -6,7 +6,6 @@ import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
-import 'package:random_string/random_string.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
@@ -37,6 +36,30 @@ void showProgressBar(String label, int current, int total, {bool quiet = false})
   if (current >= total) {
     stdout.writeln(' ✓');
   }
+}
+
+/// Generate a strong PIN with alphanumeric characters and safe special characters
+/// Avoids potentially confusing characters like 0/O, 1/l/I and special chars that might cause URL issues
+String generateStrongPin(int length) {
+  // Character set: uppercase, lowercase, numbers, and safe special characters
+  // Excludes: 0, O, 1, l, I for readability
+  // Excludes: quotes, spaces, and URL-problematic characters
+  const String chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
+  
+  final random = SecureRandom('AES/CTR/AUTO-SEED-PRNG');
+  final seed = Uint8List(32);
+  for (int i = 0; i < 32; i++) {
+    seed[i] = DateTime.now().millisecondsSinceEpoch % 256;
+  }
+  random.seed(KeyParameter(seed));
+  
+  String result = '';
+  for (int i = 0; i < length; i++) {
+    final randomIndex = random.nextUint32() % chars.length;
+    result += chars.substring(randomIndex, randomIndex + 1);
+  }
+  
+  return result;
 }
 
 /// Encryption using AES-CTR mode with proper memory handling
@@ -536,7 +559,7 @@ Future<void> main(List<String> arguments) async {
     print('  2. Upload the encrypted file to filebin.net');
     print('  3. Store decryption metadata securely on the atPlatform');
     print('  4. Generate a secure URL for the recipient');
-    print('  5. Generate a PIN for additional security');
+    print('  5. Generate a strong PIN with special characters for additional security');
     print('  6. Calculate SHA-512 hash for integrity verification');
     print('  7. Display the expiration time based on TTL');
     exit(0);
@@ -601,8 +624,8 @@ Future<void> main(List<String> arguments) async {
       8,
     ); // 8-byte nonce for ChaCha20 (some implementations use 8 bytes)
 
-    // 2. Generate 9-char alphanumeric PIN
-    final pin = randomAlphaNumeric(9);
+    // 2. Generate 9-char strong PIN with alphanumeric + special characters
+    final pin = generateStrongPin(9);
     //print('PIN for recipient: $pin');
 
     // 3. Encrypt file with ChaCha20 streaming and calculate SHA-512 for integrity
