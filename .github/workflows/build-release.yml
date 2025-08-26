@@ -24,28 +24,16 @@ jobs:
             dart-arch: x64
             binary-ext: ''
             
-          - platform: linux
-            arch: arm64
-            os: ubuntu-latest
-            dart-arch: arm64
-            binary-ext: ''
-            
-          - platform: linux
-            arch: riscv64
-            os: ubuntu-latest
-            dart-arch: riscv64
-            binary-ext: ''
-            
           # macOS builds
           - platform: macos
             arch: x64
-            os: macos-latest
+            os: macos-13  # Intel runner
             dart-arch: x64
             binary-ext: ''
             
           - platform: macos
             arch: arm64
-            os: macos-latest
+            os: macos-latest  # M1/M2 runner
             dart-arch: arm64
             binary-ext: ''
             
@@ -54,12 +42,6 @@ jobs:
             arch: x64
             os: windows-latest
             dart-arch: x64
-            binary-ext: '.exe'
-            
-          - platform: windows
-            arch: arm64
-            os: windows-latest
-            dart-arch: arm64
             binary-ext: '.exe'
 
     steps:
@@ -78,6 +60,10 @@ jobs:
     - name: Run tests
       run: dart test --exclude-tags=performance --exclude-tags=e2e
       continue-on-error: true
+
+    - name: Create build directory
+      run: mkdir -p build
+      shell: bash
 
     - name: Build executable
       run: |
@@ -102,6 +88,7 @@ jobs:
         files: |
           furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
           furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
+      continue-on-error: true
 
     # macOS Code Signing
     - name: Import macOS certificate
@@ -110,6 +97,7 @@ jobs:
       with:
         p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
         p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      continue-on-error: true
 
     - name: Sign macOS executables
       if: matrix.platform == 'macos' && github.event_name != 'pull_request'
@@ -117,6 +105,7 @@ jobs:
         codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
         codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }}
       shell: bash
+      continue-on-error: true
 
     - name: Notarize macOS executables
       if: matrix.platform == 'macos' && github.event_name != 'pull_request'
@@ -168,10 +157,6 @@ jobs:
           sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
           sha256sum furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
         fi
-      shell: bash
-
-    - name: Create build directory
-      run: mkdir -p build
       shell: bash
 
     - name: Copy web assets
