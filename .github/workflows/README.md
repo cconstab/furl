@@ -45,14 +45,20 @@ Each release includes:
 #### Jobs:
 - **Test:** Runs on Ubuntu, macOS, Windows
   - Code analysis with `dart analyze`
-  - Unit tests with `dart test`
+  - Unit tests with `dart test` (excludes performance and E2E tests)
   - Build verification
   - Basic executable testing
+  - Optional performance tests (manual workflow trigger only)
 
 - **Lint:** Code quality checks
   - Format verification with `dart format`
   - Strict analysis with `--fatal-infos`
   - Dependency validation
+
+#### Test Exclusions:
+- **Performance tests** are excluded from CI to prevent flaky failures
+- **E2E tests** are excluded from CI due to network dependencies
+- Use `run-all-tests.sh` (Unix) or `run-all-tests.bat` (Windows) for complete local testing
 
 ### 3. WASM Build (`wasm.yml`)
 

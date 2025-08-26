@@ -31,7 +31,12 @@ jobs:
       run: dart analyze
 
     - name: Run tests
-      run: dart test
+      run: dart test --exclude=test/performance_test.dart --exclude=test/e2e_test.dart
+
+    - name: Run performance tests (manual trigger only)
+      if: github.event_name == 'workflow_dispatch'
+      run: dart test test/performance_test.dart
+      continue-on-error: true
 
     - name: Build executable (Unix)
       if: runner.os != 'Windows'

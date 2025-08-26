@@ -397,9 +397,33 @@ For detailed security analysis, see [SECURITY_DESIGN.md](SECURITY_DESIGN.md).
 
 ### Running Tests
 
+#### Quick Testing (CI-compatible tests only)
 ```bash
 dart test
 ```
+
+#### Comprehensive Testing (includes performance and E2E tests)
+```bash
+# On Unix/Linux/macOS
+./run-all-tests.sh
+
+# On Windows
+run-all-tests.bat
+```
+
+#### Individual Test Suites
+```bash
+# Core functionality tests
+dart test test/crypto_test.dart test/server_test.dart test/cli_validation_test.dart
+
+# Performance tests (local development only)
+dart test test/performance_test.dart
+
+# End-to-end tests (requires network)
+dart test test/e2e_test.dart
+```
+
+**Note:** Performance and E2E tests are excluded from CI builds to prevent flaky failures. Use the comprehensive test runners for complete local validation.
 
 ### Project Structure
 
