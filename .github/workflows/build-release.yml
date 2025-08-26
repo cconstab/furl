@@ -153,6 +153,9 @@ jobs:
         if [ "${{ matrix.platform }}" = "windows" ]; then
           certutil -hashfile furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} SHA256 > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
           certutil -hashfile furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} SHA256 > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          shasum -a 256 furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          shasum -a 256 furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
         else
           sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
           sha256sum furl-server-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.binary-ext }} > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
