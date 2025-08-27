@@ -38,7 +38,7 @@ void showProgressBar(
   final bar = '█' * filledWidth + '░' * emptyWidth;
   final percentage = (progress * 100).toStringAsFixed(1);
 
-  stdout.write('\r$label [$bar] $percentage%');
+  stdout.write('\r\x1b[K$label [$bar] $percentage%');
   if (current >= total) {
     stdout.writeln(' ✓');
   }
