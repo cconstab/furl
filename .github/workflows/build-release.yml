@@ -8,6 +8,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     name: Build ${{ matrix.platform }}-${{ matrix.arch }}
@@ -218,6 +222,22 @@ jobs:
       with:
         path: artifacts
 
+    - name: List available files
+      run: |
+        echo "Available release files:"
+        find artifacts -type f -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" -o -name "*.sig" | sort
+
+    - name: Prepare release files
+      run: |
+        # Collect all release files that exist
+        mkdir -p release-files
+        find artifacts -name "*.tar.gz" -exec cp {} release-files/ \; 2>/dev/null || true
+        find artifacts -name "*.zip" -exec cp {} release-files/ \; 2>/dev/null || true
+        find artifacts -name "*.sha256" -exec cp {} release-files/ \; 2>/dev/null || true
+        find artifacts -name "*.sig" -exec cp {} release-files/ \; 2>/dev/null || true
+        echo "Files prepared for release:"
+        ls -la release-files/
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -276,11 +296,7 @@ jobs:
           - `*.sha256`: SHA256 checksums for verification
           - `*.sig`: GPG signatures (Linux only)
           
-        files: |
-          artifacts/**/furl-*.tar.gz
-          artifacts/**/furl-*.zip
-          artifacts/**/*.sha256
-          artifacts/**/*.sig
+        files: release-files/*
         draft: false
         prerelease: false
       env:
@@ -290,9 +306,6 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     needs: build
-    permissions:
-      contents: read
-      packages: write
     
     steps:
     - name: Checkout repository
