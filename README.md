@@ -1,60 +1,10 @@
-# Furl - Secure File Sharing
+# Furl - End to End Encrypted File Sharing
+File URL
 
 A secure file sharing system that uses multi-layer encryption and client-side decryption to protect files.
 
+
 ## 🚀 Quick Start
-
-### For Compiled Binary Users
-
-```bash
-# 0. Get an atSign first: https://atsign.com/get-an-atsign
-# Then activate it: at_activate
-
-# 1. Start the server
-furl_server
-
-# 2. Share a file (replace @youratsign with your actual atSign)
-furl @youratsign document.pdf 1h
-
-# 2a. Or share with a custom message
-furl @youratsign document.pdf 1h -m "Here's the report you requested"
-
-# 3. Share the generated URL and PIN with recipient
-# Recipient enters PIN in web interface to decrypt and download
-```
-
-### For Dart Developers
-
-```bash
-# 0. Get an atSign first: https://atsign.com/get-an-atsign
-# Then activate it: dart run bin/at_activate.dart
-
-# 1. Install dependencies
-dart pub get
-
-# 2. Start the unified server
-dart run bin/furl_server.dart
-
-# 3. Share a file (replace @youratsign with your actual atSign)
-dart run bin/furl.dart @youratsign document.pdf 1h
-
-# 3a. Or share with a custom message
-dart run bin/furl.dart @youratsign document.pdf 1h -m "Here's the report you requested"
-
-# 4. Share the generated URL and PIN with recipient
-# Recipient enters PIN in web interface to decrypt and download
-```
-
-## Features
-
-- **Zero-Knowledge Security**: Files are encrypted before upload, decrypted in recipient's browser
-- **PIN Protection**: 9-character strong PIN with special characters protects encryption keys
-- **Custom Messages**: Optional custom messages for recipients (max 140 characters)
-- **Public Storage**: Uses public services (filebin.net) for encrypted file storage
-- **atPlatform Integration**: Metadata stored securely on atPlatform (requires free atSign)
-- **Client-Side Decryption**: All decryption happens in the browser for maximum privacy
-
-## Quick Start
 
 ### 0. Get Your atSign (First Time Users)
 
@@ -71,9 +21,6 @@ If you don't have an atSign yet, you'll need to register and activate one:
 # Replace @youratSign with your actual atSign (e.g., @alice)
 at_activate -a @youratSign
 
-# Or using Dart
-# Replace @youratSign with your actual atSign (e.g., @alice)
-dart run bin/at_activate.dart -a @youratSign
 ```
 
 Follow the prompts to:
@@ -82,44 +29,16 @@ Follow the prompts to:
 
 > **Important**: Keep your atSign keys safe! They're stored in your home directory/.atsign/keys and needed to send an encrypted file with furl or other atsign apps.
 
-### 1. Start the Server
-
-#### Using Compiled Binary
-```bash
-# Start the unified server (default port 8080)
-furl_server
-
-# Or specify a custom port
-furl_server --port 8090
-
-# Or use command line options
-furl_server --port 3000 --web-root public
-```
-
-#### Using Dart
-```bash
-# Start the unified server (default port 8080)
-dart run bin/furl_server.dart
-
-# Or specify a custom port
-dart run bin/furl_server.dart 8090
-
-# Or use command line options
-dart run bin/furl_server.dart --port 3000 --web-root public
-```
-
-### 2. Upload a File
+### 1. Share a File
 
 #### Using Compiled Binary
 ```bash
 # Replace @youratSign with your actual atSign (e.g., @alice)
+# Uses the default server at https://furl.host
 furl @youratSign path/to/file.txt 1h
-```
 
-#### Using Dart
-```bash
-# Replace @youratSign with your actual atSign (e.g., @alice)
-dart run bin/furl.dart @youratSign path/to/file.txt 1h
+# Or share with a custom message
+furl @youratSign path/to/file.txt 1h -m "Here's the file you requested"
 ```
 
 This will:
@@ -129,13 +48,13 @@ This will:
 - Store encrypted metadata on atPlatform
 - Display a URL and PIN for the recipient
 
-### 3. Share with Recipient
+### 2. Share with Recipient
 
 Send the recipient:
-1. **URL**: `http://localhost:8080/furl.html?atSign=@youratSign&key=_furl_xxxxx`
+1. **URL**: The URL displayed after successful upload
 2. **PIN**: The 9-character code displayed during upload
 
-### 4. Download and Decrypt
+### 3. Download and Decrypt
 
 The recipient:
 1. Opens the URL in their browser
@@ -169,8 +88,15 @@ filebin.net → Get Encrypted File → ChaCha20 Decrypt → Original File
 ## Prerequisites
 
 - Dart SDK
-- Activated atSign (get one at [atsign.com](https://atsign.com/get-an-atsign), then activate with `dart run bin/at_activate.dart`)
+- Activated atSign (get one at [atsign.com](https://atsign.com/get-an-atsign), then activate with `at_activate` binary or `dart run bin/at_activate.dart`)
 - Network connectivity for atPlatform and filebin.net
+
+## Setting up your own furl environment
+
+If you want to run your own furl server instead of using the default server at https://furl.host, follow these instructions:
+
+### Additional Prerequisites for Self-Hosting
+
 - **Rust and wasm-pack** (required for browser decryption)
 
 ### Initial Setup
@@ -200,6 +126,46 @@ cd ..
 
 # Now you can use both CLI and web interface
 ```
+
+### Starting Your Own Server
+
+#### Using Compiled Binary
+```bash
+# Start the unified server (default port 8080)
+furl-server
+
+# Or specify a custom port
+furl-server --port 8090
+
+# Or use command line options
+furl-server --port 3000 --web-root public
+```
+
+#### Using Dart
+```bash
+# Start the unified server (default port 8080)
+dart run bin/furl_server.dart
+
+# Or specify a custom port
+dart run bin/furl_server.dart 8090
+
+# Or use command line options
+dart run bin/furl_server.dart --port 3000 --web-root public
+```
+
+### Using Your Custom Server
+
+Once your server is running, specify it when sharing files:
+
+```bash
+# Using compiled binary with custom server
+furl @alice document.pdf 1h --server http://localhost:8080
+
+# Using Dart with custom server  
+dart run bin/furl.dart @alice document.pdf 1h --server http://localhost:8080
+```
+
+Your files will then be accessible via your custom server URL instead of the default https://furl.host.
 
 ## Command Line Usage
 
