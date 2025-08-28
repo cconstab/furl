@@ -195,7 +195,7 @@ jobs:
         path: |
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}
-          build/${{ matrix.platform }}-${{ matrix.arch }}/hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip
+          build/${{ matrix.platform }}-${{ matrix.arch }}/hashes/
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}.sig
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}.sig
           build/${{ matrix.platform }}-${{ matrix.arch }}/web/
@@ -245,7 +245,7 @@ jobs:
     - name: Zip all checksums
       run: |
         cd release-files
-        zip all-hashes.zip *.sha256
+        zip -r all-hashes.zip */hashes/*.sha256
         cd ..
 
     - name: Create Release
