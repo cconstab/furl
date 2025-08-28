@@ -170,8 +170,12 @@ jobs:
 
     - name: Zip checksums
       run: |
-        cd build/${{ matrix.platform }}-${{ matrix.arch }}/hashes
-        zip ../hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip *.sha256
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          pwsh -Command "Compress-Archive -Path 'build/${{ matrix.platform }}-${{ matrix.arch }}/hashes/*.sha256' -DestinationPath 'build/${{ matrix.platform }}-${{ matrix.arch }}/hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip'"
+        else
+          cd build/${{ matrix.platform }}-${{ matrix.arch }}/hashes
+          zip ../hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip *.sha256
+        fi
       shell: bash
 
     - name: Copy web assets
@@ -246,65 +250,75 @@ jobs:
         echo "Files prepared for release:"
         ls -la release-files/
 
+    - name: Zip all checksums
+      run: |
+        cd release-files
+        zip all-hashes.zip *.sha256
+        cd ..
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         name: Release ${{ github.ref_name }}
         body: |
           ## Furl ${{ github.ref_name }}
-          
+
           Secure file sharing with multi-layer encryption and client-side decryption.
-          
+
           ### Downloads
-          
+
           **Linux:**
           - x64: `furl-linux-x64.tar.gz`
           - ARM64: `furl-linux-arm64.tar.gz`
           - RISC-V 64: `furl-linux-riscv64.tar.gz`
-          
+
           **macOS:**
           - x64 (Intel): `furl-macos-x64.tar.gz`
           - ARM64 (Apple Silicon): `furl-macos-arm64.tar.gz`
-          
+
           **Windows:**
           - x64: `furl-windows-x64.zip`
           - ARM64: `furl-windows-arm64.zip`
-          
+
           ### Code Signing & Security
-          
+
           **All binaries are digitally signed:**
           - 🍎 **macOS**: Code signed and notarized by Apple
           - 🪟 **Windows**: Authenticode signed with trusted certificate
           - 🐧 **Linux**: GPG signed with maintainer key
-          
+
           **Verification:**
-          - SHA256 checksums provided for all binaries (`.sha256` files)
+          - All SHA256 checksums for every binary are provided in a single zip archive: `all-hashes.zip`
           - GPG signatures available for Linux builds (`.sig` files)
           - Windows binaries can be verified via Properties → Digital Signatures
           - macOS binaries verified automatically by Gatekeeper
-          
+
           ### Usage
-          
+
           Extract the archive and run:
           ```bash
           ./furl "@username" file.txt 7d -m "Your message"
           ```
-          
+
           For Windows:
           ```cmd
           furl.exe "@username" file.txt 7d -m "Your message"
           ```
-          
+
           ### What's Included
-          
+
           - `furl` / `furl.exe`: Main CLI application
           - `furl-server` / `furl-server.exe`: Local web server for decryption
           - `web/`: Web interface for browser-based decryption
           - `wasm-crypto/`: WebAssembly crypto acceleration modules
-          - `*.sha256`: SHA256 checksums for verification
+          - `all-hashes.zip`: Contains all SHA256 checksums for every binary
           - `*.sig`: GPG signatures (Linux only)
-          
-        files: release-files/*
+
+        files: |
+          release-files/*.tar.gz
+          release-files/*.zip
+          release-files/*.sig
+          release-files/all-hashes.zip
         draft: false
         prerelease: false
       env:
