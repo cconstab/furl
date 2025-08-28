@@ -168,7 +168,6 @@ jobs:
         fi
       shell: bash
 
-    - name: Zip checksums
   # Removed per-matrix zipping of hashes. All .sha256 files will be collected and zipped in the release job.
 
     - name: Copy web assets
