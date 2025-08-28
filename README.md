@@ -27,11 +27,11 @@ Follow the prompts to:
 - Enter the one-time password (OTP) sent to your email/SMS
 - Create a backup of your keys file e.g send to another machine using furl!
 
-> **Important**: Keep your atSign keys safe! They're stored in your home directory/.atsign/keys and needed to send an encrypted file with furl or other atsign apps.
+> **Important**: Keep your atSign keys safe! They're stored in your home directory/.atsign/keys and are needed to send an encrypted file with furl or other atsign apps.
 
 ### 1. Share a File
 
-#### Using Compiled Binary
+#### Using latest [Binary Release](https://github.com/cconstab/furl/releases/latest) for your OS/Arch
 ```bash
 # Replace @youratSign with your actual atSign (e.g., @alice)
 # Uses the default server at https://furl.host
