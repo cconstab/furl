@@ -230,6 +230,8 @@ jobs:
       run: |
         echo "Available release files:"
         find artifacts -type f -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" -o -name "*.sig" | sort
+        echo "Full directory structure:"
+        find artifacts -type f | head -20
 
     - name: Prepare release files
       run: |
@@ -244,8 +246,10 @@ jobs:
 
     - name: Zip all checksums
       run: |
-        cd release-files
-        zip -r all-hashes.zip */hashes/*.sha256
+        mkdir -p all-hashes
+        find artifacts -name "*.sha256" -exec cp {} all-hashes/ \; 2>/dev/null || true
+        cd all-hashes
+        zip ../release-files/all-hashes.zip *.sha256
         cd ..
 
     - name: Create Release
