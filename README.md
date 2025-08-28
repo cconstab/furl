@@ -13,6 +13,9 @@ furl_server
 # 2. Share a file
 furl @youratsign document.pdf 1h
 
+# 2a. Or share with a custom message
+furl @youratsign document.pdf 1h -m "Here's the report you requested"
+
 # 3. Share the generated URL and PIN with recipient
 # Recipient enters PIN in web interface to decrypt and download
 ```
@@ -29,6 +32,9 @@ dart run bin/furl_server.dart
 # 3. Share a file
 dart run bin/furl.dart @youratsign document.pdf 1h
 
+# 3a. Or share with a custom message
+dart run bin/furl.dart @youratsign document.pdf 1h -m "Here's the report you requested"
+
 # 4. Share the generated URL and PIN with recipient
 # Recipient enters PIN in web interface to decrypt and download
 ```
@@ -37,6 +43,7 @@ dart run bin/furl.dart @youratsign document.pdf 1h
 
 - **Zero-Knowledge Security**: Files are encrypted before upload, decrypted in recipient's browser
 - **PIN Protection**: 9-character strong PIN with special characters protects encryption keys
+- **Custom Messages**: Optional custom messages for recipients (max 140 characters)
 - **Public Storage**: Uses public services (filebin.net) for encrypted file storage
 - **atPlatform Integration**: Metadata stored securely on atPlatform
 - **Client-Side Decryption**: All decryption happens in the browser for maximum privacy
@@ -172,6 +179,9 @@ furl @alice document.pdf 1h -v
 # With quiet mode (no progress bars)
 furl @alice document.pdf 1h -q
 
+# With a custom message for the recipient
+furl @alice document.pdf 1h -m "Here is the contract"
+
 # Using Dart (for development)
 dart run bin/furl.dart @alice document.pdf 1h
 
@@ -184,6 +194,7 @@ dart run bin/furl.dart @alice document.pdf 1h -v
 # 1h           - TTL (1 hour, can use: 30s, 10m, 2h, 7d, or seconds)
 # -v           - Verbose output (optional)
 # -q           - Quiet mode - no progress bars (optional)
+# -m "message" - Custom message for recipient (max 140 chars, optional)
 ```
 
 ## Server Configuration

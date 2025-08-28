@@ -46,6 +46,16 @@ jobs:
       if: runner.os == 'Windows'
       run: dart compile exe bin/furl.dart -o furl.exe
 
+    - name: Build at_activate executable (Unix)
+      if: runner.os != 'Windows'
+      run: dart compile exe bin/at_activate.dart -o at_activate
+      continue-on-error: true
+
+    - name: Build at_activate executable (Windows)
+      if: runner.os == 'Windows'
+      run: dart compile exe bin/at_activate.dart -o at_activate.exe
+      continue-on-error: true
+
     - name: Test executable (Unix)
       if: runner.os != 'Windows'
       run: ./furl --help || true
