@@ -155,15 +155,16 @@ jobs:
     - name: Generate checksums
       run: |
         cd build/${{ matrix.platform }}-${{ matrix.arch }}
+        mkdir -p hashes
         if [ "${{ matrix.platform }}" = "windows" ]; then
-          certutil -hashfile furl${{ matrix.binary-ext }} SHA256 > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
-          certutil -hashfile furl-server${{ matrix.binary-ext }} SHA256 > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          certutil -hashfile furl${{ matrix.binary-ext }} SHA256 > hashes/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          certutil -hashfile furl-server${{ matrix.binary-ext }} SHA256 > hashes/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
         elif [ "${{ matrix.platform }}" = "macos" ]; then
-          shasum -a 256 furl${{ matrix.binary-ext }} > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
-          shasum -a 256 furl-server${{ matrix.binary-ext }} > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          shasum -a 256 furl${{ matrix.binary-ext }} > hashes/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          shasum -a 256 furl-server${{ matrix.binary-ext }} > hashes/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
         else
-          sha256sum furl${{ matrix.binary-ext }} > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
-          sha256sum furl-server${{ matrix.binary-ext }} > furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          sha256sum furl${{ matrix.binary-ext }} > hashes/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          sha256sum furl-server${{ matrix.binary-ext }} > hashes/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
         fi
       shell: bash
 
@@ -192,8 +193,7 @@ jobs:
         path: |
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}
-          build/${{ matrix.platform }}-${{ matrix.arch }}/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
-          build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          build/${{ matrix.platform }}-${{ matrix.arch }}/hashes/*.sha256
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}.sig
           build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}.sig
           build/${{ matrix.platform }}-${{ matrix.arch }}/web/
