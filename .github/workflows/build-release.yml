@@ -231,7 +231,9 @@ jobs:
         echo "Available release files:"
         find artifacts -type f -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" -o -name "*.sig" | sort
         echo "Full directory structure:"
-        find artifacts -type f | head -20
+        find artifacts -type f | head -30
+        echo "Looking specifically for .sha256 files:"
+        find artifacts -name "*.sha256" -type f
 
     - name: Prepare release files
       run: |
@@ -246,11 +248,23 @@ jobs:
 
     - name: Zip all checksums
       run: |
+        echo "Searching for .sha256 files..."
+        find artifacts -name "*.sha256" -type f
+        echo "Creating all-hashes directory and copying files..."
         mkdir -p all-hashes
         find artifacts -name "*.sha256" -exec cp {} all-hashes/ \; 2>/dev/null || true
-        cd all-hashes
-        zip ../release-files/all-hashes.zip *.sha256
-        cd ..
+        echo "Contents of all-hashes directory:"
+        ls -la all-hashes/
+        if [ -n "$(ls -A all-hashes)" ]; then
+          cd all-hashes
+          zip ../all-hashes.zip *.sha256
+          cd ..
+          echo "Created all-hashes.zip successfully"
+          ls -la all-hashes.zip
+        else
+          echo "No .sha256 files found to zip!"
+          exit 1
+        fi
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -312,9 +326,8 @@ jobs:
 
         files: |
           release-files/*.tar.gz
-          release-files/*.zip
           release-files/*.sig
-          release-files/all-hashes.zip
+          all-hashes.zip
         draft: false
         prerelease: false
       env:
