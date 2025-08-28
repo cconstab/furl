@@ -7,10 +7,13 @@ A secure file sharing system that uses multi-layer encryption and client-side de
 ### For Compiled Binary Users
 
 ```bash
+# 0. Get an atSign first: https://atsign.com/get-an-atsign
+# Then activate it: at_activate
+
 # 1. Start the server
 furl_server
 
-# 2. Share a file
+# 2. Share a file (replace @youratsign with your actual atSign)
 furl @youratsign document.pdf 1h
 
 # 2a. Or share with a custom message
@@ -23,13 +26,16 @@ furl @youratsign document.pdf 1h -m "Here's the report you requested"
 ### For Dart Developers
 
 ```bash
+# 0. Get an atSign first: https://atsign.com/get-an-atsign
+# Then activate it: dart run bin/at_activate.dart
+
 # 1. Install dependencies
 dart pub get
 
 # 2. Start the unified server
 dart run bin/furl_server.dart
 
-# 3. Share a file
+# 3. Share a file (replace @youratsign with your actual atSign)
 dart run bin/furl.dart @youratsign document.pdf 1h
 
 # 3a. Or share with a custom message
@@ -45,10 +51,37 @@ dart run bin/furl.dart @youratsign document.pdf 1h -m "Here's the report you req
 - **PIN Protection**: 9-character strong PIN with special characters protects encryption keys
 - **Custom Messages**: Optional custom messages for recipients (max 140 characters)
 - **Public Storage**: Uses public services (filebin.net) for encrypted file storage
-- **atPlatform Integration**: Metadata stored securely on atPlatform
+- **atPlatform Integration**: Metadata stored securely on atPlatform (requires free atSign)
 - **Client-Side Decryption**: All decryption happens in the browser for maximum privacy
 
 ## Quick Start
+
+### 0. Get Your atSign (First Time Users)
+
+If you don't have an atSign yet, you'll need to register and activate one:
+
+#### Step 1: Register an atSign
+1. Go to [atsign.com/get-an-atsign](https://atsign.com/get-an-atsign)
+2. Choose an available atSign (like @alice, @mycompany, etc.)
+3. Complete the registration process
+
+#### Step 2: Activate Your atSign
+```bash
+# Using compiled binary
+# Replace @youratSign with your actual atSign (e.g., @alice)
+at_activate -a @youratSign
+
+# Or using Dart
+# Replace @youratSign with your actual atSign (e.g., @alice)
+dart run bin/at_activate.dart -a @youratSign
+```
+
+Follow the prompts to:
+- Enter your atSign
+- Enter the one-time password (OTP) sent to your email
+- Create a backup of your keys (important for recovery)
+
+> **Important**: Keep your atSign keys safe! They're stored in your home directory and needed for encryption/decryption.
 
 ### 1. Start the Server
 
@@ -80,11 +113,13 @@ dart run bin/furl_server.dart --port 3000 --web-root public
 
 #### Using Compiled Binary
 ```bash
+# Replace @youratSign with your actual atSign (e.g., @alice)
 furl @youratSign path/to/file.txt 1h
 ```
 
 #### Using Dart
 ```bash
+# Replace @youratSign with your actual atSign (e.g., @alice)
 dart run bin/furl.dart @youratSign path/to/file.txt 1h
 ```
 
@@ -135,7 +170,7 @@ filebin.net → Get Encrypted File → ChaCha20 Decrypt → Original File
 ## Prerequisites
 
 - Dart SDK
-- Activated atSign (use `dart run at_activate --atsign @youratSign`)
+- Activated atSign (get one at [atsign.com](https://atsign.com/get-an-atsign), then activate with `dart run bin/at_activate.dart`)
 - Network connectivity for atPlatform and filebin.net
 - **Rust and wasm-pack** (required for browser decryption)
 
