@@ -61,8 +61,8 @@ dart run bin/furl.dart @youratsign document.pdf 1h -m "Here's the report you req
 If you don't have an atSign yet, you'll need to register and activate one:
 
 #### Step 1: Register an atSign
-1. Go to [atsign.com/get-an-atsign](https://atsign.com/get-an-atsign)
-2. Choose an available atSign (like @alice, @mycompany, etc.)
+1. Go to [my.atsign.com/go](https://my.atsign.com/go)
+2. Purchase or get a free atSign (like @alice, @mycompany, etc.)
 3. Complete the registration process
 
 #### Step 2: Activate Your atSign
@@ -77,11 +77,10 @@ dart run bin/at_activate.dart -a @youratSign
 ```
 
 Follow the prompts to:
-- Enter your atSign
-- Enter the one-time password (OTP) sent to your email
-- Create a backup of your keys (important for recovery)
+- Enter the one-time password (OTP) sent to your email/SMS
+- Create a backup of your keys file e.g send to another machine using furl!
 
-> **Important**: Keep your atSign keys safe! They're stored in your home directory and needed for encryption/decryption.
+> **Important**: Keep your atSign keys safe! They're stored in your home directory/.atsign/keys and needed to send an encrypted file with furl or other atsign apps.
 
 ### 1. Start the Server
 
