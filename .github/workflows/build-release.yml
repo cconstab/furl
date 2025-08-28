@@ -169,14 +169,7 @@ jobs:
       shell: bash
 
     - name: Zip checksums
-      run: |
-        if [ "${{ matrix.platform }}" = "windows" ]; then
-          pwsh -Command "Compress-Archive -Path 'build/${{ matrix.platform }}-${{ matrix.arch }}/hashes/*.sha256' -DestinationPath 'build/${{ matrix.platform }}-${{ matrix.arch }}/hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip'"
-        else
-          cd build/${{ matrix.platform }}-${{ matrix.arch }}/hashes
-          zip ../hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip *.sha256
-        fi
-      shell: bash
+  # Removed per-matrix zipping of hashes. All .sha256 files will be collected and zipped in the release job.
 
     - name: Copy web assets
       run: |
