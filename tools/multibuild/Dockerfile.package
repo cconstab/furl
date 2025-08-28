@@ -1,0 +1,30 @@
+# Dockerfile.package
+# A dockerfile for packaging furl releases using docker buildx
+
+FROM dart:3.9.1@sha256:1245685edacccab41a36e57ca7eb503de1fc60e2538332888741c8a58c1d403c AS build
+WORKDIR /furl
+
+COPY . .
+
+# Build furl
+RUN set -eux; \
+  mkdir -p /furl_build; \
+  mkdir /tarball; \
+  dart pub get --enforce-lockfile; \
+  dart compile exe bin/furl.dart -v -o /furl_build/furl; \
+  dart compile exe bin/furl_server.dart -v -o /furl_build/furl-server; \
+  dart compile exe bin/at_activate.dart -v -o /furl_build/at_activate; \
+  cp -r web /furl_build/; \
+  cp -r wasm-crypto /furl_build/
+
+RUN set -eux; \
+  case "$(dpkg --print-architecture)" in \
+  amd64) ARCH="x64";; \
+  armhf) ARCH="arm";; \
+  arm64) ARCH="arm64";; \
+  riscv64) ARCH="riscv64";; \
+  esac; \
+  tar -cvzf /tarball/furl-linux-"${ARCH}".tar.gz -C /furl_build .
+
+FROM scratch
+COPY --from=build /tarball/* /

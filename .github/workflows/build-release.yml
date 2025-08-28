@@ -17,30 +17,21 @@ jobs:
     name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     
+    # Note: ARM64 and RISC-V builds for Linux/Windows are not supported
+    # due to Dart's 'dart compile exe' not supporting cross-compilation.
+    # Only macOS ARM64 is supported via native M1/M2 runners.
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux builds
+          # Linux builds - only x64 due to Dart compilation limitations
           - platform: linux
             arch: x64
             os: ubuntu-latest
             dart-arch: x64
             binary-ext: ''
             
-          - platform: linux
-            arch: arm64
-            os: ubuntu-latest
-            dart-arch: arm64
-            binary-ext: ''
-            
-          - platform: linux
-            arch: riscv64
-            os: ubuntu-latest
-            dart-arch: riscv64
-            binary-ext: ''
-            
-          # macOS builds
+          # macOS builds - both architectures supported with native runners
           - platform: macos
             arch: x64
             os: macos-13  # Intel runner
@@ -53,17 +44,11 @@ jobs:
             dart-arch: arm64
             binary-ext: ''
             
-          # Windows builds
+          # Windows builds - only x64 due to Dart compilation limitations
           - platform: windows
             arch: x64
             os: windows-latest
             dart-arch: x64
-            binary-ext: '.exe'
-            
-          - platform: windows
-            arch: arm64
-            os: windows-latest
-            dart-arch: arm64
             binary-ext: '.exe'
 
     steps:
@@ -252,10 +237,83 @@ jobs:
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}.zip
         retention-days: 30
 
+  # Docker BuildX job for ARM/RISC-V cross-compilation
+  other_build:
+    name: Build ARM/RISC-V via Docker BuildX
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: arm
+            docker-platform: linux/arm/v7
+            
+          - platform: linux
+            arch: arm64
+            docker-platform: linux/arm64
+            
+          - platform: linux
+            arch: riscv64
+            docker-platform: linux/riscv64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm,arm64,riscv64
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: ${{ matrix.docker-platform }}
+
+    - name: Build with Docker BuildX
+      run: |
+        mkdir -p build
+        docker buildx build \
+          --platform ${{ matrix.docker-platform }} \
+          --file tools/multibuild/Dockerfile.package \
+          --output type=tar,dest=build/furl-${{ matrix.platform }}-${{ matrix.arch }}.tar \
+          .
+
+    - name: Extract tarball
+      run: |
+        cd build
+        tar -xf furl-${{ matrix.platform }}-${{ matrix.arch }}.tar
+        ls -la
+
+    - name: Create release archive
+      run: |
+        cd build
+        if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz ]; then
+          mv furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+        fi
+
+    - name: Generate checksums
+      run: |
+        cd build
+        if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz ]; then
+          sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz | cut -d' ' -f1 > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+        fi
+
+    - name: Upload cross-compiled artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: furl-cross-${{ matrix.platform }}-${{ matrix.arch }}
+        path: |
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+        retention-days: 30
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, other_build]
     if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
@@ -320,8 +378,9 @@ jobs:
 
           **Linux:**
           - x64: `furl-linux-x64.tar.gz`
-          - ARM64: `furl-linux-arm64.tar.gz`
-          - RISC-V 64: `furl-linux-riscv64.tar.gz`
+          - ARM64: `furl-linux-arm64.tar.gz` (Cross-compiled via Docker BuildX)
+          - ARM v7: `furl-linux-arm.tar.gz` (Cross-compiled via Docker BuildX)
+          - RISC-V 64: `furl-linux-riscv64.tar.gz` (Cross-compiled via Docker BuildX)
 
           **macOS:**
           - x64 (Intel): `furl-macos-x64.tar.gz`
@@ -329,7 +388,12 @@ jobs:
 
           **Windows:**
           - x64: `furl-windows-x64.zip`
-          - ARM64: `furl-windows-arm64.zip`
+
+          ### Cross-Compilation Notes
+
+          - **x64 builds**: Native compilation on dedicated runners
+          - **macOS ARM64**: Native compilation on Apple Silicon runners  
+          - **Linux ARM/RISC-V**: Cross-compiled using Docker BuildX + QEMU emulation
 
           ### Code Signing & Security
 
@@ -379,7 +443,7 @@ jobs:
   docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, other_build]
     
     steps:
     - name: Checkout repository

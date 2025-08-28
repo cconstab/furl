@@ -11,9 +11,21 @@ This directory contains GitHub Actions workflows for automated building, testing
 **Purpose:** Builds furl binaries for multiple platforms and architectures:
 
 #### Supported Platforms & Architectures:
-- **Linux:** x64, ARM64, RISC-V 64
-- **macOS:** x64 (Intel), ARM64 (Apple Silicon)  
-- **Windows:** x64, ARM64
+- **Linux:** 
+  - x64 (native compilation)
+  - ARM64 (cross-compiled via Docker BuildX + QEMU)
+  - ARM v7 (cross-compiled via Docker BuildX + QEMU)  
+  - RISC-V 64 (cross-compiled via Docker BuildX + QEMU)
+- **macOS:** 
+  - x64 (Intel, native compilation)
+  - ARM64 (Apple Silicon, native compilation)
+- **Windows:** 
+  - x64 (native compilation)
+
+#### Cross-Compilation Strategy:
+- **Native builds**: Use dedicated GitHub runners for supported architectures
+- **Cross-compilation**: Docker BuildX with QEMU emulation for unsupported architectures
+- **Approach**: Follows the atsign-foundation/noports repository pattern for multi-architecture support
 
 #### Outputs:
 - Individual platform binaries (digitally signed)
@@ -138,17 +150,13 @@ docker run -it -v /path/to/files:/shared furl ./furl --help
 
 ## Platform-Specific Notes
 
-### Linux RISC-V
-- Experimental support via Dart's RISC-V 64 target
-- May have limited package availability
+### Architecture Limitations
+- Linux and Windows ARM64/RISC-V builds are not supported due to Dart's `dart compile exe` not supporting cross-compilation
+- Use x64 builds with emulation if needed on ARM systems
 
 ### macOS Universal
 - Separate x64 and ARM64 builds
 - Use ARM64 for Apple Silicon Macs (M1/M2/M3)
-
-### Windows ARM64
-- Native ARM64 support for Surface Pro X and similar devices
-- Fallback to x64 emulation if needed
 
 ## Troubleshooting
 
