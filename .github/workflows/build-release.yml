@@ -153,11 +153,6 @@ jobs:
 
     # Create checksums for all platforms
     - name: Generate checksums
-    - name: Zip checksums
-      run: |
-        cd build/${{ matrix.platform }}-${{ matrix.arch }}/hashes
-        zip ../hashes-${{ matrix.platform }}-${{ matrix.arch }}.zip *.sha256
-      shell: bash
       run: |
         cd build/${{ matrix.platform }}-${{ matrix.arch }}
         mkdir -p hashes
