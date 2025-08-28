@@ -326,6 +326,7 @@ jobs:
 
         files: |
           release-files/*.tar.gz
+          release-files/*.zip
           release-files/*.sig
           all-hashes.zip
         draft: false
