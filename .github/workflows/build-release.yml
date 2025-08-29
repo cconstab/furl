@@ -254,11 +254,22 @@ jobs:
     - name: Create release archive
       working-directory: build
       run: |
-        cd ${{ matrix.platform }}-${{ matrix.arch }}
+        # Create a furl directory for proper archive structure
+        mkdir -p furl-${{ matrix.platform }}-${{ matrix.arch }}-temp/furl
+        
+        # Copy files to the furl subdirectory
+        cp ${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }} furl-${{ matrix.platform }}-${{ matrix.arch }}-temp/furl/
+        cp ${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }} furl-${{ matrix.platform }}-${{ matrix.arch }}-temp/furl/
+        cp ${{ matrix.platform }}-${{ matrix.arch }}/at_activate${{ matrix.binary-ext }} furl-${{ matrix.platform }}-${{ matrix.arch }}-temp/furl/
+        cp -r ${{ matrix.platform }}-${{ matrix.arch }}/web furl-${{ matrix.platform }}-${{ matrix.arch }}-temp/furl/
+        cp -r ${{ matrix.platform }}-${{ matrix.arch }}/wasm-crypto furl-${{ matrix.platform }}-${{ matrix.arch }}-temp/furl/
+        
+        # Create archive with proper directory structure
+        cd furl-${{ matrix.platform }}-${{ matrix.arch }}-temp
         if [ "${{ matrix.platform }}" = "windows" ]; then
-          7z a ../furl-${{ matrix.platform }}-${{ matrix.arch }}.zip furl${{ matrix.binary-ext }} furl-server${{ matrix.binary-ext }} at_activate${{ matrix.binary-ext }} web/ wasm-crypto/
+          7z a ../furl-${{ matrix.platform }}-${{ matrix.arch }}.zip furl/
         else
-          tar -czf ../furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz furl${{ matrix.binary-ext }} furl-server${{ matrix.binary-ext }} at_activate${{ matrix.binary-ext }} web/ wasm-crypto/
+          tar -czf ../furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz furl/
         fi
       shell: bash
 
