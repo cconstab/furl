@@ -534,12 +534,26 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value={{sha}}-{{date 'YYYYMMDD-HHmmss'}}
+        flavor: |
+          latest=auto
 
     - name: Download Linux x64 artifacts  
       uses: actions/download-artifact@v4
       with:
         name: furl-linux-x64
         path: docker-build
+
+    - name: Debug Docker metadata
+      run: |
+        echo "Generated tags:"
+        echo "${{ steps.meta.outputs.tags }}"
+        echo "Generated labels:"
+        echo "${{ steps.meta.outputs.labels }}"
+        echo "Event name: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Default branch: ${{ github.event.repository.default_branch }}"
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
