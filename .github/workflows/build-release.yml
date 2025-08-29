@@ -40,7 +40,7 @@ jobs:
             
           - platform: macos
             arch: arm64
-            os: macos-latest  # M1/M2 runner
+            os: macos-14  # M1/M2 runner (use specific version like noports)
             dart-arch: arm64
             binary-ext: ''
             
@@ -105,58 +105,110 @@ jobs:
           at_activate${{ matrix.binary-ext }}
       continue-on-error: true
 
-    # macOS Code Signing
-    - name: Import macOS certificate
+    # macOS Code Signing (based on noports successful approach)
+    # Required secrets: MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD, MACOS_SIGNING_IDENTITY, MACOS_KEYCHAIN_PASSWORD
+    - name: Codesign (macOS only)
       if: matrix.platform == 'macos' && github.event_name != 'pull_request'
-      uses: apple-actions/import-codesign-certs@v2
-      with:
-        p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
-        p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      continue-on-error: true
-
-    - name: Sign macOS executables
-      if: matrix.platform == 'macos' && github.event_name != 'pull_request'
+      env:
+        MACOS_CODESIGN_CERT: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CODESIGN_CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
       run: |
-        codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}
-        codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}
-        codesign --force --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" --timestamp --options runtime build/${{ matrix.platform }}-${{ matrix.arch }}/at_activate${{ matrix.binary-ext }}
+        echo "=== macOS Code Signing Debug (${{ matrix.arch }}) ==="
+        echo "Platform: ${{ matrix.platform }}"
+        echo "Architecture: ${{ matrix.arch }}"
+        echo "Runner OS: ${{ matrix.os }}"
+        
+        # Load certificate
+        CERT_PATH=$RUNNER_TEMP/furl-codesign.p12
+        echo -n "$MACOS_CODESIGN_CERT" | base64 --decode -o $CERT_PATH
+        
+        # Create keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        
+        # Import certificate
+        security import $CERT_PATH -P "$MACOS_CODESIGN_CERT_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+        security set-key-partition-list -S apple-tool:apple,:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        
+        echo "Available signing identities:"
+        security find-identity -v -p codesigning
+        
+        echo "Build directory contents:"
+        ls -la build/${{ matrix.platform }}-${{ matrix.arch }}/
+        
+        echo "Binary architecture info:"
+        file build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}
+        file build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}
+        file build/${{ matrix.platform }}-${{ matrix.arch }}/at_activate${{ matrix.binary-ext }}
+        
+        # codesign all binaries
+        echo "Signing binaries..."
+        /usr/bin/codesign \
+          --force \
+          -s "$MACOS_SIGNING_IDENTITY" \
+          --options=runtime \
+          --entitlements ./entitlements.plist \
+          --prefix "com.atsign." \
+          --timestamp \
+          -v \
+          build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}
+          
+        /usr/bin/codesign \
+          --force \
+          -s "$MACOS_SIGNING_IDENTITY" \
+          --options=runtime \
+          --entitlements ./entitlements.plist \
+          --prefix "com.atsign." \
+          --timestamp \
+          -v \
+          build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}
+          
+        /usr/bin/codesign \
+          --force \
+          -s "$MACOS_SIGNING_IDENTITY" \
+          --options=runtime \
+          --entitlements ./entitlements.plist \
+          --prefix "com.atsign." \
+          --timestamp \
+          -v \
+          build/${{ matrix.platform }}-${{ matrix.arch }}/at_activate${{ matrix.binary-ext }}
+        
+        echo "Verifying signatures:"
+        codesign --verify --verbose build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }}
+        codesign --verify --verbose build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }}
+        codesign --verify --verbose build/${{ matrix.platform }}-${{ matrix.arch }}/at_activate${{ matrix.binary-ext }}
       shell: bash
       continue-on-error: true
 
-    - name: Notarize macOS executables
+    - name: Create zip for notarization (macOS only)
       if: matrix.platform == 'macos' && github.event_name != 'pull_request'
       run: |
-        # Create temporary directories for notarization
-        mkdir -p notarization/furl notarization/furl-server notarization/at_activate
-        
-        # Copy executables to temporary directories
-        cp build/${{ matrix.platform }}-${{ matrix.arch }}/furl${{ matrix.binary-ext }} notarization/furl/
-        cp build/${{ matrix.platform }}-${{ matrix.arch }}/furl-server${{ matrix.binary-ext }} notarization/furl-server/
-        cp build/${{ matrix.platform }}-${{ matrix.arch }}/at_activate${{ matrix.binary-ext }} notarization/at_activate/
-        
-        # Create zip files for notarization
-        cd notarization/furl && zip -r ../furl-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
-        cd notarization/furl-server && zip -r ../furl-server-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
-        cd notarization/at_activate && zip -r ../at_activate-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
-        
-        # Submit for notarization
-        xcrun notarytool submit notarization/furl-${{ matrix.platform }}-${{ matrix.arch }}.zip \
-          --apple-id "${{ secrets.APPLE_ID }}" \
-          --password "${{ secrets.APPLE_APP_PASSWORD }}" \
-          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+        # Create a zip file containing all signed binaries for notarization
+        cd build/${{ matrix.platform }}-${{ matrix.arch }}
+        zip -r ../furl-${{ matrix.platform }}-${{ matrix.arch }}-signed.zip .
+        cd ../..
+      shell: bash
+      continue-on-error: true
+
+    - name: Notarize the build (macOS only)
+      if: matrix.platform == 'macos' && github.event_name != 'pull_request'
+      env:
+        MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
+        MACOS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        MACOS_APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      run: |
+        echo "Submitting for notarization..."
+        xcrun notarytool submit build/furl-${{ matrix.platform }}-${{ matrix.arch }}-signed.zip \
+          --apple-id "$MACOS_APPLE_ID" \
+          --team-id "$MACOS_TEAM_ID" \
+          --password "$MACOS_APPLE_ID_PASSWORD" \
           --wait
-          
-        xcrun notarytool submit notarization/furl-server-${{ matrix.platform }}-${{ matrix.arch }}.zip \
-          --apple-id "${{ secrets.APPLE_ID }}" \
-          --password "${{ secrets.APPLE_APP_PASSWORD }}" \
-          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-          --wait
-          
-        xcrun notarytool submit notarization/at_activate-${{ matrix.platform }}-${{ matrix.arch }}.zip \
-          --apple-id "${{ secrets.APPLE_ID }}" \
-          --password "${{ secrets.APPLE_APP_PASSWORD }}" \
-          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-          --wait
+        echo "Notarization complete"
       shell: bash
       continue-on-error: true
 
