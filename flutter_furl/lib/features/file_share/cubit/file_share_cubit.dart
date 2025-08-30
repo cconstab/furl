@@ -55,18 +55,18 @@ class FileShareCubit extends Cubit<FileShareState> {
     emit(FileSelected(file));
   }
 
-  Future<void> shareFile(File file, String fileName) async {
+  Future<void> shareFile(File file, String fileName, {String? ttl, String? message}) async {
     try {
       // First select the file, then upload and share it
       emit(FileSelected(file));
-      await uploadAndShareFile(file, fileName);
+      await uploadAndShareFile(file, fileName, ttl: ttl, message: message);
     } catch (e) {
       _logger.severe('Error sharing file: $e');
       emit(FileShareError('Failed to share file: ${e.toString()}'));
     }
   }
 
-  Future<void> uploadAndShareFile(File file, String fileName) async {
+  Future<void> uploadAndShareFile(File file, String fileName, {String? ttl, String? message}) async {
     try {
       emit(FileUploading(0.0, status: 'Preparing encryption...'));
 
@@ -116,6 +116,8 @@ class FileShareCubit extends Cubit<FileShareState> {
         chaCha20Nonce: chaCha20Nonce.bytes,
         sha512Hash: sha512Hash,
         fileSize: fileSize,
+        customMessage: message,
+        ttl: _parseTtlToSeconds(ttl ?? '1h'),
       );
 
       emit(FileUploading(0.9, status: 'Generating share URL...'));
@@ -123,8 +125,9 @@ class FileShareCubit extends Cubit<FileShareState> {
       // Generate retrieval URL
       final shareUrl = FileEncryptionService.generateRetrievalUrl(atSign: currentAtSign, atKeyName: atKeyName);
 
-      // Calculate expiration time (1 hour default)
-      final expiresAt = DateTime.now().add(Duration(hours: 1));
+      // Calculate expiration time based on TTL
+      final ttlSeconds = _parseTtlToSeconds(ttl ?? '1h');
+      final expiresAt = DateTime.now().add(Duration(seconds: ttlSeconds));
 
       emit(FileUploaded(url: shareUrl, pin: pin, fileName: fileName, fileSize: fileSize, expiresAt: expiresAt));
 
@@ -137,5 +140,27 @@ class FileShareCubit extends Cubit<FileShareState> {
 
   void reset() {
     emit(FileShareInitial());
+  }
+
+  /// Parse TTL string to seconds
+  int _parseTtlToSeconds(String ttl) {
+    switch (ttl) {
+      case '30m':
+        return 30 * 60; // 30 minutes
+      case '1h':
+        return 60 * 60; // 1 hour
+      case '2h':
+        return 2 * 60 * 60; // 2 hours
+      case '6h':
+        return 6 * 60 * 60; // 6 hours
+      case '1d':
+        return 24 * 60 * 60; // 1 day
+      case '3d':
+        return 3 * 24 * 60 * 60; // 3 days
+      case '6d':
+        return 6 * 24 * 60 * 60; // 6 days
+      default:
+        return 60 * 60; // Default to 1 hour
+    }
   }
 }

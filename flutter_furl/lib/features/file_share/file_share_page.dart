@@ -8,8 +8,16 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'dart:io';
 import 'dart:math';
 
-class FileSharePage extends StatelessWidget {
+class FileSharePage extends StatefulWidget {
   const FileSharePage({super.key});
+
+  @override
+  State<FileSharePage> createState() => _FileSharePageState();
+}
+
+class _FileSharePageState extends State<FileSharePage> {
+  String _selectedTtl = '1h'; // Default 1 hour
+  String? _customMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +161,62 @@ class FileSharePage extends StatelessWidget {
                             // File Drop Zone
                             _buildDropZone(context, state),
 
+                            const SizedBox(height: 20),
+
+                            // Share Options Section (always visible)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '⚙️ Share Options',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ShareOptionsWidget(
+                                    initialTtl: _selectedTtl,
+                                    initialMessage: _customMessage,
+                                    onTtlChanged: (ttl) => setState(() => _selectedTtl = ttl),
+                                    onMessageChanged: (message) => setState(() => _customMessage = message),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Share Button (only visible when file is selected)
+                            if (state is FileSelected) ...[
+                              ElevatedButton(
+                                onPressed: () {
+                                  final file = state.file;
+                                  final fileName = file.path.split('/').last;
+                                  context.read<FileShareCubit>().shareFile(
+                                    file, 
+                                    fileName,
+                                    ttl: _selectedTtl,
+                                    message: _customMessage?.trim().isEmpty == true ? null : _customMessage?.trim(),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF667eea),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                child: const Text(
+                                  '🔐 Encrypt and Share',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+
                             const SizedBox(height: 30),
 
                             // Upload Progress or Results
@@ -254,26 +318,6 @@ class FileSharePage extends StatelessWidget {
                     'Drag and drop a file here\nor click to select',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.normal),
-                  ),
-                ],
-                if (state is FileSelected) ...[
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: () {
-                      final file = state.file;
-                      final fileName = file.path.split('/').last;
-                      context.read<FileShareCubit>().shareFile(file, fileName);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF667eea),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text(
-                      '🔐 Encrypt and Share',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
                   ),
                 ],
               ],
@@ -674,5 +718,115 @@ void _selectFile(BuildContext context) async {
     }
   } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
+  }
+}
+
+class ShareOptionsWidget extends StatefulWidget {
+  final String initialTtl;
+  final String? initialMessage;
+  final Function(String) onTtlChanged;
+  final Function(String?) onMessageChanged;
+
+  const ShareOptionsWidget({
+    super.key,
+    required this.initialTtl,
+    this.initialMessage,
+    required this.onTtlChanged,
+    required this.onMessageChanged,
+  });
+
+  @override
+  State<ShareOptionsWidget> createState() => _ShareOptionsWidgetState();
+}
+
+class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
+  late String _selectedTtl;
+  late TextEditingController _messageController;
+  
+  final List<Map<String, String>> _ttlOptions = [
+    {'value': '30m', 'label': '30 minutes'},
+    {'value': '1h', 'label': '1 hour'},
+    {'value': '2h', 'label': '2 hours'},
+    {'value': '6h', 'label': '6 hours'},
+    {'value': '1d', 'label': '1 day'},
+    {'value': '3d', 'label': '3 days'},
+    {'value': '6d', 'label': '6 days'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTtl = widget.initialTtl;
+    _messageController = TextEditingController(text: widget.initialMessage ?? '');
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // TTL Dropdown
+        DropdownButtonFormField<String>(
+          value: _selectedTtl,
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF667eea)),
+            ),
+          ),
+          items: _ttlOptions.map((option) {
+            return DropdownMenuItem<String>(
+              value: option['value'],
+              child: Text(option['label']!),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedTtl = value!;
+            });
+            widget.onTtlChanged(value!);
+          },
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Message Field
+        const Text('💬 Message (optional):', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _messageController,
+          decoration: InputDecoration(
+            hintText: 'Add a message for the recipient (max 140 characters)',
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF667eea)),
+            ),
+            suffixText: '${_messageController.text.length}/140',
+          ),
+          maxLength: 140,
+          maxLines: 2,
+          onChanged: (value) {
+            setState(() {}); // Trigger rebuild to update character count
+            widget.onMessageChanged(value.trim().isEmpty ? null : value.trim());
+          },
+        ),
+      ],
+    );
   }
 }
