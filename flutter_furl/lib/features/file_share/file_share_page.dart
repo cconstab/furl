@@ -6,6 +6,7 @@ import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'dart:io';
+import 'dart:math';
 
 class FileSharePage extends StatelessWidget {
   const FileSharePage({super.key});
@@ -65,9 +66,32 @@ class FileSharePage extends StatelessWidget {
                         if (value == 'logout') {
                           context.read<OnboardingCubit>().logout();
                           context.read<FileShareCubit>().reset();
+                        } else if (value == 'settings') {
+                          _showSettingsDialog(context);
                         }
                       },
-                      itemBuilder: (context) => [const PopupMenuItem(value: 'logout', child: Text('Logout'))],
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'settings',
+                          child: Row(
+                            children: [
+                              Icon(Icons.settings, size: 18),
+                              SizedBox(width: 8),
+                              Text('Settings'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              Icon(Icons.logout, size: 18),
+                              SizedBox(width: 8),
+                              Text('Logout'),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -165,12 +189,33 @@ class FileSharePage extends StatelessWidget {
 
   Widget _buildDropZone(BuildContext context, FileShareState state) {
     return DropTarget(
-      onDragDone: (detail) {
+      onDragDone: (detail) async {
         final files = detail.files;
         if (files.isNotEmpty) {
           final file = File(files.first.path);
           final fileName = files.first.name;
-          context.read<FileShareCubit>().shareFile(file, fileName);
+          
+          // Check file size for drag and drop
+          try {
+            final fileSize = await file.length();
+            if (!_isFileSizeValid(fileSize)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'File too large! Maximum size is 100 MB.\nDropped file: ${_formatFileSize(fileSize)}',
+                  ),
+                  backgroundColor: Colors.red.shade600,
+                ),
+              );
+              return;
+            }
+            
+            context.read<FileShareCubit>().shareFile(file, fileName);
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error processing dropped file: $e')),
+            );
+          }
         }
       },
       child: Container(
@@ -191,19 +236,50 @@ class FileSharePage extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(state is FileSelected ? '✅' : '📁', style: const TextStyle(fontSize: 48)),
-                const SizedBox(height: 12),
-                Text(
-                  state is FileSelected
-                      ? 'File Selected: ${state.file.path.split('/').last}'
-                      : 'Drag and drop a file here\nor click to select',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: state is FileSelected ? const Color(0xFF667eea) : Colors.grey.shade600,
-                    fontWeight: state is FileSelected ? FontWeight.w600 : FontWeight.normal,
+                if (state is FileSelected) ...[
+                  Text(_getFileIcon(state.file.path.split('/').last), style: const TextStyle(fontSize: 48)),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.file.path.split('/').last,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF667eea),
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  FutureBuilder<int>(
+                    future: state.file.length(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        final size = snapshot.data!;
+                        final isValid = _isFileSizeValid(size);
+                        return Text(
+                          _formatFileSize(size),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isValid ? Colors.grey.shade600 : Colors.red.shade600,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        );
+                      }
+                      return const Text('...', style: TextStyle(fontSize: 14, color: Colors.grey));
+                    },
+                  ),
+                ] else ...[
+                  const Text('📁', style: TextStyle(fontSize: 48)),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Drag and drop a file here\nor click to select',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
                 if (state is FileSelected) ...[
                   const SizedBox(height: 20),
                   ElevatedButton(
@@ -447,18 +523,145 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
   );
 }
 
-void _selectFile(BuildContext context) async {
-  try {
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-    if (result != null) {
-      File file = File(result.files.single.path!);
-      String fileName = result.files.single.name;
-
-      // Start the file sharing process
-      context.read<FileShareCubit>().shareFile(file, fileName);
+  // Helper functions for file handling
+  String _getFileIcon(String fileName) {
+    final extension = fileName.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return '📄';
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'webp':
+        return '🖼️';
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+      case 'mkv':
+        return '🎬';
+      case 'mp3':
+      case 'wav':
+      case 'flac':
+      case 'm4a':
+        return '🎵';
+      case 'zip':
+      case 'rar':
+      case '7z':
+      case 'tar':
+        return '📦';
+      case 'doc':
+      case 'docx':
+        return '📝';
+      case 'xls':
+      case 'xlsx':
+        return '📊';
+      case 'ppt':
+      case 'pptx':
+        return '📋';
+      case 'txt':
+        return '📄';
+      default:
+        return '📁';
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
   }
-}
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    int i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
+  }
+
+  bool _isFileSizeValid(int bytes) {
+    const maxSizeInBytes = 100 * 1024 * 1024; // 100 MB limit
+    return bytes <= maxSizeInBytes;
+  }
+
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.settings, color: Color(0xFF667eea)),
+              SizedBox(width: 8),
+              Text('Settings'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'File Upload Limits',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text('Maximum file size: 100 MB'),
+              const Text('Supported file types: All'),
+              const SizedBox(height: 16),
+              const Text(
+                'Security Features',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text('• End-to-end encryption'),
+              const Text('• Automatic PIN generation'),
+              const Text('• Secure atSign authentication'),
+              const SizedBox(height: 16),
+              const Text(
+                'About Furl',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text('Version: 1.0.0'),
+              const Text('Secure file sharing powered by atSign'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Color(0xFF667eea)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _selectFile(BuildContext context) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles();
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        String fileName = result.files.single.name;
+        
+        // Check file size
+        final fileSize = await file.length();
+        if (!_isFileSizeValid(fileSize)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'File too large! Maximum size is 100 MB.\nSelected file: ${_formatFileSize(fileSize)}',
+              ),
+              backgroundColor: Colors.red.shade600,
+            ),
+          );
+          return;
+        }
+
+        // Start the file sharing process
+        context.read<FileShareCubit>().shareFile(file, fileName);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error selecting file: $e')),
+      );
+    }
+  }
