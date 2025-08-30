@@ -38,6 +38,13 @@ dependencies:
   file_picker: ^10.3.2
   uuid: ^4.5.1
   desktop_drop: ^0.6.1
+  at_onboarding_flutter: ^6.2.0
+  at_client_mobile: ^3.3.0
+  at_utils: ^3.3.0
+  crypto: ^3.0.6
+  encrypt: ^5.0.3
+  http: ^1.5.0
+  dio: ^5.9.0
 
 dev_dependencies:
   flutter_test:

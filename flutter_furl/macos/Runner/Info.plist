@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Furl needs access to your files to securely encrypt and share them.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Furl needs access to your Downloads folder to save and share files.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Furl needs access to your Desktop to select files for sharing.</string>
 </dict>
 </plist>

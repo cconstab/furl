@@ -73,23 +73,11 @@ class FileSharePage extends StatelessWidget {
                       itemBuilder: (context) => [
                         const PopupMenuItem(
                           value: 'settings',
-                          child: Row(
-                            children: [
-                              Icon(Icons.settings, size: 18),
-                              SizedBox(width: 8),
-                              Text('Settings'),
-                            ],
-                          ),
+                          child: Row(children: [Icon(Icons.settings, size: 18), SizedBox(width: 8), Text('Settings')]),
                         ),
                         const PopupMenuItem(
                           value: 'logout',
-                          child: Row(
-                            children: [
-                              Icon(Icons.logout, size: 18),
-                              SizedBox(width: 8),
-                              Text('Logout'),
-                            ],
-                          ),
+                          child: Row(children: [Icon(Icons.logout, size: 18), SizedBox(width: 8), Text('Logout')]),
                         ),
                       ],
                     ),
@@ -194,27 +182,23 @@ class FileSharePage extends StatelessWidget {
         if (files.isNotEmpty) {
           final file = File(files.first.path);
           final fileName = files.first.name;
-          
+
           // Check file size for drag and drop
           try {
             final fileSize = await file.length();
             if (!_isFileSizeValid(fileSize)) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(
-                    'File too large! Maximum size is 100 MB.\nDropped file: ${_formatFileSize(fileSize)}',
-                  ),
+                  content: Text('File too large! Maximum size is 100 MB.\nDropped file: ${_formatFileSize(fileSize)}'),
                   backgroundColor: Colors.red.shade600,
                 ),
               );
               return;
             }
-            
+
             context.read<FileShareCubit>().shareFile(file, fileName);
           } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error processing dropped file: $e')),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing dropped file: $e')));
           }
         }
       },
@@ -241,11 +225,7 @@ class FileSharePage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     state.file.path.split('/').last,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Color(0xFF667eea),
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontSize: 16, color: Color(0xFF667eea), fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
@@ -273,11 +253,7 @@ class FileSharePage extends StatelessWidget {
                   Text(
                     'Drag and drop a file here\nor click to select',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.normal,
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.normal),
                   ),
                 ],
                 if (state is FileSelected) ...[
@@ -285,7 +261,8 @@ class FileSharePage extends StatelessWidget {
                   ElevatedButton(
                     onPressed: () {
                       final file = state.file;
-                      context.read<FileShareCubit>().uploadAndShareFile(file);
+                      final fileName = file.path.split('/').last;
+                      context.read<FileShareCubit>().shareFile(file, fileName);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF667eea),
@@ -314,14 +291,17 @@ Widget _buildUploadProgress(BuildContext context, FileUploading state) {
     decoration: BoxDecoration(color: const Color(0xFFf0f0f0), borderRadius: BorderRadius.circular(8)),
     child: Column(
       children: [
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('🔐', style: TextStyle(fontSize: 24)),
-            SizedBox(width: 8),
-            Text(
-              'Encrypting and Uploading...',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black87),
+            const Text('🔐', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                state.status,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black87),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
@@ -472,6 +452,36 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
         ),
         const SizedBox(height: 20),
 
+        // File Info Section
+        Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: const Color(0xFFf8f9fa),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFe9ecef), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('📄', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  const Text('File Details:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('Name: ${state.fileName}', style: const TextStyle(fontSize: 13)),
+              Text('Size: ${_formatFileSize(state.fileSize)}', style: const TextStyle(fontSize: 13)),
+              Text(
+                'Expires: ${_formatExpiration(state.expiresAt)}',
+                style: const TextStyle(fontSize: 13, color: Colors.orange),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
         // Share buttons
         Row(
           children: [
@@ -523,145 +533,146 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
   );
 }
 
-  // Helper functions for file handling
-  String _getFileIcon(String fileName) {
-    final extension = fileName.split('.').last.toLowerCase();
-    switch (extension) {
-      case 'pdf':
-        return '📄';
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'webp':
-        return '🖼️';
-      case 'mp4':
-      case 'mov':
-      case 'avi':
-      case 'mkv':
-        return '🎬';
-      case 'mp3':
-      case 'wav':
-      case 'flac':
-      case 'm4a':
-        return '🎵';
-      case 'zip':
-      case 'rar':
-      case '7z':
-      case 'tar':
-        return '📦';
-      case 'doc':
-      case 'docx':
-        return '📝';
-      case 'xls':
-      case 'xlsx':
-        return '📊';
-      case 'ppt':
-      case 'pptx':
-        return '📋';
-      case 'txt':
-        return '📄';
-      default:
-        return '📁';
-    }
+// Helper functions for file handling
+String _getFileIcon(String fileName) {
+  final extension = fileName.split('.').last.toLowerCase();
+  switch (extension) {
+    case 'pdf':
+      return '📄';
+    case 'jpg':
+    case 'jpeg':
+    case 'png':
+    case 'gif':
+    case 'webp':
+      return '🖼️';
+    case 'mp4':
+    case 'mov':
+    case 'avi':
+    case 'mkv':
+      return '🎬';
+    case 'mp3':
+    case 'wav':
+    case 'flac':
+    case 'm4a':
+      return '🎵';
+    case 'zip':
+    case 'rar':
+    case '7z':
+    case 'tar':
+      return '📦';
+    case 'doc':
+    case 'docx':
+      return '📝';
+    case 'xls':
+    case 'xlsx':
+      return '📊';
+    case 'ppt':
+    case 'pptx':
+      return '📋';
+    case 'txt':
+      return '📄';
+    default:
+      return '📁';
   }
+}
 
-  String _formatFileSize(int bytes) {
-    if (bytes <= 0) return "0 B";
-    const suffixes = ["B", "KB", "MB", "GB", "TB"];
-    int i = (log(bytes) / log(1024)).floor();
-    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
+String _formatFileSize(int bytes) {
+  if (bytes <= 0) return "0 B";
+  const suffixes = ["B", "KB", "MB", "GB", "TB"];
+  int i = (log(bytes) / log(1024)).floor();
+  return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
+}
+
+bool _isFileSizeValid(int bytes) {
+  const maxSizeInBytes = 100 * 1024 * 1024; // 100 MB limit
+  return bytes <= maxSizeInBytes;
+}
+
+String _formatExpiration(DateTime expiresAt) {
+  final now = DateTime.now();
+  final difference = expiresAt.difference(now);
+
+  if (difference.isNegative) {
+    return 'Expired';
+  } else if (difference.inDays > 0) {
+    return '${difference.inDays} day${difference.inDays == 1 ? '' : 's'}';
+  } else if (difference.inHours > 0) {
+    return '${difference.inHours} hour${difference.inHours == 1 ? '' : 's'}';
+  } else if (difference.inMinutes > 0) {
+    return '${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'}';
+  } else {
+    return 'Less than a minute';
   }
+}
 
-  bool _isFileSizeValid(int bytes) {
-    const maxSizeInBytes = 100 * 1024 * 1024; // 100 MB limit
-    return bytes <= maxSizeInBytes;
-  }
-
-  void _showSettingsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.settings, color: Color(0xFF667eea)),
-              SizedBox(width: 8),
-              Text('Settings'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'File Upload Limits',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              const Text('Maximum file size: 100 MB'),
-              const Text('Supported file types: All'),
-              const SizedBox(height: 16),
-              const Text(
-                'Security Features',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              const Text('• End-to-end encryption'),
-              const Text('• Automatic PIN generation'),
-              const Text('• Secure atSign authentication'),
-              const SizedBox(height: 16),
-              const Text(
-                'About Furl',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              const Text('Version: 1.0.0'),
-              const Text('Secure file sharing powered by atSign'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                'Close',
-                style: TextStyle(color: Color(0xFF667eea)),
-              ),
-            ),
+void _showSettingsDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.settings, color: Color(0xFF667eea)),
+            SizedBox(width: 8),
+            Text('Settings'),
           ],
-        );
-      },
-    );
-  }
-
-  void _selectFile(BuildContext context) async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-      if (result != null) {
-        File file = File(result.files.single.path!);
-        String fileName = result.files.single.name;
-        
-        // Check file size
-        final fileSize = await file.length();
-        if (!_isFileSizeValid(fileSize)) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'File too large! Maximum size is 100 MB.\nSelected file: ${_formatFileSize(fileSize)}',
-              ),
-              backgroundColor: Colors.red.shade600,
-            ),
-          );
-          return;
-        }
-
-        // Start the file sharing process
-        context.read<FileShareCubit>().shareFile(file, fileName);
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error selecting file: $e')),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('File Upload Limits', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            const Text('Maximum file size: 100 MB'),
+            const Text('Supported file types: All'),
+            const SizedBox(height: 16),
+            const Text('Security Features', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            const Text('• End-to-end encryption'),
+            const Text('• Automatic PIN generation'),
+            const Text('• Secure atSign authentication'),
+            const SizedBox(height: 16),
+            const Text('About Furl', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            const Text('Version: 1.0.0'),
+            const Text('Secure file sharing powered by atSign'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close', style: TextStyle(color: Color(0xFF667eea))),
+          ),
+        ],
       );
+    },
+  );
+}
+
+void _selectFile(BuildContext context) async {
+  try {
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
+
+    if (result != null) {
+      File file = File(result.files.single.path!);
+      String fileName = result.files.single.name;
+
+      // Check file size
+      final fileSize = await file.length();
+      if (!_isFileSizeValid(fileSize)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File too large! Maximum size is 100 MB.\nSelected file: ${_formatFileSize(fileSize)}'),
+            backgroundColor: Colors.red.shade600,
+          ),
+        );
+        return;
+      }
+
+      // Start the file sharing process
+      context.read<FileShareCubit>().shareFile(file, fileName);
     }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
   }
+}

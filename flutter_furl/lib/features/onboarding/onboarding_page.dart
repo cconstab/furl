@@ -134,7 +134,7 @@ class OnboardingPage extends StatelessWidget {
                               width: double.infinity,
                               child: ElevatedButton(
                                 onPressed: () {
-                                  context.read<OnboardingCubit>().startOnboarding();
+                                  context.read<OnboardingCubit>().startOnboarding(context);
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF667eea),

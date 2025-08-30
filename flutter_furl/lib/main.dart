@@ -8,7 +8,6 @@ import 'package:flutter_furl/features/file_share/file_share_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   runApp(const FurlApp());
 }
 
