@@ -74,14 +74,20 @@ class _FileSharePageState extends State<FileSharePage> {
                         if (value == 'logout') {
                           context.read<OnboardingCubit>().logout();
                           context.read<FileShareCubit>().reset();
-                        } else if (value == 'settings') {
-                          _showSettingsDialog(context);
+                        } else if (value == 'about') {
+                          _showAboutDialog(context);
+                        } else if (value == 'help') {
+                          _showHelpDialog(context);
                         }
                       },
                       itemBuilder: (context) => [
                         const PopupMenuItem(
-                          value: 'settings',
-                          child: Row(children: [Icon(Icons.settings, size: 18), SizedBox(width: 8), Text('Settings')]),
+                          value: 'help',
+                          child: Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 8), Text('Help')]),
+                        ),
+                        const PopupMenuItem(
+                          value: 'about',
+                          child: Row(children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('About')]),
                         ),
                         const PopupMenuItem(
                           value: 'logout',
@@ -127,37 +133,6 @@ class _FileSharePageState extends State<FileSharePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Instructions
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(colors: [Color(0xFFe3f2fd), Color(0xFFf3e5f5)]),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFb3d9ff)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'How to Share Files:',
-                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                      color: const Color(0xFF1976d2),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Text('📁 1. Drag and drop a file or click to select'),
-                                  const SizedBox(height: 4),
-                                  const Text('🔐 2. Your file will be encrypted automatically'),
-                                  const SizedBox(height: 4),
-                                  const Text('🔗 3. Share the generated URL and PIN'),
-                                  const SizedBox(height: 4),
-                                  const Text('🔑 4. Recipients use the PIN to decrypt the file'),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 30),
-
                             // File Drop Zone
                             _buildDropZone(context, state),
 
@@ -245,7 +220,6 @@ class _FileSharePageState extends State<FileSharePage> {
         final files = detail.files;
         if (files.isNotEmpty) {
           final file = File(files.first.path);
-          final fileName = files.first.name;
 
           // Check file size for drag and drop
           try {
@@ -260,7 +234,7 @@ class _FileSharePageState extends State<FileSharePage> {
               return;
             }
 
-            context.read<FileShareCubit>().shareFile(file, fileName);
+            context.read<FileShareCubit>().selectFile(file);
           } catch (e) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing dropped file: $e')));
           }
@@ -649,16 +623,16 @@ String _formatExpiration(DateTime expiresAt) {
   }
 }
 
-void _showSettingsDialog(BuildContext context) {
+void _showAboutDialog(BuildContext context) {
   showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.settings, color: Color(0xFF667eea)),
+            Icon(Icons.info_outline, color: Color(0xFF667eea)),
             SizedBox(width: 8),
-            Text('Settings'),
+            Text('About Furl'),
           ],
         ),
         content: Column(
@@ -676,7 +650,7 @@ void _showSettingsDialog(BuildContext context) {
             const Text('• Automatic PIN generation'),
             const Text('• Secure atSign authentication'),
             const SizedBox(height: 16),
-            const Text('About Furl', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('Version Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             const Text('Version: 1.0.0'),
             const Text('Secure file sharing powered by atSign'),
@@ -693,13 +667,60 @@ void _showSettingsDialog(BuildContext context) {
   );
 }
 
+void _showHelpDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline, color: Color(0xFF667eea)),
+            SizedBox(width: 8),
+            Text('How to Share Files'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Follow these simple steps:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 12),
+            const Text('📁 1. Drag and drop a file or click to select'),
+            const SizedBox(height: 8),
+            const Text('⚙️ 2. Configure expiration time and optional message'),
+            const SizedBox(height: 8),
+            const Text('🔐 3. Click "Encrypt and Share" button'),
+            const SizedBox(height: 8),
+            const Text('🔗 4. Share the generated URL and PIN'),
+            const SizedBox(height: 8),
+            const Text('🔑 5. Recipients use the PIN to decrypt the file'),
+            const SizedBox(height: 16),
+            const Text('Tips:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 8),
+            const Text('• Set expiration time from 30 minutes to 6 days'),
+            const SizedBox(height: 4),
+            const Text('• Add a custom message (up to 140 characters)'),
+            const SizedBox(height: 4),
+            const Text('• Files are encrypted before uploading'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it!', style: TextStyle(color: Color(0xFF667eea))),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 void _selectFile(BuildContext context) async {
   try {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
 
     if (result != null) {
       File file = File(result.files.single.path!);
-      String fileName = result.files.single.name;
 
       // Check file size
       final fileSize = await file.length();
@@ -713,8 +734,8 @@ void _selectFile(BuildContext context) async {
         return;
       }
 
-      // Start the file sharing process
-      context.read<FileShareCubit>().shareFile(file, fileName);
+      // Select the file (don't upload yet - wait for user to click Encrypt and Share button)
+      context.read<FileShareCubit>().selectFile(file);
     }
   } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
