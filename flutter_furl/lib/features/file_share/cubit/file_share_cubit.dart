@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:io';
+import 'dart:math';
+import 'package:uuid/uuid.dart';
 
 // States
 abstract class FileShareState {}
@@ -39,6 +41,16 @@ class FileShareCubit extends Cubit<FileShareState> {
     emit(FileSelected(file));
   }
 
+  Future<void> shareFile(File file, String fileName) async {
+    try {
+      // First select the file, then upload and share it
+      emit(FileSelected(file));
+      await uploadAndShareFile(file);
+    } catch (e) {
+      emit(FileShareError('Failed to share file: ${e.toString()}'));
+    }
+  }
+
   Future<void> uploadAndShareFile(File file) async {
     try {
       emit(FileUploading(0.0));
@@ -52,11 +64,13 @@ class FileShareCubit extends Cubit<FileShareState> {
         emit(FileUploading(i / 10.0));
       }
 
-      // Simulate successful upload with dummy URL and PIN
-      const dummyUrl = 'https://furl.atsign.org/share/abc123';
-      const dummyPin = '1234';
+      // Generate unique URL and random PIN
+      const uuid = Uuid();
+      final fileId = uuid.v4().substring(0, 8);
+      final url = 'https://furl.atsign.org/share/$fileId';
+      final pin = (1000 + Random().nextInt(9000)).toString(); // 4-digit PIN
 
-      emit(FileUploaded(url: dummyUrl, pin: dummyPin));
+      emit(FileUploaded(url: url, pin: pin));
     } catch (e) {
       emit(FileShareError('Failed to upload file: ${e.toString()}'));
     }
