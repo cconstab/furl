@@ -523,9 +523,24 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF667eea),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('📋 Copy All', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('📋', style: TextStyle(fontSize: 14)),
+                    SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Copy All',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -536,11 +551,23 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                 },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Color(0xFF667eea), width: 2),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text(
-                  '🔄 Share Another',
-                  style: TextStyle(color: Color(0xFF667eea), fontWeight: FontWeight.w600),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('🔄', style: TextStyle(fontSize: 14)),
+                    SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Send File',
+                        style: TextStyle(color: Color(0xFF667eea), fontWeight: FontWeight.w600, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

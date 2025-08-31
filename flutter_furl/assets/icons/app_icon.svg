@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4f46e5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e0e7ff;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <circle cx="256" cy="256" r="240" fill="url(#backgroundGradient)" stroke="none"/>
+  
+  <!-- Document/File icon -->
+  <path d="M180 120 L180 120 L332 120 L380 168 L380 392 L180 392 Z" 
+        fill="url(#iconGradient)" 
+        stroke="none"/>
+  
+  <!-- Document corner fold -->
+  <path d="M332 120 L332 168 L380 168 Z" 
+        fill="#c7d2fe" 
+        stroke="none"/>
+  
+  <!-- Chain link icon (representing URL) -->
+  <g transform="translate(200, 220)">
+    <!-- First link -->
+    <ellipse cx="30" cy="25" rx="15" ry="25" 
+             fill="none" 
+             stroke="#4f46e5" 
+             stroke-width="8" 
+             transform="rotate(-45 30 25)"/>
+    
+    <!-- Second link -->
+    <ellipse cx="65" cy="60" rx="15" ry="25" 
+             fill="none" 
+             stroke="#4f46e5" 
+             stroke-width="8" 
+             transform="rotate(-45 65 60)"/>
+    
+    <!-- Connection between links -->
+    <line x1="42" y1="37" x2="53" y2="48" 
+          stroke="#4f46e5" 
+          stroke-width="8" 
+          stroke-linecap="round"/>
+  </g>
+  
+  <!-- Small decorative dots to represent sharing/network -->
+  <circle cx="320" cy="300" r="4" fill="#c7d2fe"/>
+  <circle cx="340" cy="280" r="3" fill="#c7d2fe"/>
+  <circle cx="350" cy="320" r="3" fill="#c7d2fe"/>
+  
+</svg>
