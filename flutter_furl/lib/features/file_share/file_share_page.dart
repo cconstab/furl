@@ -173,7 +173,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                   final file = state.file;
                                   final fileName = file.path.split('/').last;
                                   context.read<FileShareCubit>().shareFile(
-                                    file, 
+                                    file,
                                     fileName,
                                     ttl: _selectedTtl,
                                     message: _customMessage?.trim().isEmpty == true ? null : _customMessage?.trim(),
@@ -763,7 +763,7 @@ class ShareOptionsWidget extends StatefulWidget {
 class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
   late String _selectedTtl;
   late TextEditingController _messageController;
-  
+
   final List<Map<String, String>> _ttlOptions = [
     {'value': '30m', 'label': '30 minutes'},
     {'value': '1h', 'label': '1 hour'},
@@ -807,10 +807,7 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
             ),
           ),
           items: _ttlOptions.map((option) {
-            return DropdownMenuItem<String>(
-              value: option['value'],
-              child: Text(option['label']!),
-            );
+            return DropdownMenuItem<String>(value: option['value'], child: Text(option['label']!));
           }).toList(),
           onChanged: (value) {
             setState(() {
@@ -819,9 +816,9 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
             widget.onTtlChanged(value!);
           },
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Message Field
         const Text('💬 Message (optional):', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),

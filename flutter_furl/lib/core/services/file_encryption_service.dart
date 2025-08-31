@@ -78,7 +78,20 @@ class FileEncryptionService {
       // Generate unique bin ID
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
-      final uploadUrl = 'https://filebin.net/$binId/${fileName}.encrypted';
+
+      // Sanitize filename for URL - remove or replace problematic characters
+      final sanitizedFileName = fileName
+          .replaceAll('@', '_at_')
+          .replaceAll(' ', '_')
+          .replaceAll('/', '_')
+          .replaceAll('\\', '_')
+          .replaceAll('?', '_')
+          .replaceAll('#', '_')
+          .replaceAll('&', '_')
+          .replaceAll('=', '_')
+          .replaceAll('%', '_');
+
+      final uploadUrl = 'https://filebin.net/$binId/${sanitizedFileName}.encrypted';
 
       // Upload with progress tracking
       final response = await dio.post(
@@ -99,9 +112,19 @@ class FileEncryptionService {
       }
     } catch (e) {
       _logger.severe('Upload error: $e');
-      // For testing, return a mock URL
+      // For testing, return a mock URL with sanitized filename
       final uuid = Uuid();
-      final mockUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${fileName}.encrypted';
+      final sanitizedFileName = fileName
+          .replaceAll('@', '_at_')
+          .replaceAll(' ', '_')
+          .replaceAll('/', '_')
+          .replaceAll('\\', '_')
+          .replaceAll('?', '_')
+          .replaceAll('#', '_')
+          .replaceAll('&', '_')
+          .replaceAll('=', '_')
+          .replaceAll('%', '_');
+      final mockUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${sanitizedFileName}.encrypted';
       _logger.info('Mock upload URL: $mockUrl');
       return mockUrl;
     }
