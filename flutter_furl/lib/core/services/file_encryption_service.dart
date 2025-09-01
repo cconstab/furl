@@ -112,21 +112,12 @@ class FileEncryptionService {
       }
     } catch (e) {
       _logger.severe('Upload error: $e');
-      // For testing, return a mock URL with sanitized filename
-      final uuid = Uuid();
-      final sanitizedFileName = fileName
-          .replaceAll('@', '_at_')
-          .replaceAll(' ', '_')
-          .replaceAll('/', '_')
-          .replaceAll('\\', '_')
-          .replaceAll('?', '_')
-          .replaceAll('#', '_')
-          .replaceAll('&', '_')
-          .replaceAll('=', '_')
-          .replaceAll('%', '_');
-      final mockUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_${sanitizedFileName}.encrypted';
-      _logger.info('Mock upload URL: $mockUrl');
-      return mockUrl;
+      // Re-throw the actual error instead of masking it with a mock URL
+      if (e is DioException) {
+        throw Exception('Upload failed: ${e.message}');
+      } else {
+        throw Exception('Upload failed: ${e.toString()}');
+      }
     }
   }
 
