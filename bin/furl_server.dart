@@ -16,13 +16,8 @@ class FurlServer {
   final String? sslKeyPath;
   final bool useHttps;
 
-  FurlServer({
-    this.port = 8080,
-    this.webRoot = 'web',
-    this.bindAddress = '0.0.0.0',
-    this.sslCertPath,
-    this.sslKeyPath,
-  }) : useHttps = sslCertPath != null && sslKeyPath != null;
+  FurlServer({this.port = 8080, this.webRoot = 'web', this.bindAddress = '0.0.0.0', this.sslCertPath, this.sslKeyPath})
+    : useHttps = sslCertPath != null && sslKeyPath != null;
 
   Future<void> start() async {
     if (useHttps) {
@@ -47,9 +42,7 @@ class FurlServer {
     print('   GET / - Redirect to furl.html');
     print('   GET /furl.html - File decryption interface');
     print('   Static files served from: $webRoot/');
-    print(
-      '   Binding to all interfaces: $bindAddress (use --bind 127.0.0.1 for localhost only)',
-    );
+    print('   Binding to all interfaces: $bindAddress (use --bind 127.0.0.1 for localhost only)');
     print('');
 
     await for (HttpRequest request in _server!) {
@@ -61,23 +54,15 @@ class FurlServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    final requestId = DateTime.now().millisecondsSinceEpoch
-        .toString()
-        .substring(8); // Last 5 digits
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString().substring(8); // Last 5 digits
     final startTime = DateTime.now();
 
     print('🔄 [$requestId] ${request.method} ${request.uri.path} - Started');
 
     // Add CORS headers for web access
     request.response.headers.add('Access-Control-Allow-Origin', '*');
-    request.response.headers.add(
-      'Access-Control-Allow-Methods',
-      'GET, POST, OPTIONS',
-    );
-    request.response.headers.add(
-      'Access-Control-Allow-Headers',
-      'Content-Type',
-    );
+    request.response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    request.response.headers.add('Access-Control-Allow-Headers', 'Content-Type');
 
     try {
       final uri = request.uri;
@@ -98,37 +83,25 @@ class FurlServer {
       }
 
       final duration = DateTime.now().difference(startTime).inMilliseconds;
-      print(
-        '✅ [$requestId] ${request.method} ${request.uri.path} - Completed in ${duration}ms',
-      );
+      print('✅ [$requestId] ${request.method} ${request.uri.path} - Completed in ${duration}ms');
     } catch (e) {
       final duration = DateTime.now().difference(startTime).inMilliseconds;
-      print(
-        '❌ [$requestId] ${request.method} ${request.uri.path} - Failed in ${duration}ms: $e',
-      );
+      print('❌ [$requestId] ${request.method} ${request.uri.path} - Failed in ${duration}ms: $e');
       await _handleError(request, e);
     }
   }
 
   Future<void> _handleApiRequest(HttpRequest request, Uri uri) async {
     final apiPath = uri.path.substring(4); // Remove '/api' prefix
-    final pathSegments = uri.pathSegments
-        .skip(1)
-        .toList(); // Skip 'api' segment
+    final pathSegments = uri.pathSegments.skip(1).toList(); // Skip 'api' segment
 
     if (apiPath == '/health') {
       await _handleHealth(request);
-    } else if (apiPath == '/download' &&
-        uri.queryParameters.containsKey('url')) {
+    } else if (apiPath == '/download' && uri.queryParameters.containsKey('url')) {
       final fileUrl = uri.queryParameters['url']!;
       final atSign = uri.queryParameters['atSign'];
       final keyName = uri.queryParameters['keyName'];
-      await _handleFileDownload(
-        request,
-        fileUrl,
-        atSign: atSign,
-        keyName: keyName,
-      );
+      await _handleFileDownload(request, fileUrl, atSign: atSign, keyName: keyName);
     } else if (pathSegments.length == 2 && pathSegments[0] == 'atsign') {
       final atSign = pathSegments[1];
       await _handleAtSignLookup(request, atSign);
@@ -246,9 +219,7 @@ class FurlServer {
       // But send to atDirectory without the @
       final lookupAtSign = normalizedAtSign.substring(1);
 
-      print(
-        '🔍 Looking up atServer details for: $normalizedAtSign (sending: $lookupAtSign)',
-      );
+      print('🔍 Looking up atServer details for: $normalizedAtSign (sending: $lookupAtSign)');
 
       // Query the atDirectory to get the atServer details
       final atServerInfo = await _queryAtDirectory(lookupAtSign);
@@ -279,11 +250,7 @@ class FurlServer {
     await request.response.close();
   }
 
-  Future<void> _handleFetchData(
-    HttpRequest request,
-    String atSign,
-    String keyName,
-  ) async {
+  Future<void> _handleFetchData(HttpRequest request, String atSign, String keyName) async {
     try {
       // Ensure atSign starts with @
       final normalizedAtSign = atSign.startsWith('@') ? atSign : '@$atSign';
@@ -297,12 +264,27 @@ class FurlServer {
       final port = atServerInfo['port'];
 
       // Fetch the data from the atServer using curl (since it works reliably)
-      final atServerUrl =
-          'https://$host:$port/public:$keyName.furl$normalizedAtSign';
+      final atServerUrl = 'https://$host:$port/public:$keyName.furl$normalizedAtSign';
       print('🌐 Fetching from atServer: $atServerUrl');
 
       // Use curl to fetch the data since it handles SSL properly
-      final result = await Process.run('curl', ['-s', '--url', atServerUrl]);
+      late ProcessResult result;
+      try {
+        result = await Process.run('curl', ['-s', '--url', atServerUrl]);
+      } catch (e) {
+        if (e is ProcessException && e.errorCode == 2) {
+          // curl not found
+          throw Exception(
+            'curl is required for the furl server but is not installed.\n'
+            'Please install curl:\n'
+            '  • macOS: curl is pre-installed, try updating your system\n'
+            '  • Ubuntu/Debian: sudo apt-get install curl\n'
+            '  • CentOS/RHEL: sudo yum install curl\n'
+            '  • Windows: Install from https://curl.se/download.html',
+          );
+        }
+        throw Exception('Failed to fetch metadata: $e');
+      }
 
       if (result.exitCode == 0) {
         String responseBody = result.stdout.toString().trim();
@@ -360,9 +342,7 @@ class FurlServer {
           return;
         }
 
-        throw Exception(
-          'Curl failed with exit code ${result.exitCode}: ${result.stderr}',
-        );
+        throw Exception('Curl failed with exit code ${result.exitCode}: ${result.stderr}');
       }
     } catch (e) {
       print('❌ Error fetching data for $atSign/$keyName: $e');
@@ -402,12 +382,7 @@ class FurlServer {
     await request.response.close();
   }
 
-  Future<void> _handleFileDownload(
-    HttpRequest request,
-    String fileUrl, {
-    String? atSign,
-    String? keyName,
-  }) async {
+  Future<void> _handleFileDownload(HttpRequest request, String fileUrl, {String? atSign, String? keyName}) async {
     try {
       print('📁 Proxying file download with streaming: $fileUrl');
 
@@ -418,25 +393,38 @@ class FurlServer {
 
       // First, get the content length with a HEAD request
       print('🔍 Getting file info...');
-      final headResult = await Process.run('curl', [
-        '-I', // HEAD request only
-        '-s', // Silent
-        '-L', // Follow redirects
-        '-f', // Fail on HTTP errors
-        '--max-time', '30', // 30 second timeout
-        '--connect-timeout', '10', // 10 second connect timeout
-        '--url', encodedUrl, // Use encoded URL for safer handling
-      ]);
+      late ProcessResult headResult;
+      try {
+        headResult = await Process.run('curl', [
+          '-I', // HEAD request only
+          '-s', // Silent
+          '-L', // Follow redirects
+          '-f', // Fail on HTTP errors
+          '--max-time', '30', // 30 second timeout
+          '--connect-timeout', '10', // 10 second connect timeout
+          '--url', encodedUrl, // Use encoded URL for safer handling
+        ]);
+      } catch (e) {
+        if (e is ProcessException && e.errorCode == 2) {
+          // curl not found
+          throw Exception(
+            'curl is required for the furl server but is not installed.\n'
+            'Please install curl:\n'
+            '  • macOS: curl is pre-installed, try updating your system\n'
+            '  • Ubuntu/Debian: sudo apt-get install curl\n'
+            '  • CentOS/RHEL: sudo yum install curl\n'
+            '  • Windows: Install from https://curl.se/download.html',
+          );
+        }
+        throw Exception('Failed to get file info: $e');
+      }
 
       int? contentLength;
       if (headResult.exitCode == 0) {
         final headers = headResult.stdout.toString();
         print('📄 HEAD response headers:');
         print(headers);
-        final contentLengthMatch = RegExp(
-          r'content-length:\s*(\d+)',
-          caseSensitive: false,
-        ).firstMatch(headers);
+        final contentLengthMatch = RegExp(r'content-length:\s*(\d+)', caseSensitive: false).firstMatch(headers);
         if (contentLengthMatch != null) {
           contentLength = int.tryParse(contentLengthMatch.group(1)!);
           print('📏 Parsed Content-Length: $contentLength bytes');
@@ -466,14 +454,30 @@ class FurlServer {
       request.response.headers.set('Cache-Control', 'no-cache');
 
       // Start curl process for streaming download
-      final curlProcess = await Process.start('curl', [
-        '-s', // Silent (no progress bar)
-        '-L', // Follow redirects
-        '-f', // Fail on HTTP errors
-        '--max-time', '300', // 5 minute timeout
-        '--connect-timeout', '30', // 30 second connect timeout
-        '--url', encodedUrl, // Use encoded URL for safer handling
-      ]);
+      late Process curlProcess;
+      try {
+        curlProcess = await Process.start('curl', [
+          '-s', // Silent (no progress bar)
+          '-L', // Follow redirects
+          '-f', // Fail on HTTP errors
+          '--max-time', '300', // 5 minute timeout
+          '--connect-timeout', '30', // 30 second connect timeout
+          '--url', encodedUrl, // Use encoded URL for safer handling
+        ]);
+      } catch (e) {
+        if (e is ProcessException && e.errorCode == 2) {
+          // curl not found
+          throw Exception(
+            'curl is required for the furl server but is not installed.\n'
+            'Please install curl:\n'
+            '  • macOS: curl is pre-installed, try updating your system\n'
+            '  • Ubuntu/Debian: sudo apt-get install curl\n'
+            '  • CentOS/RHEL: sudo yum install curl\n'
+            '  • Windows: Install from https://curl.se/download.html',
+          );
+        }
+        throw Exception('Failed to start file download: $e');
+      }
 
       // Stream the curl stdout directly to the response
       print('🚀 Starting direct stream from curl to client');
@@ -489,11 +493,8 @@ class FurlServer {
 
           // Log progress every MB for large files
           if (contentLength != null && bytesStreamed % (1024 * 1024) == 0) {
-            final percent = (bytesStreamed / contentLength * 100)
-                .toStringAsFixed(1);
-            print(
-              '📦 Streamed ${(bytesStreamed / 1024 / 1024).toStringAsFixed(1)}MB (${percent}%)',
-            );
+            final percent = (bytesStreamed / contentLength * 100).toStringAsFixed(1);
+            print('📦 Streamed ${(bytesStreamed / 1024 / 1024).toStringAsFixed(1)}MB (${percent}%)');
           }
         },
         onError: (error) {
@@ -501,9 +502,7 @@ class FurlServer {
         },
         onDone: () {
           stopwatch.stop();
-          print(
-            '✅ Streaming completed: ${bytesStreamed} bytes in ${stopwatch.elapsedMilliseconds}ms',
-          );
+          print('✅ Streaming completed: ${bytesStreamed} bytes in ${stopwatch.elapsedMilliseconds}ms');
         },
       );
 
@@ -520,9 +519,7 @@ class FurlServer {
       await streamSubscription.cancel();
 
       if (exitCode == 0) {
-        print(
-          '✅ Successfully streamed ${bytesStreamed} bytes directly from source',
-        );
+        print('✅ Successfully streamed ${bytesStreamed} bytes directly from source');
       } else {
         final errorMessage = String.fromCharCodes(stderrBuffer);
         print('❌ Curl failed with exit code $exitCode: $errorMessage');
@@ -576,15 +573,10 @@ class FurlServer {
   Future<Map<String, dynamic>> _queryAtDirectory(String atSign) async {
     Socket? socket;
     try {
-      print(
-        '🔌 Connecting to atDirectory at $atDirectoryHost:$atDirectoryPort',
-      );
+      print('🔌 Connecting to atDirectory at $atDirectoryHost:$atDirectoryPort');
 
       // Connect to atDirectory using TLS
-      socket = await SecureSocket.connect(
-        atDirectoryHost,
-        atDirectoryPort,
-      ).timeout(Duration(seconds: 10));
+      socket = await SecureSocket.connect(atDirectoryHost, atDirectoryPort).timeout(Duration(seconds: 10));
 
       // Send lookup command
       final lookupCommand = '$atSign\n';
@@ -592,9 +584,7 @@ class FurlServer {
       socket.write(lookupCommand);
 
       // Read response with a timeout
-      final response = await _readSocketResponse(
-        socket,
-      ).timeout(Duration(seconds: 10));
+      final response = await _readSocketResponse(socket).timeout(Duration(seconds: 10));
 
       print('📥 Received response: $response');
 
@@ -608,18 +598,14 @@ class FurlServer {
           ? trimmedResponse.substring(0, trimmedResponse.length - 1)
           : trimmedResponse;
 
-      if (cleanResponse.isEmpty ||
-          cleanResponse.startsWith('null') ||
-          cleanResponse.startsWith('error')) {
+      if (cleanResponse.isEmpty || cleanResponse.startsWith('null') || cleanResponse.startsWith('error')) {
         throw Exception('AtSign not found in directory');
       }
 
       // Extract host and port from response
       final parts = cleanResponse.split(':');
       if (parts.length != 2) {
-        throw Exception(
-          'Invalid response format from atDirectory: $cleanResponse',
-        );
+        throw Exception('Invalid response format from atDirectory: $cleanResponse');
       }
 
       // Remove leading @ from host if present
@@ -737,8 +723,7 @@ Future<void> main(List<String> arguments) async {
       }
     } else if (arguments[i] == '--web-root' && i + 1 < arguments.length) {
       webRoot = arguments[i + 1];
-    } else if ((arguments[i] == '--bind' || arguments[i] == '--host') &&
-        i + 1 < arguments.length) {
+    } else if ((arguments[i] == '--bind' || arguments[i] == '--host') && i + 1 < arguments.length) {
       bindAddress = arguments[i + 1];
     } else if (arguments[i] == '--ssl-cert' && i + 1 < arguments.length) {
       sslCertPath = arguments[i + 1];
@@ -751,9 +736,7 @@ Future<void> main(List<String> arguments) async {
       print('');
       print('Options:');
       print('  --port <port>        Server port (default: 8080)');
-      print(
-        '  --bind <address>     Bind address (default: 0.0.0.0 - all interfaces)',
-      );
+      print('  --bind <address>     Bind address (default: 0.0.0.0 - all interfaces)');
       print('  --host <address>     Alias for --bind');
       print('  --web-root <path>    Web root directory (default: web)');
       print('  --ssl-cert <path>    SSL certificate file for HTTPS');
@@ -761,12 +744,8 @@ Future<void> main(List<String> arguments) async {
       print('  --help, -h           Show this help message');
       print('');
       print('Bind Address Examples:');
-      print(
-        '  0.0.0.0              Bind to all interfaces (default, accessible externally)',
-      );
-      print(
-        '  127.0.0.1            Bind to localhost only (local access only)',
-      );
+      print('  0.0.0.0              Bind to all interfaces (default, accessible externally)');
+      print('  127.0.0.1            Bind to localhost only (local access only)');
       print('  192.168.1.100        Bind to specific IP address');
       print('');
       print('Examples:');
@@ -774,17 +753,13 @@ Future<void> main(List<String> arguments) async {
       print('  furl_server --port 8085');
       print('  furl_server --port 3000 --bind 127.0.0.1');
       print('  furl_server --port 3000 --web-root public');
-      print(
-        '  furl_server --port 443 --ssl-cert server.crt --ssl-key server.key',
-      );
+      print('  furl_server --port 443 --ssl-cert server.crt --ssl-key server.key');
       print('');
       print('HTTPS Notes:');
       print('  - Both --ssl-cert and --ssl-key must be provided for HTTPS');
       print('  - Certificate file should be in PEM format');
       print('  - Private key file should be in PEM format');
-      print(
-        '  - Default HTTPS port is typically 443 (requires admin privileges)',
-      );
+      print('  - Default HTTPS port is typically 443 (requires admin privileges)');
       exit(0);
     } else if (!arguments[i].startsWith('--')) {
       // If it's just a number, treat it as port

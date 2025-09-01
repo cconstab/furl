@@ -115,7 +115,7 @@ Future<Uint8List> encryptFileStream(
 Future<(File, String)> encryptFileStreamChaCha20ToFile(
   String filePath,
   Uint8List key, // 32-byte ChaCha20 key
-  Uint8List nonce, { // 12-byte ChaCha20 nonce
+  Uint8List nonce, { // 8-byte ChaCha20 nonce (IV)
   bool quiet = false,
   int chunkSize = 64 * 1024, // 64KB chunks
 }) async {
@@ -499,6 +499,412 @@ int parseTtl(String ttlString) {
   return ttlSeconds;
 }
 
+/// Decrypt file using ChaCha20 streaming - memory efficient for large files
+Future<void> decryptFileStreamChaCha20(
+  String encryptedFilePath,
+  String outputFilePath,
+  Uint8List key, // 32-byte ChaCha20 key
+  Uint8List nonce, { // 8-byte ChaCha20 nonce (IV)
+  bool quiet = false,
+  int chunkSize = 1024 * 1024, // 1MB chunks
+}) async {
+  final inputFile = File(encryptedFilePath);
+  final outputFile = File(outputFilePath);
+  final fileSize = await inputFile.length();
+
+  // Initialize ChaCha20 cipher
+  final cipher = ChaCha20Engine();
+  final keyParam = KeyParameter(key);
+  final paramsWithIV = ParametersWithIV<KeyParameter>(keyParam, nonce);
+  cipher.init(false, paramsWithIV); // false for decryption
+
+  // Read entire file at once to avoid chunking issues
+  final encryptedData = await inputFile.readAsBytes();
+  final decryptedData = Uint8List(encryptedData.length);
+
+  // Process entire file through ChaCha20
+  cipher.processBytes(encryptedData, 0, encryptedData.length, decryptedData, 0);
+
+  // Write decrypted data
+  await outputFile.writeAsBytes(decryptedData);
+
+  if (!quiet) {
+    showProgressBar('Decrypting', fileSize, fileSize);
+  }
+}
+
+/// Receive and decrypt a file shared via furl (using HTTPS route)
+Future<void> receiveFileViaHttp(
+  String furlUrl,
+  String pin, {
+  String? outputDir,
+  bool verbose = false,
+  bool quiet = false,
+}) async {
+  try {
+    // 1. Parse furl URL to extract metadata
+    String cleanUrl = furlUrl.replaceAll('\\?', '?').replaceAll('\\&', '&').replaceAll('\\=', '=');
+
+    final uri = Uri.parse(cleanUrl);
+    final key = uri.queryParameters['key'];
+    final senderAtSign = uri.queryParameters['atSign'];
+
+    if (key == null || senderAtSign == null) {
+      throw Exception('Invalid furl URL: missing key or atSign parameter');
+    }
+
+    if (!quiet) print('🔍 Retrieving file metadata via HTTPS...');
+
+    // 2. Make HTTPS request to furl server to get metadata
+    final serverUrl = '${uri.scheme}://${uri.host}';
+    final metadataUrl = '$serverUrl/api/fetch/$senderAtSign/$key';
+
+    if (verbose) print('DEBUG: Requesting metadata from: $metadataUrl');
+
+    final dio = Dio();
+
+    if (verbose) {
+      print('DEBUG: Using PIN: "$pin"');
+      print('DEBUG: Extracted key: "$key"');
+      print('DEBUG: Sender atSign: "$senderAtSign"');
+    }
+
+    final response = await dio.get(
+      metadataUrl,
+      options: Options(
+        headers: {'Content-Type': 'application/json'},
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      if (verbose) {
+        print('DEBUG: Server response: ${response.statusCode}');
+        print('DEBUG: Response data: ${response.data}');
+      }
+      if (response.statusCode == 401) {
+        throw Exception('Invalid PIN');
+      } else if (response.statusCode == 404) {
+        throw Exception('File not found or expired');
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    }
+
+    final encryptedMetadata = response.data;
+
+    if (verbose) {
+      print('DEBUG: Raw metadata: $encryptedMetadata');
+    }
+
+    // 3. Parse the encrypted metadata (this is the JSON payload from atPlatform)
+    final fileUrl = encryptedMetadata['file_url'] as String;
+    final fileName = encryptedMetadata['file_name'] as String;
+    final fileSize = encryptedMetadata['file_size'] as int?;
+    final originalHash = encryptedMetadata['sha512_hash'] as String;
+    final encryptedKeyBase64 = encryptedMetadata['chacha20_key'] as String;
+    final keyIvBase64 = encryptedMetadata['key_iv'] as String;
+    final keySaltBase64 = encryptedMetadata['key_salt'] as String;
+    final fileNonceBase64 = encryptedMetadata['file_nonce'] as String;
+    final customMessage = encryptedMetadata['message'] as String?;
+
+    // 4. Decrypt the ChaCha20 key using the PIN
+    final encryptedKey = base64Decode(encryptedKeyBase64);
+    final keyIv = base64Decode(keyIvBase64);
+    final keySalt = base64Decode(keySaltBase64);
+    final fileNonce = base64Decode(fileNonceBase64);
+
+    if (verbose) {
+      print('DEBUG: Encrypted key length: ${encryptedKey.length}');
+      print('DEBUG: Key IV length: ${keyIv.length}');
+      print('DEBUG: Key salt: ${base64Encode(keySalt)}');
+      print('DEBUG: File nonce: ${base64Encode(fileNonce)}');
+      print('DEBUG: PIN: "$pin"');
+    }
+
+    // Derive the PIN key using the same method as in upload
+    final pinBytes = utf8.encode(pin);
+    final digest = sha256.convert(pinBytes + keySalt);
+    final derivedKey = Uint8List.fromList(digest.bytes);
+
+    if (verbose) {
+      print('DEBUG: Derived key from PIN: ${base64Encode(derivedKey)}');
+    }
+
+    // Decrypt the ChaCha20 key
+    final keyDecrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
+    late Uint8List chaCha20Key;
+
+    try {
+      final decryptedKey = keyDecrypter.decryptBytes(encrypt.Encrypted(encryptedKey), iv: encrypt.IV(keyIv));
+      chaCha20Key = Uint8List.fromList(decryptedKey);
+      if (verbose) {
+        print('DEBUG: Decrypted ChaCha20 key length: ${chaCha20Key.length}');
+        print('DEBUG: ChaCha20 key: ${base64Encode(chaCha20Key)}');
+      }
+    } catch (e) {
+      throw Exception('Invalid PIN - failed to decrypt key: $e');
+    }
+
+    if (!quiet) {
+      print('📁 File: $fileName');
+      if (fileSize != null) {
+        print('📏 Size: ${(fileSize / (1024 * 1024)).toStringAsFixed(2)} MB');
+      }
+      print('👤 From: $senderAtSign');
+      if (customMessage != null) {
+        print('💬 Message: $customMessage');
+      }
+    }
+
+    // 5. Download encrypted file using curl (like furl_server.dart does)
+    if (!quiet) print('⬇️  Downloading encrypted file...');
+
+    final outputPath = outputDir != null ? '$outputDir/$fileName' : fileName;
+
+    // Ensure output directory exists
+    if (outputDir != null) {
+      await Directory(outputDir).create(recursive: true);
+    }
+
+    // Use curl for reliable downloads with redirect following (same as furl_server.dart)
+    final encryptedFilePath = '$outputPath.encrypted';
+
+    if (verbose) {
+      print('DEBUG: Downloading from URL: $fileUrl');
+      print('DEBUG: Saving to: $encryptedFilePath');
+    }
+
+    late Process curlProcess;
+    try {
+      curlProcess = await Process.start('curl', [
+        '-s', // Silent (no progress bar)
+        '-L', // Follow redirects
+        '-f', // Fail on HTTP errors
+        '--max-time', '300', // 5 minute timeout
+        '--connect-timeout', '30', // 30 second connect timeout
+        '--output', encryptedFilePath, // Output to file
+        '--url', fileUrl, // Source URL
+      ]);
+    } catch (e) {
+      if (e is ProcessException && e.errorCode == 2) {
+        // curl not found
+        throw Exception(
+          'curl is required for file downloads but is not installed.\n'
+          'Please install curl:\n'
+          '  • macOS: curl is pre-installed, try updating your system\n'
+          '  • Ubuntu/Debian: sudo apt-get install curl\n'
+          '  • CentOS/RHEL: sudo yum install curl\n'
+          '  • Windows: Install from https://curl.se/download.html',
+        );
+      }
+      throw Exception('Failed to start download: $e');
+    }
+
+    // Monitor progress and errors
+    final errorBuffer = <int>[];
+    curlProcess.stderr.listen((data) {
+      errorBuffer.addAll(data);
+    });
+
+    final exitCode = await curlProcess.exitCode;
+
+    if (exitCode != 0) {
+      final errorMessage = String.fromCharCodes(errorBuffer);
+      throw Exception('Download failed (curl exit code $exitCode): $errorMessage');
+    }
+
+    // Verify the file was downloaded
+    final downloadedFile = File(encryptedFilePath);
+    if (!await downloadedFile.exists()) {
+      throw Exception('Download failed: File was not created');
+    }
+
+    final downloadedSize = await downloadedFile.length();
+    if (verbose) {
+      print('DEBUG: Downloaded file size: $downloadedSize bytes');
+    }
+
+    if (!quiet) {
+      showProgressBar('Downloaded', downloadedSize, downloadedSize);
+    }
+
+    // 6. Decrypt file using ChaCha20 streaming
+    if (!quiet) print('\n🔓 Decrypting file...');
+
+    if (verbose) {
+      print('DEBUG: ChaCha20 key length: ${chaCha20Key.length} bytes');
+      print('DEBUG: File nonce length: ${fileNonce.length} bytes');
+    }
+
+    await decryptFileStreamChaCha20(
+      '$outputPath.encrypted',
+      outputPath,
+      Uint8List.fromList(chaCha20Key),
+      Uint8List.fromList(fileNonce),
+      quiet: quiet,
+    );
+
+    // 7. Verify file integrity
+    if (!quiet) print('\n🔍 Verifying file integrity...');
+
+    final decryptedHash = await calculateFileSha512(outputPath);
+
+    if (verbose) {
+      print('DEBUG: Expected hash: $originalHash');
+      print('DEBUG: Calculated hash: $decryptedHash');
+      print('DEBUG: Hashes match: ${decryptedHash == originalHash}');
+    }
+
+    if (decryptedHash != originalHash) {
+      await File(outputPath).delete();
+      throw Exception(
+        'File integrity check failed! Expected: ${originalHash.substring(0, 16)}..., Got: ${decryptedHash.substring(0, 16)}...',
+      );
+    }
+
+    // 8. Clean up encrypted file
+    await File('$outputPath.encrypted').delete();
+
+    if (!quiet) {
+      print('✅ File received successfully!');
+      print('📁 Saved to: $outputPath');
+      print('🔐 File integrity verified');
+    }
+  } catch (e) {
+    print('❌ Error receiving file: $e');
+    exit(1);
+  }
+}
+
+/// Receive and decrypt a file shared via furl (using atPlatform - legacy method)
+Future<void> receiveFile(
+  String atSign,
+  String furlUrl,
+  String pin, {
+  String? outputDir,
+  bool verbose = false,
+  bool quiet = false,
+}) async {
+  try {
+    if (!quiet) print('🔐 Initializing atClient...');
+
+    // Debug: Print the received URL
+    if (verbose) print('DEBUG: Received URL: $furlUrl');
+
+    // 1. Initialize atClient
+    final atClient = await _getAtClient(atSign, verbose);
+
+    // 2. Parse furl URL to extract metadata key
+    // Handle shell-escaped URLs by replacing escaped characters
+    String cleanUrl = furlUrl.replaceAll('\\?', '?').replaceAll('\\&', '&').replaceAll('\\=', '=');
+
+    final uri = Uri.parse(cleanUrl);
+    if (verbose) {
+      print('DEBUG: Cleaned URL: $cleanUrl');
+      print('DEBUG: Parsed URI: $uri');
+      print('DEBUG: Query parameters: ${uri.queryParameters}');
+    }
+
+    final key = uri.queryParameters['key'];
+    if (key == null) {
+      print('ERROR: Key parameter not found in URL');
+      print('Available parameters: ${uri.queryParameters.keys.join(', ')}');
+      throw Exception('Invalid furl URL: missing key parameter');
+    }
+
+    if (!quiet) print('🔍 Retrieving file metadata...');
+
+    // 3. Get metadata from atPlatform
+    final atKey = AtKey()
+      ..key = key
+      ..namespace =
+          'furl' // Use the same namespace as when storing
+      ..sharedBy = uri.queryParameters['atSign'] ?? atSign;
+
+    if (verbose) {
+      print('DEBUG: Looking for key: ${atKey.toString()}');
+    }
+
+    final metadataResult = await atClient.get(atKey);
+    if (metadataResult.value == null) {
+      throw Exception('File not found or expired');
+    }
+
+    final metadata = jsonDecode(metadataResult.value!);
+
+    // 4. Verify PIN
+    if (metadata['pin'] != pin) {
+      throw Exception('Invalid PIN');
+    }
+
+    // 5. Extract decryption information
+    final downloadUrl = metadata['downloadUrl'] as String;
+    final fileName = metadata['fileName'] as String;
+    final fileSize = metadata['fileSize'] as int;
+    final originalHash = metadata['fileHash'] as String;
+    final keyBase64 = metadata['key'] as String;
+    final nonceBase64 = metadata['nonce'] as String;
+
+    // 6. Reconstruct encryption key and nonce
+    final encryptionKey = base64Decode(keyBase64);
+    final nonce = base64Decode(nonceBase64);
+
+    if (!quiet) {
+      print('📁 File: $fileName');
+      print('📏 Size: ${(fileSize / (1024 * 1024)).toStringAsFixed(2)} MB');
+    }
+
+    // 7. Download encrypted file
+    if (!quiet) print('⬇️  Downloading encrypted file...');
+
+    final dio = Dio();
+    final outputPath = outputDir != null ? '$outputDir/$fileName' : fileName;
+
+    await dio.download(
+      downloadUrl,
+      '$outputPath.encrypted',
+      onReceiveProgress: (received, total) {
+        if (!quiet && total > 0) {
+          showProgressBar('Downloading', received, total);
+        }
+      },
+    );
+
+    // 8. Decrypt file using ChaCha20 streaming
+    if (!quiet) print('\n🔓 Decrypting file...');
+
+    await decryptFileStreamChaCha20(
+      '$outputPath.encrypted',
+      outputPath,
+      Uint8List.fromList(encryptionKey),
+      Uint8List.fromList(nonce),
+      quiet: quiet,
+    );
+
+    // 9. Verify file integrity
+    if (!quiet) print('\n🔍 Verifying file integrity...');
+
+    final decryptedHash = await calculateFileSha512(outputPath);
+    if (decryptedHash != originalHash) {
+      await File(outputPath).delete();
+      throw Exception('File integrity check failed!');
+    }
+
+    // 10. Clean up encrypted file
+    await File('$outputPath.encrypted').delete();
+
+    if (!quiet) {
+      print('✅ File received successfully!');
+      print('📁 Saved to: $outputPath');
+      print('🔐 File integrity verified');
+    }
+  } catch (e) {
+    print('❌ Error receiving file: $e');
+    exit(1);
+  }
+}
+
 /// Format seconds into a human-readable duration
 String formatDuration(int seconds) {
   if (seconds < 60) {
@@ -523,6 +929,7 @@ Future<void> main(List<String> arguments) async {
   if (arguments.contains('-h') || arguments.contains('--help')) {
     print('Furl - Secure File Sharing with atPlatform');
     print('');
+    print('SEND FILES:');
     print('Usage: furl <atSign> <file_path> <ttl> [options]');
     print('');
     print('Arguments:');
@@ -538,6 +945,18 @@ Future<void> main(List<String> arguments) async {
     print('  --no-file-size        Hide file size on download page');
     print('  -h, --help            Show this help message');
     print('');
+    print('RECEIVE FILES:');
+    print('Usage: furl receive <furl_url> <pin> [options]');
+    print('');
+    print('Arguments:');
+    print('  furl_url              The furl URL received from sender');
+    print('  pin                   The PIN provided by sender');
+    print('');
+    print('Options:');
+    print('  -v, --verbose         Enable verbose logging');
+    print('  -q, --quiet           Disable progress bars');
+    print('  -o, --output <dir>    Output directory (default: current directory)');
+    print('');
     print('TTL Examples:');
     print('  30s                   30 seconds');
     print('  10m                   10 minutes');
@@ -546,7 +965,7 @@ Future<void> main(List<String> arguments) async {
     print('  6d                    6 days (maximum)');
     print('  3600                  3600 seconds (1 hour)');
     print('');
-    print('Examples:');
+    print('Send Examples:');
     print('  furl @alice document.pdf 1h');
     print('  furl @alice document.pdf 30m -v');
     print('  furl @alice document.pdf 2d --quiet');
@@ -555,19 +974,79 @@ Future<void> main(List<String> arguments) async {
     print('  furl @alice document.pdf 1d --no-file-size');
     print('  furl @alice document.pdf 12h --server https://my-furl-server.com -v');
     print('');
+    print('Receive Examples:');
+    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"');
+    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" -o ~/Downloads');
+    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" --verbose');
+    print('');
     print('The program will:');
-    print('  1. Encrypt your file with ChaCha20 (streaming optimized)');
-    print('  2. Upload the encrypted file to filebin.net');
-    print('  3. Store decryption metadata securely on the atPlatform');
-    print('  4. Generate a secure URL for the recipient');
-    print('  5. Generate a strong PIN with special characters for additional security');
-    print('  6. Calculate SHA-512 hash for integrity verification');
-    print('  7. Display the expiration time based on TTL');
+    print('  SEND: 1. Encrypt your file with ChaCha20 (streaming optimized)');
+    print('        2. Upload the encrypted file to filebin.net');
+    print('        3. Store decryption metadata securely on the atPlatform');
+    print('        4. Generate a secure URL for the recipient');
+    print('        5. Generate a strong PIN with special characters for additional security');
+    print('        6. Calculate SHA-512 hash for integrity verification');
+    print('        7. Display the expiration time based on TTL');
+    print('');
+    print('  RECEIVE: 1. Download and decrypt the file using the provided URL and PIN');
+    print('           2. Verify file integrity with SHA-512 hash');
+    print('           3. Save the decrypted file to the specified location');
     exit(0);
   }
 
+  // Check if this is a receive command
+  if (arguments.isNotEmpty && arguments[0] == 'receive') {
+    if (arguments.length < 3) {
+      print('Usage: furl receive <furl_url> <pin> [options]');
+      print('');
+      print('Arguments:');
+      print('  furl_url              The furl URL received from sender');
+      print('  pin                   The PIN provided by sender');
+      print('');
+      print('Options:');
+      print('  -v, --verbose         Enable verbose logging');
+      print('  -q, --quiet           Disable progress bars');
+      print('  -o, --output <dir>    Output directory (default: current directory)');
+      print('');
+      print('Example:');
+      print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"');
+      print('');
+      print('Use --help for detailed information.');
+      exit(1);
+    }
+
+    final furlUrl = arguments[1];
+    final pin = arguments[2];
+
+    // Parse optional arguments for receive
+    bool verbose = false;
+    bool quiet = false;
+    String? outputDir;
+
+    for (int i = 3; i < arguments.length; i++) {
+      if (arguments[i] == '-v' || arguments[i] == '--verbose') {
+        verbose = true;
+      } else if (arguments[i] == '-q' || arguments[i] == '--quiet') {
+        quiet = true;
+      } else if ((arguments[i] == '-o' || arguments[i] == '--output') && i + 1 < arguments.length) {
+        outputDir = arguments[i + 1];
+        i++; // Skip the next argument as it's the output directory
+      }
+    }
+
+    try {
+      await receiveFileViaHttp(furlUrl, pin, outputDir: outputDir, verbose: verbose, quiet: quiet);
+    } catch (e) {
+      print('Error: $e');
+      exit(1);
+    }
+    return;
+  }
+
+  // Original send file logic
   if (arguments.length < 3) {
     print('Usage: furl <atSign> <file_path> <ttl> [options]');
+    print('       furl receive <atSign> <furl_url> <pin> [options]');
     print('');
     print('Arguments:');
     print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
@@ -576,6 +1055,7 @@ Future<void> main(List<String> arguments) async {
     print('  furl @alice document.pdf 1h');
     print('  furl @alice document.pdf 30m -v');
     print('  furl @alice document.pdf 2d --server http://localhost:8080');
+    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"');
     print('');
     print('Use --help for detailed information.');
     exit(1);
