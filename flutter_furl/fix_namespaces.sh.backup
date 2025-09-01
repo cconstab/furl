@@ -393,6 +393,69 @@ else
     echo "at_onboarding_flutter build.gradle not found"
 fi
     
+    # Create new build.gradle with proper kotlin options
+    cat > "$AT_ONBOARDING_GRADLE" << 'EOF'
+group 'com.atsign.at_onboarding_flutter'
+version '1.0-SNAPSHOT'
+
+buildscript {
+    ext.kotlin_version = '1.8.20'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.atsign.at_onboarding_flutter'
+    compileSdkVersion 32
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+    defaultConfig {
+        minSdkVersion 23
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+    
+    lintOptions {
+        disable 'InvalidPackage'
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
+EOF
+    
+    echo "at_onboarding_flutter kotlinOptions fixed"
+else
+    echo "at_onboarding_flutter build.gradle not found"
+fi
+
 # Fix at_onboarding_flutter import issue
 AT_ONBOARDING_PLUGIN="$HOME/.pub-cache/hosted/pub.dev/at_onboarding_flutter-6.1.11/android/src/main/kotlin/com/atsign/at_onboarding_flutter/AtOnboardingFlutterPlugin.kt"
 if [ -f "$AT_ONBOARDING_PLUGIN" ]; then

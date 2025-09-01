@@ -121,17 +121,18 @@ class FileEncryptionService {
     }
   }
 
-  /// Store encrypted metadata in atPlatform
+  /// Store metadata in atPlatform with pre-generated key name
   static Future<String> storeMetadataInAtPlatform({
     required String fileUrl,
     required String fileName,
     required String pin,
-    required Uint8List chaCha20Key,
-    required Uint8List chaCha20Nonce,
+    required List<int> chaCha20Key,
+    required List<int> chaCha20Nonce,
     required String sha512Hash,
     required int fileSize,
     String? customMessage,
-    int ttl = defaultTtl,
+    required int ttl,
+    AtClient? atClient, // Accept pre-initialized atClient to avoid delays
   }) async {
     try {
       // Encrypt ChaCha20 key with PIN
@@ -165,9 +166,8 @@ class FileEncryptionService {
         if (customMessage != null) 'message': customMessage,
       });
 
-      // Get current atClient
-      final atClientManager = AtClientManager.getInstance();
-      final atClient = atClientManager.atClient;
+      // Get atClient (use provided one or get from manager)
+      final atClientInstance = atClient ?? AtClientManager.getInstance().atClient;
 
       // Create atKey
       final atKey = AtKey()
@@ -178,7 +178,7 @@ class FileEncryptionService {
 
       // Store in atPlatform
       final putRequestOptions = PutRequestOptions()..useRemoteAtServer = true;
-      await atClient.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
+      await atClientInstance.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
 
       _logger.info('Metadata stored in atPlatform with key: $atKeyName');
 

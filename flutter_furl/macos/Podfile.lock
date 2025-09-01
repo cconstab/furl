@@ -69,8 +69,8 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   at_file_saver: 1fc6ed722f17c7a20ce79cce168d1100fcad4b95
   biometric_storage: 43caa6e7ef00e8e19c074216e7e1786dacda9e76
-  desktop_drop: e52397f93b3daec9fe1d504f1d5a21b76403d8ae
-  device_info_plus: 1b14eed9bf95428983aed283a8d51cce3d8c4215
+  desktop_drop: 69eeff437544aa619c8db7f4481b3a65f7696898
+  device_info_plus: ce1b7762849d3ec103d0e0517299f2db7ad60720
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   package_info_plus: 12f1c5c2cfe8727ca46cbd0b26677728972d9a5b

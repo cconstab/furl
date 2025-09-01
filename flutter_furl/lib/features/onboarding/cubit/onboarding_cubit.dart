@@ -32,17 +32,46 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     _checkExistingOnboarding();
   }
 
+  /// Initialize storage paths early during app startup
+  Future<void> initializeAtClientEarly() async {
+    try {
+      _logger.info('Early storage initialization starting...');
+
+      // Set up storage paths early so they're ready when needed
+      final appSupportDir = await getApplicationSupportDirectory();
+      final atClientStorageDir = Directory('${appSupportDir.path}/atClient');
+
+      if (!await atClientStorageDir.exists()) {
+        await atClientStorageDir.create(recursive: true);
+      }
+
+      _logger.info('Storage paths prepared: ${atClientStorageDir.path}');
+    } catch (e) {
+      _logger.warning('Early storage initialization failed (non-critical): $e');
+    }
+  }
+
   Future<void> _checkExistingOnboarding() async {
     try {
-      // Check if atClient is already initialized and user is onboarded
+      // Try to check if user is already onboarded
       final atClientManager = AtClientManager.getInstance();
-      final currentAtSign = atClientManager.atClient.getCurrentAtSign();
+
+      // Safe check for existing atClient and atSign
+      String? currentAtSign;
+      try {
+        currentAtSign = atClientManager.atClient.getCurrentAtSign();
+      } catch (e) {
+        // atClient might not be initialized yet, that's okay
+        _logger.info('atClient not yet initialized: $e');
+      }
 
       if (currentAtSign != null && currentAtSign.isNotEmpty) {
         _logger.info('User already onboarded with: $currentAtSign');
         emit(OnboardingCompleted(currentAtSign));
         return;
       }
+
+      _logger.info('No existing atSign found, ready for onboarding');
     } catch (e) {
       _logger.warning('Error checking onboarding status: $e');
       // User not onboarded yet, stay in initial state

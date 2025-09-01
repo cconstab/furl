@@ -48,8 +48,13 @@ class FileSelected extends FileShareState {
 // Cubit
 class FileShareCubit extends Cubit<FileShareState> {
   static final AtSignLogger _logger = AtSignLogger('FileShareCubit');
+  late final AtClientManager _atClientManager;
 
-  FileShareCubit() : super(FileShareInitial());
+  FileShareCubit() : super(FileShareInitial()) {
+    // Get the AtClientManager (may not be fully initialized yet)
+    _atClientManager = AtClientManager.getInstance();
+    _logger.info('FileShareCubit initialized');
+  }
 
   void selectFile(File file) {
     emit(FileSelected(file));
@@ -70,9 +75,8 @@ class FileShareCubit extends Cubit<FileShareState> {
     try {
       emit(FileUploading(0.0, status: 'Preparing encryption...'));
 
-      // Get current atSign
-      final atClientManager = AtClientManager.getInstance();
-      final currentAtSign = atClientManager.atClient.getCurrentAtSign();
+      // Get current atSign from pre-initialized atClient
+      final currentAtSign = _atClientManager.atClient.getCurrentAtSign();
 
       if (currentAtSign == null) {
         throw Exception('Not authenticated. Please sign in first.');
@@ -107,7 +111,7 @@ class FileShareCubit extends Cubit<FileShareState> {
 
       emit(FileUploading(0.8, status: 'Storing metadata...'));
 
-      // Store metadata in atPlatform
+      // Store metadata in atPlatform using pre-initialized atClient
       final atKeyName = await FileEncryptionService.storeMetadataInAtPlatform(
         fileUrl: fileUrl,
         fileName: fileName,
@@ -118,6 +122,7 @@ class FileShareCubit extends Cubit<FileShareState> {
         fileSize: fileSize,
         customMessage: message,
         ttl: _parseTtlToSeconds(ttl ?? '1h'),
+        atClient: _atClientManager.atClient, // Pass pre-initialized atClient
       );
 
       emit(FileUploading(0.9, status: 'Generating share URL...'));

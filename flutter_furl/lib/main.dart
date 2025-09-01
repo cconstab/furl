@@ -8,6 +8,16 @@ import 'package:flutter_furl/features/file_share/file_share_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize atClient early to avoid delays later
+  try {
+    final onboardingCubit = OnboardingCubit();
+    await onboardingCubit.initializeAtClientEarly();
+  } catch (e) {
+    // Ignore initialization errors - they'll be handled in the UI
+    print('Early atClient initialization warning: $e');
+  }
+
   runApp(const FurlApp());
 }
 
