@@ -106,23 +106,84 @@ jobs:
         
         APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
         
-        # Sign with simple approach
-        echo "Signing app bundle..."
+        # Verify app exists
+        if [ ! -d "$APP_PATH" ]; then
+          echo "❌ App not found at: $APP_PATH"
+          find flutter_furl/build -name "*.app" -type d || true
+          exit 1
+        fi
+        
+        # Check that we have the signing identity available
+        echo "Checking for signing identity: $MACOS_SIGNING_IDENTITY"
+        if ! security find-identity -v -p codesigning | grep -q "$MACOS_SIGNING_IDENTITY"; then
+          echo "❌ Signing identity '$MACOS_SIGNING_IDENTITY' not found!"
+          echo "Available identities:"
+          security find-identity -v -p codesigning
+          exit 1
+        fi
+        
+        # Sign frameworks first (required for proper nested signing)
+        echo "Signing individual frameworks and dylibs..."
+        find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d | while read framework; do
+          echo "  Signing framework: $(basename "$framework")"
+          codesign --force --options runtime --timestamp \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            --verbose "$framework" || {
+            echo "❌ Failed to sign framework: $framework"
+            exit 1
+          }
+        done
+        
+        find "$APP_PATH/Contents/Frameworks" -name "*.dylib" -type f | while read dylib; do
+          echo "  Signing dylib: $(basename "$dylib")"
+          codesign --force --options runtime --timestamp \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            --verbose "$dylib" || {
+            echo "❌ Failed to sign dylib: $dylib" 
+            exit 1
+          }
+        done
+        
+        # Now sign the main app bundle
+        echo "Signing main app bundle..."
         codesign \
           --sign "$MACOS_SIGNING_IDENTITY" \
           --force \
-          --deep \
           --options runtime \
           --timestamp \
           --entitlements entitlements.plist \
           --verbose \
-          "$APP_PATH"
+          "$APP_PATH" || {
+          echo "❌ Failed to sign main app bundle"
+          exit 1
+        }
         
-        # Verify signature
+        # Verify signature thoroughly
         echo "Verifying signature..."
-        codesign --verify --deep --strict --verbose=2 "$APP_PATH"
         
-        echo "✅ Signing completed successfully"
+        # Check main app signature
+        echo "Checking main app signature..."
+        codesign -dvvv "$APP_PATH" || {
+          echo "❌ Failed to get signature details for main app"
+          exit 1
+        }
+        
+        codesign --verify --deep --strict --verbose=2 "$APP_PATH" || {
+          echo "❌ Main app signature verification failed"
+          exit 1
+        }
+        
+        # Verify individual components
+        echo "Verifying framework signatures..."
+        find "$APP_PATH/Contents/Frameworks" -name "*.framework" -o -name "*.dylib" | while read component; do
+          echo "  Verifying: $(basename "$component")"
+          codesign --verify --verbose "$component" || {
+            echo "❌ Signature verification failed for: $component"
+            exit 1
+          }
+        done
+        
+        echo "✅ All signatures verified successfully"
         
     - name: Notarize macOS app
       if: github.event_name != 'pull_request'
