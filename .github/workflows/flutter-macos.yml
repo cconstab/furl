@@ -31,7 +31,13 @@ jobs:
     - name: Build macOS app
       run: |
         cd flutter_furl
-        flutter build macos --release
+        # Build universal binary (arm64 + x86_64)
+        flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin
+        
+        # Verify the binary architectures
+        echo "Built app architectures:"
+        file build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl
+        lipo -info build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl || echo "Not a universal binary"
         
     - name: Create entitlements file
       run: |
@@ -52,6 +58,21 @@ jobs:
         </plist>
         EOF
         
+    - name: Debug secrets availability
+      run: |
+        echo "Checking secret availability..."
+        echo "MACOS_CODESIGN_CERT length: ${#MACOS_CODESIGN_CERT}"
+        echo "MACOS_CODESIGN_CERT_PASSWORD length: ${#MACOS_CODESIGN_CERT_PASSWORD}"
+        echo "MACOS_TEAM_ID length: ${#MACOS_TEAM_ID}"
+        echo "MACOS_APPLE_ID length: ${#MACOS_APPLE_ID}"
+        echo "MACOS_APPLE_ID_PASSWORD length: ${#MACOS_APPLE_ID_PASSWORD}"
+      env:
+        MACOS_CODESIGN_CERT: ${{ secrets.MACOS_CODESIGN_CERT }}
+        MACOS_CODESIGN_CERT_PASSWORD: ${{ secrets.MACOS_CODESIGN_CERT_PASSWORD }}
+        MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+        MACOS_APPLE_ID_PASSWORD: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
+        
     - name: Sign and notarize macOS app
       if: github.event_name != 'pull_request'
       uses: lando/code-sign-action@v3
@@ -59,6 +80,7 @@ jobs:
         file: flutter_furl/build/macos/Build/Products/Release/flutter_furl.app
         certificate-data: ${{ secrets.MACOS_CODESIGN_CERT }}
         certificate-password: ${{ secrets.MACOS_CODESIGN_CERT_PASSWORD }}
+        certificate-id: ${{ secrets.MACOS_TEAM_ID }}
         apple-team-id: ${{ secrets.MACOS_TEAM_ID }}
         apple-notary-user: ${{ secrets.MACOS_APPLE_ID }}
         apple-notary-password: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
