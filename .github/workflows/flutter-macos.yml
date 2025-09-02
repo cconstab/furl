@@ -293,6 +293,9 @@ jobs:
           rm -rf ../dmg_temp/VolumeIcon.iconset
           rm -f ../dmg_temp/.VolumeIcon.icns.png
           
+          # Set the volume icon to be hidden (invisible in Finder)
+          chflags hidden ../dmg_temp/.VolumeIcon.icns
+          
           cd ..
           
           # Verify DMG contents
