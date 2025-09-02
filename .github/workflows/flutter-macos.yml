@@ -47,6 +47,11 @@ jobs:
         channel: 'stable'
         cache: true
 
+    - name: Install required tools
+      run: |
+        # Install jq for JSON parsing
+        brew install jq
+
     - name: Enable macOS desktop support
       run: flutter config --enable-macos-desktop
 
@@ -147,20 +152,52 @@ jobs:
         zip -r flutter_furl-for-notarization.zip flutter_furl.app/
         
         echo "Submitting app for notarization..."
-        xcrun notarytool submit flutter_furl-for-notarization.zip \
+        SUBMISSION_ID=$(xcrun notarytool submit flutter_furl-for-notarization.zip \
           --apple-id "$MACOS_APPLE_ID" \
           --team-id "$MACOS_TEAM_ID" \
           --password "$MACOS_APPLE_ID_PASSWORD" \
-          --wait
+          --wait \
+          --output-format json | jq -r '.id // empty')
+        
+        if [ -z "$SUBMISSION_ID" ]; then
+          echo "❌ Failed to get submission ID"
+          exit 1
+        fi
+        
+        echo "Submission ID: $SUBMISSION_ID"
+        
+        # Check notarization status
+        NOTARY_STATUS=$(xcrun notarytool info "$SUBMISSION_ID" \
+          --apple-id "$MACOS_APPLE_ID" \
+          --team-id "$MACOS_TEAM_ID" \
+          --password "$MACOS_APPLE_ID_PASSWORD" \
+          --output-format json | jq -r '.status // empty')
+        
+        echo "Notarization status: $NOTARY_STATUS"
+        
+        if [ "$NOTARY_STATUS" != "Accepted" ]; then
+          echo "❌ Notarization failed with status: $NOTARY_STATUS"
+          echo "Getting detailed logs..."
+          xcrun notarytool log "$SUBMISSION_ID" \
+            --apple-id "$MACOS_APPLE_ID" \
+            --team-id "$MACOS_TEAM_ID" \
+            --password "$MACOS_APPLE_ID_PASSWORD" || true
+          exit 1
+        fi
         
         echo "✓ Notarization completed successfully"
         
         # Staple the notarization ticket to the app
         echo "Stapling notarization ticket..."
-        xcrun stapler staple flutter_furl.app
-        
-        echo "Verifying notarization:"
-        xcrun stapler validate flutter_furl.app
+        if xcrun stapler staple flutter_furl.app; then
+          echo "✓ Stapling successful"
+          
+          echo "Verifying notarization:"
+          xcrun stapler validate flutter_furl.app
+          echo "✓ Validation successful"
+        else
+          echo "❌ Stapling failed - continuing without stapling"
+        fi
         
         cd ../../../../../
       shell: bash
