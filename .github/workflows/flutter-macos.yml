@@ -176,43 +176,8 @@ jobs:
         echo "Frameworks to be signed:"
         ls -la "$APP_PATH/Contents/Frameworks/"
         
-        # Sign all frameworks first
-        echo "Signing frameworks individually..."
-        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
-          if [ -d "$framework" ]; then
-            echo "Signing framework: $(basename "$framework")"
-            /usr/bin/codesign \
-              --force \
-              --deep \
-              --options=runtime \
-              --entitlements "$ENTITLEMENTS_PATH" \
-              --timestamp \
-              -s "$MACOS_SIGNING_IDENTITY" \
-              -v \
-              "$framework"
-            echo "✓ Signed $(basename "$framework")"
-          fi
-        done
-        
-        # Sign dynamic libraries
-        echo "Signing dynamic libraries..."
-        for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
-          if [ -f "$dylib" ]; then
-            echo "Signing dylib: $(basename "$dylib")"
-            /usr/bin/codesign \
-              --force \
-              --options=runtime \
-              --entitlements "$ENTITLEMENTS_PATH" \
-              --timestamp \
-              -s "$MACOS_SIGNING_IDENTITY" \
-              -v \
-              "$dylib"
-            echo "✓ Signed $(basename "$dylib")"
-          fi
-        done
-        
-        # Sign the main app bundle with deep signing
-        echo "Signing Flutter app bundle with deep signing..."
+        # Sign the entire app bundle with deep signing (this will sign all nested components)
+        echo "Signing entire Flutter app bundle with deep signing..."
         /usr/bin/codesign \
           --force \
           --deep \
@@ -222,7 +187,7 @@ jobs:
           -s "$MACOS_SIGNING_IDENTITY" \
           -v \
           "$APP_PATH"
-        echo "✓ Signed main app bundle"
+        echo "✓ Signed entire app bundle with deep signing"
         
         # Verify all signatures before notarization
         echo "Verifying all signatures..."
@@ -234,10 +199,11 @@ jobs:
           exit 1
         fi
         
-        echo "Framework signatures:"
+        # Verify framework signatures individually
+        echo "Verifying framework signatures..."
         for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
           if [ -d "$framework" ]; then
-            echo "Verifying $(basename "$framework"):"
+            echo "Verifying $(basename "$framework")..."
             if /usr/bin/codesign --verify --verbose "$framework"; then
               echo "✓ $(basename "$framework") signature valid"
             else
@@ -247,10 +213,11 @@ jobs:
           fi
         done
         
-        echo "Dynamic library signatures:"
+        # Verify dylib signatures
+        echo "Verifying dylib signatures..."
         for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
           if [ -f "$dylib" ]; then
-            echo "Verifying $(basename "$dylib"):"
+            echo "Verifying $(basename "$dylib")..."
             if /usr/bin/codesign --verify --verbose "$dylib"; then
               echo "✓ $(basename "$dylib") signature valid"
             else
@@ -261,6 +228,23 @@ jobs:
         done
         
         echo "✓ All signatures verified successfully"
+        
+        # Display detailed signature information
+        echo "=== Detailed Signature Information ==="
+        echo "Main app signature details:"
+        codesign --display --verbose=4 "$APP_PATH"
+        
+        echo "First few framework signatures:"
+        count=0
+        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
+          if [ -d "$framework" ] && [ $count -lt 3 ]; then
+            echo "Framework: $(basename "$framework")"
+            codesign --display --verbose=2 "$framework"
+            count=$((count + 1))
+          fi
+        done
+        
+        echo "✓ Code signing completed successfully"
         
         # Debug: List all files in the app bundle
         echo "Debugging - App bundle contents:"
