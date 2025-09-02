@@ -134,32 +134,6 @@ jobs:
         echo "Main executable info:"
         file "$APP_PATH/Contents/MacOS/flutter_furl"
         
-        # Check if entitlements file exists, create a basic one if not
-        ENTITLEMENTS_PATH="../entitlements.plist"
-        if [ ! -f "$ENTITLEMENTS_PATH" ]; then
-          echo "Creating basic entitlements file..."
-          echo '<?xml version="1.0" encoding="UTF-8"?>' > "$ENTITLEMENTS_PATH"
-          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$ENTITLEMENTS_PATH"
-          echo '<plist version="1.0">' >> "$ENTITLEMENTS_PATH"
-          echo '<dict>' >> "$ENTITLEMENTS_PATH"
-          echo '    <key>com.apple.security.app-sandbox</key>' >> "$ENTITLEMENTS_PATH"
-          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
-          echo '    <key>com.apple.security.files.user-selected.read-write</key>' >> "$ENTITLEMENTS_PATH"
-          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
-          echo '    <key>com.apple.security.network.client</key>' >> "$ENTITLEMENTS_PATH"
-          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
-          echo '    <key>com.apple.security.cs.allow-jit</key>' >> "$ENTITLEMENTS_PATH"
-          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
-          echo '    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>' >> "$ENTITLEMENTS_PATH"
-          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
-          echo '    <key>com.apple.security.cs.disable-library-validation</key>' >> "$ENTITLEMENTS_PATH"
-          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
-          echo '</dict>' >> "$ENTITLEMENTS_PATH"
-          echo '</plist>' >> "$ENTITLEMENTS_PATH"
-        fi
-        
-                echo "✓ Entitlements file created"
-        
         # Debug: Check signing identity availability
         echo "Available signing identities:"
         security find-identity -v -p codesigning
@@ -176,78 +150,57 @@ jobs:
         echo "Frameworks to be signed:"
         ls -la "$APP_PATH/Contents/Frameworks/"
         
-        # Sign the app bundle using proven Flutter notarization approach
-        echo "Signing Flutter app bundle using proven approach..."
+        # Sign the app bundle using the Localazy approach - simple and proven
+        echo "Signing Flutter app bundle using Localazy approach..."
         
-        # Function to sign components
-        sign_component() {
-          local component="$1"
-          local use_entitlements="$2"
-          
-          echo "Signing: $(basename "$component")"
-          
-          if [ "$use_entitlements" = "true" ]; then
-            codesign --sign "$MACOS_SIGNING_IDENTITY" \
-              --force \
-              --timestamp \
-              --options runtime \
-              --entitlements "$ENTITLEMENTS_PATH" \
-              --verbose \
-              "$component"
-          else
-            codesign --sign "$MACOS_SIGNING_IDENTITY" \
-              --force \
-              --timestamp \
-              --options runtime \
-              --verbose \
-              "$component"
-          fi
-          
-          # Verify the signature
-          if codesign --verify --verbose "$component" 2>&1; then
-            echo "✓ Successfully signed: $(basename "$component")"
-          else
-            echo "❌ Failed to verify signature for: $(basename "$component")"
-            exit 1
-          fi
-        }
+        # Create minimal entitlements for the main app
+        cat > entitlements.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>com.apple.security.app-sandbox</key>
+          <true/>
+          <key>com.apple.security.network.client</key>
+          <true/>
+          <key>com.apple.security.files.user-selected.read-write</key>
+          <true/>
+          <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+          <true/>
+        </dict>
+        </plist>
+        EOF
         
-        # Sign in correct order: dylibs -> frameworks -> main executable -> app bundle
-        echo "Step 1: Signing Swift dylibs..."
-        for dylib in "$APP_PATH/Contents/Frameworks"/libswift*.dylib; do
-          if [ -f "$dylib" ]; then
-            sign_component "$dylib" false
-          fi
-        done
+        # Remove any existing signatures first
+        echo "Removing any existing signatures..."
+        find "$APP_PATH" -name "*.dylib" -exec codesign --remove-signature {} \; 2>/dev/null || true
+        find "$APP_PATH" -name "*.framework" -exec codesign --remove-signature {} \; 2>/dev/null || true
+        codesign --remove-signature "$APP_PATH" 2>/dev/null || true
         
-        echo "Step 2: Signing frameworks..."
-        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
-          if [ -d "$framework" ]; then
-            sign_component "$framework" false
-          fi
-        done
+        # Sign the entire app bundle in one command - let codesign handle dependencies
+        echo "Signing complete app bundle..."
+        codesign \
+          --sign "$MACOS_SIGNING_IDENTITY" \
+          --force \
+          --deep \
+          --options runtime \
+          --timestamp \
+          --entitlements entitlements.plist \
+          --verbose \
+          "$APP_PATH"
         
-        echo "Step 3: Signing main executable..."
-        sign_component "$APP_PATH/Contents/MacOS/flutter_furl" false
-        
-        echo "Step 4: Final app bundle signing..."
-        sign_component "$APP_PATH" true
-        
-        echo "✓ App bundle signing completed"
-        
-        # Verify all signatures before notarization
-        echo "Verifying all signatures..."
-        echo "Main app signature:"
-        if codesign --verify --verbose "$APP_PATH" 2>&1; then
-          echo "✓ Main app signature valid"
+        # Verify the signature
+        echo "Verifying signature..."
+        if codesign --verify --deep --strict --verbose=2 "$APP_PATH"; then
+          echo "✓ App successfully signed and verified"
         else
-          echo "❌ Main app signature INVALID"
+          echo "❌ App signing verification failed"
           exit 1
         fi
         
-        # Verify framework signatures individually with detailed output
-        echo "Verifying framework signatures..."
-        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
+        # Display signature info
+        echo "Signature details:"
+        codesign -dv --verbose=4 "$APP_PATH" 2>&1
           if [ -d "$framework" ]; then
             echo "Verifying $(basename "$framework")..."
             if codesign --verify --verbose --strict "$framework" 2>&1; then
@@ -268,72 +221,6 @@ jobs:
           if [ -f "$dylib" ]; then
             echo "Verifying $(basename "$dylib")..."
             if codesign --verify --verbose --strict "$dylib" 2>&1; then
-              echo "✓ $(basename "$dylib") signature valid"
-            else
-              echo "❌ $(basename "$dylib") signature INVALID"
-              exit 1
-            fi
-          fi
-        done
-        
-        echo "✓ All signatures verified successfully"
-        
-        # Show detailed signature information for debugging
-        echo "=== Detailed Signature Information ==="
-        echo "Main app signature details:"
-        codesign --display --verbose=4 "$APP_PATH"
-        
-        echo "=== Architecture Information ==="
-        file "$APP_PATH/Contents/MacOS/flutter_furl"
-        lipo -archs "$APP_PATH/Contents/MacOS/flutter_furl" || true
-        
-        echo "=== Certificate Chain Verification ==="
-        # Check if our certificate is properly set up
-        security find-identity -v -p codesigning | grep "$MACOS_SIGNING_IDENTITY" || echo "❌ Signing identity not found in keychain"
-        
-        # Check certificate validity
-        echo "Certificate details:"
-        security find-identity -v -p codesigning
-        
-        # Test signing a simple file to validate certificate
-        echo "Testing certificate with simple file..."
-        echo "test" > test_file.txt
-        if codesign --sign "$MACOS_SIGNING_IDENTITY" --force --timestamp --options runtime test_file.txt 2>&1; then
-          echo "✓ Certificate test successful"
-          rm test_file.txt
-        else
-          echo "❌ Certificate test failed - there may be an issue with the certificate setup"
-          exit 1
-        fi
-        
-        echo "=== Pre-signing State ==="
-        # Check if files are already signed (which might cause conflicts)
-        echo "Main executable signature status:"
-        codesign --display --verbose "$APP_PATH/Contents/MacOS/flutter_furl" 2>&1 || echo "Not currently signed"
-        
-        echo "First framework signature status:"
-        first_framework=$(find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d | head -1)
-        if [ -n "$first_framework" ]; then
-          codesign --display --verbose "$(basename "$first_framework")" 2>&1 || echo "Not currently signed"
-        fi
-        
-        echo "✓ Code signing completed successfully"
-        
-        # Debug: List all files in the app bundle
-        echo "Debugging - App bundle contents:"
-        find "$APP_PATH" -type f -name "*.framework" -o -name "*.dylib" -o -name "flutter_furl" | head -20
-        
-        # Debug: Check signing identity
-        echo "Available signing identities:"
-        security find-identity -v -p codesigning
-        
-        echo "Using signing identity: $MACOS_SIGNING_IDENTITY"
-        
-        echo "Verifying app signature:"
-        codesign --verify --verbose "$APP_PATH"
-        codesign --display --verbose=4 "$APP_PATH"
-        
-        echo "✓ Code signing completed successfully"
       shell: bash
 
     - name: Notarize macOS app
