@@ -61,32 +61,34 @@ jobs:
     - name: Debug secrets availability
       run: |
         echo "Checking secret availability..."
-        echo "MACOS_CODESIGN_CERT length: ${#MACOS_CODESIGN_CERT}"
-        echo "MACOS_CODESIGN_CERT_PASSWORD length: ${#MACOS_CODESIGN_CERT_PASSWORD}"
-        echo "MACOS_TEAM_ID length: ${#MACOS_TEAM_ID}"
-        echo "MACOS_APPLE_ID length: ${#MACOS_APPLE_ID}"
-        echo "MACOS_APPLE_ID_PASSWORD length: ${#MACOS_APPLE_ID_PASSWORD}"
+        echo "MACOS_CERTIFICATE length: ${#MACOS_CERTIFICATE}"
+        echo "MACOS_CERTIFICATE_PASSWORD length: ${#MACOS_CERTIFICATE_PASSWORD}"
+        echo "MACOS_KEYCHAIN_PASSWORD length: ${#MACOS_KEYCHAIN_PASSWORD}"
+        echo "APPLE_TEAM_ID length: ${#APPLE_TEAM_ID}"
+        echo "APPLE_ID length: ${#APPLE_ID}"
+        echo "APPLE_APP_PASSWORD length: ${#APPLE_APP_PASSWORD}"
         echo "MACOS_SIGNING_IDENTITY length: ${#MACOS_SIGNING_IDENTITY}"
       env:
-        MACOS_CODESIGN_CERT: ${{ secrets.MACOS_CODESIGN_CERT }}
-        MACOS_CODESIGN_CERT_PASSWORD: ${{ secrets.MACOS_CODESIGN_CERT_PASSWORD }}
-        MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-        MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-        MACOS_APPLE_ID_PASSWORD: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         
     - name: Sign macOS app (Custom Approach)
       if: github.event_name != 'pull_request'
       env:
-        MACOS_CODESIGN_CERT: ${{ secrets.MACOS_CODESIGN_CERT }}
-        MACOS_CODESIGN_CERT_PASSWORD: ${{ secrets.MACOS_CODESIGN_CERT_PASSWORD }}
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
         MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-        MACOS_KEYCHAIN_PASSWORD: build123
       run: |
         echo "=== Setting up signing environment ==="
         
         # Decode and import certificate
-        echo "$MACOS_CODESIGN_CERT" | base64 --decode > certificate.p12
+        echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
         
         # Create keychain
         KEYCHAIN_PATH="$HOME/Library/Keychains/build.keychain"
@@ -96,7 +98,7 @@ jobs:
         security list-keychain -d user -s build.keychain
         
         # Import certificate
-        security import certificate.p12 -P "$MACOS_CODESIGN_CERT_PASSWORD" -A -t cert -f pkcs12 -k build.keychain
+        security import certificate.p12 -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k build.keychain
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" build.keychain
         
         echo "Available signing identities:"
@@ -125,9 +127,9 @@ jobs:
     - name: Notarize macOS app
       if: github.event_name != 'pull_request'
       env:
-        MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-        MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-        MACOS_APPLE_ID_PASSWORD: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
       run: |
         echo "=== macOS App Notarization ==="
         
@@ -140,9 +142,9 @@ jobs:
         
         echo "Submitting app for notarization..."
         SUBMISSION_ID=$(xcrun notarytool submit flutter_furl-for-notarization.zip \
-          --apple-id "$MACOS_APPLE_ID" \
-          --team-id "$MACOS_TEAM_ID" \
-          --password "$MACOS_APPLE_ID_PASSWORD" \
+          --apple-id "$APPLE_ID" \
+          --team-id "$APPLE_TEAM_ID" \
+          --password "$APPLE_APP_PASSWORD" \
           --wait \
           --output-format json | jq -r '.id // empty')
         
@@ -155,9 +157,9 @@ jobs:
         
         # Check notarization status
         NOTARY_STATUS=$(xcrun notarytool info "$SUBMISSION_ID" \
-          --apple-id "$MACOS_APPLE_ID" \
-          --team-id "$MACOS_TEAM_ID" \
-          --password "$MACOS_APPLE_ID_PASSWORD" \
+          --apple-id "$APPLE_ID" \
+          --team-id "$APPLE_TEAM_ID" \
+          --password "$APPLE_APP_PASSWORD" \
           --output-format json | jq -r '.status // empty')
         
         echo "Notarization status: $NOTARY_STATUS"
@@ -166,9 +168,9 @@ jobs:
           echo "❌ Notarization failed with status: $NOTARY_STATUS"
           echo "Getting detailed logs..."
           xcrun notarytool log "$SUBMISSION_ID" \
-            --apple-id "$MACOS_APPLE_ID" \
-            --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_APPLE_ID_PASSWORD" || true
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" || true
           exit 1
         fi
         

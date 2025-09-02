@@ -33,19 +33,6 @@ jobs:
         cd flutter_furl
         flutter build macos --release
         
-    - name: Sign and notarize macOS app
-      if: github.event_name != 'pull_request'
-      uses: lando/code-sign-action@v3
-      with:
-        file: flutter_furl/build/macos/Build/Products/Release/flutter_furl.app
-        certificate-data: ${{ secrets.MACOS_CODESIGN_CERT }}
-        certificate-password: ${{ secrets.MACOS_CODESIGN_CERT_PASSWORD }}
-        apple-team-id: ${{ secrets.MACOS_TEAM_ID }}
-        apple-notary-user: ${{ secrets.MACOS_APPLE_ID }}
-        apple-notary-password: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
-        apple-product-id: com.atsign.flutterFurl
-        options: --options runtime --entitlements entitlements.plist
-        
     - name: Create entitlements file
       run: |
         cat > entitlements.plist << EOF
@@ -64,6 +51,19 @@ jobs:
         </dict>
         </plist>
         EOF
+        
+    - name: Sign and notarize macOS app
+      if: github.event_name != 'pull_request'
+      uses: lando/code-sign-action@v3
+      with:
+        file: flutter_furl/build/macos/Build/Products/Release/flutter_furl.app
+        certificate-data: ${{ secrets.MACOS_CODESIGN_CERT }}
+        certificate-password: ${{ secrets.MACOS_CODESIGN_CERT_PASSWORD }}
+        apple-team-id: ${{ secrets.MACOS_TEAM_ID }}
+        apple-notary-user: ${{ secrets.MACOS_APPLE_ID }}
+        apple-notary-password: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
+        apple-product-id: com.atsign.flutterFurl
+        options: --options runtime --entitlements entitlements.plist
         
     - name: Upload signed app
       if: github.event_name != 'pull_request'
