@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background circle with purple gradient -->
+  <defs>
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="padlockGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f3f4f6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="shackleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e5e7eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d1d5db;stop-opacity:1" />
+    </linearGradient>
+    <!-- Shadow filter -->
+    <filter id="dropshadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#backgroundGradient)" stroke="none"/>
+  
+  <!-- Padlock body -->
+  <rect x="186" y="220" width="140" height="160" rx="20" ry="20" 
+        fill="url(#padlockGradient)" 
+        stroke="none"
+        filter="url(#dropshadow)"/>
+  
+  <!-- Padlock shackle (open) -->
+  <path d="M210 220 
+           C 210 180, 210 160, 240 160
+           C 270 160, 290 160, 290 160
+           C 320 160, 320 180, 320 200
+           L 320 220" 
+        fill="none" 
+        stroke="url(#shackleGradient)" 
+        stroke-width="16" 
+        stroke-linecap="round"/>
+  
+  <!-- Keyhole -->
+  <circle cx="256" cy="280" r="18" fill="#7c3aed"/>
+  <rect x="248" y="280" width="16" height="40" rx="8" ry="8" fill="#7c3aed"/>
+  
+  <!-- Highlight on padlock body -->
+  <rect x="196" y="230" width="40" height="20" rx="10" ry="10" 
+        fill="#ffffff" 
+        opacity="0.3"/>
+  
+  <!-- Small decorative chain link -->
+  <g transform="translate(340, 180)" opacity="0.6">
+    <ellipse cx="0" cy="0" rx="8" ry="12" 
+             fill="none" 
+             stroke="#ffffff" 
+             stroke-width="4" 
+             transform="rotate(45)"/>
+  </g>
+  
+  <!-- URL/Link indicator -->
+  <g transform="translate(160, 350)" opacity="0.7">
+    <circle cx="0" cy="0" r="6" fill="#ffffff"/>
+    <circle cx="20" cy="0" r="6" fill="#ffffff"/>
+    <circle cx="40" cy="0" r="6" fill="#ffffff"/>
+  </g>
+</svg>
