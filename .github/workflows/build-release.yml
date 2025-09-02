@@ -190,7 +190,7 @@ jobs:
       run: |
         # Create a zip file containing all signed binaries for notarization
         cd build/${{ matrix.platform }}-${{ matrix.arch }}
-        zip -r ../furl-${{ matrix.platform }}-${{ matrix.arch }}-signed.zip .
+        zip -r ../furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}-signed.zip .
         cd ../..
       shell: bash
       continue-on-error: true
@@ -203,7 +203,7 @@ jobs:
         MACOS_APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
       run: |
         echo "Submitting for notarization..."
-        xcrun notarytool submit build/furl-${{ matrix.platform }}-${{ matrix.arch }}-signed.zip \
+        xcrun notarytool submit build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}-signed.zip \
           --apple-id "$MACOS_APPLE_ID" \
           --team-id "$MACOS_TEAM_ID" \
           --password "$MACOS_APPLE_ID_PASSWORD" \
@@ -267,9 +267,9 @@ jobs:
         # Create archive with proper directory structure
         cd furl-${{ matrix.platform }}-${{ matrix.arch }}-temp
         if [ "${{ matrix.platform }}" = "windows" ]; then
-          7z a ../furl-${{ matrix.platform }}-${{ matrix.arch }}.zip furl/
+          7z a ../furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.zip furl/
         else
-          tar -czf ../furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz furl/
+          tar -czf ../furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz furl/
         fi
       shell: bash
 
@@ -296,8 +296,8 @@ jobs:
       with:
         name: furl-archive-${{ matrix.platform }}-${{ matrix.arch }}
         path: |
-          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
-          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.zip
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.zip
         retention-days: 30
 
   # Docker BuildX job for ARM/RISC-V cross-compilation
@@ -354,14 +354,14 @@ jobs:
       run: |
         cd build
         if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz ]; then
-          mv furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+          mv furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
         fi
 
     - name: Generate checksums
       run: |
         cd build
-        if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz ]; then
-          sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz | cut -d' ' -f1 > furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+        if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz ]; then
+          sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz | cut -d' ' -f1 > furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256
         fi
 
     - name: Upload cross-compiled artifacts
@@ -369,8 +369,8 @@ jobs:
       with:
         name: furl-cross-${{ matrix.platform }}-${{ matrix.arch }}
         path: |
-          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
-          build/furl-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
+          build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256
         retention-days: 30
 
   release:
@@ -442,25 +442,25 @@ jobs:
           ## 🖥️ Command Line Tools
 
           **Linux:**
-          - x64: `furl-linux-x64.tar.gz`
-          - ARM64: `furl-linux-arm64.tar.gz` (Cross-compiled via Docker BuildX)
-          - ARM v7: `furl-linux-arm.tar.gz` (Cross-compiled via Docker BuildX)
-          - RISC-V 64: `furl-linux-riscv64.tar.gz` (Cross-compiled via Docker BuildX)
+          - x64: `furl-linux-x64-${{ github.ref_name }}.tar.gz`
+          - ARM64: `furl-linux-arm64-${{ github.ref_name }}.tar.gz` (Cross-compiled via Docker BuildX)
+          - ARM v7: `furl-linux-arm-${{ github.ref_name }}.tar.gz` (Cross-compiled via Docker BuildX)
+          - RISC-V 64: `furl-linux-riscv64-${{ github.ref_name }}.tar.gz` (Cross-compiled via Docker BuildX)
 
           **macOS:**
-          - x64 (Intel): `furl-macos-x64.tar.gz`
-          - ARM64 (Apple Silicon): `furl-macos-arm64.tar.gz`
+          - x64 (Intel): `furl-macos-x64-${{ github.ref_name }}.tar.gz`
+          - ARM64 (Apple Silicon): `furl-macos-arm64-${{ github.ref_name }}.tar.gz`
 
           **Windows:**
-          - x64: `furl-windows-x64.zip`
+          - x64: `furl-windows-x64-${{ github.ref_name }}.zip`
 
           ## 📱 GUI Applications (Flutter)
 
           **🍎 macOS:**
-          - `flutter_furl-macos-*.zip` - macOS application bundle (signed and notarized)
+          - `flutter_furl-macos-${{ github.ref_name }}.zip` - macOS application bundle (signed and notarized)
 
           **🪟 Windows:**
-          - `flutter_furl-windows-*.zip` - Windows executable and dependencies
+          - `flutter_furl-windows-${{ github.ref_name }}.zip` - Windows executable and dependencies
 
           ### Cross-Compilation Notes
 

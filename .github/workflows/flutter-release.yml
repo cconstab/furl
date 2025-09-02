@@ -208,6 +208,59 @@ jobs:
         echo "Downloaded Flutter artifacts:"
         find artifacts -type f -name "*.zip" | sort
 
+    - name: Generate Flutter app hashes and update all-hashes.zip
+      run: |
+        # Create flutter-hashes directory
+        mkdir -p flutter-hashes
+        
+        # Generate hashes for Flutter apps
+        find artifacts -name "flutter_furl-*.zip" -type f | while read file; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            echo "Generating hash for $filename"
+            sha256sum "$file" | cut -d' ' -f1 > "flutter-hashes/${filename%.zip}.sha256"
+          fi
+        done
+        
+        echo "Generated Flutter hashes:"
+        ls -la flutter-hashes/
+        
+        # Download existing all-hashes.zip from the release (if it exists)
+        echo "Attempting to download existing all-hashes.zip..."
+        if curl -L -f -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+           "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" \
+           -o release-info.json; then
+          
+          # Extract download URL for all-hashes.zip
+          download_url=$(cat release-info.json | grep -o '"browser_download_url":"[^"]*all-hashes\.zip"' | cut -d'"' -f4)
+          
+          if [ -n "$download_url" ]; then
+            echo "Found existing all-hashes.zip, downloading..."
+            curl -L -f "$download_url" -o existing-all-hashes.zip
+            
+            # Extract existing hashes
+            mkdir -p existing-hashes
+            cd existing-hashes
+            unzip -o ../existing-all-hashes.zip
+            cd ..
+            
+            # Copy existing hashes to flutter-hashes directory
+            cp existing-hashes/*.sha256 flutter-hashes/ 2>/dev/null || true
+          else
+            echo "No existing all-hashes.zip found in release"
+          fi
+        else
+          echo "Could not fetch release info or release doesn't exist yet"
+        fi
+        
+        # Create updated all-hashes.zip
+        cd flutter-hashes
+        zip ../updated-all-hashes.zip *.sha256
+        cd ..
+        
+        echo "Created updated all-hashes.zip with contents:"
+        unzip -l updated-all-hashes.zip
+
     - name: Add Flutter Apps to Existing Release
       uses: softprops/action-gh-release@v2
       with:
@@ -217,6 +270,7 @@ jobs:
         files: |
           artifacts/macos-builds-${{ github.ref_name }}/*
           artifacts/windows-builds-${{ github.ref_name }}/*
+          updated-all-hashes.zip
         draft: false
         prerelease: false
         append_body: true  # Add to existing release body
