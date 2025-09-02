@@ -71,7 +71,6 @@ jobs:
       run: flutter build macos --release
 
     - name: Code sign macOS app (release)
-      if: github.event_name != 'pull_request'
       env:
         MACOS_CODESIGN_CERT: ${{ secrets.MACOS_CERTIFICATE }}
         MACOS_CODESIGN_CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -81,6 +80,7 @@ jobs:
         echo "=== macOS Flutter App Code Signing ==="
         echo "Event type: ${{ github.event_name }}"
         echo "Ref: ${{ github.ref }}"
+        echo "Branch: ${{ github.ref_name }}"
         
         # Debug: Check which secrets are available (without showing values)
         echo "Checking secret availability:"
@@ -91,8 +91,13 @@ jobs:
         
         # Check if signing secrets are available
         if [ -z "$MACOS_CODESIGN_CERT" ]; then
-          echo "⚠️  Code signing secrets not available, skipping signing"
-          echo "⚠️  App will NOT be properly signed for notarization!"
+          echo "⚠️  Code signing certificate not available"
+          echo "⚠️  Proceeding without signing - app will NOT be properly signed for notarization!"
+          echo "⚠️  You need to set up the following GitHub secrets:"
+          echo "   - MACOS_CERTIFICATE (base64 encoded .p12 file)"
+          echo "   - MACOS_CERTIFICATE_PASSWORD"
+          echo "   - MACOS_SIGNING_IDENTITY (e.g., 'Developer ID Application: Your Name (TEAM_ID)')"
+          echo "   - MACOS_KEYCHAIN_PASSWORD"
           exit 0
         fi
         
