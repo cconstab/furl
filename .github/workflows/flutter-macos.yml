@@ -79,10 +79,20 @@ jobs:
         MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
       run: |
         echo "=== macOS Flutter App Code Signing ==="
+        echo "Event type: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        
+        # Debug: Check which secrets are available (without showing values)
+        echo "Checking secret availability:"
+        echo "MACOS_CODESIGN_CERT: $([ -n "$MACOS_CODESIGN_CERT" ] && echo "✓ Available" || echo "❌ Missing")"
+        echo "MACOS_CODESIGN_CERT_PASSWORD: $([ -n "$MACOS_CODESIGN_CERT_PASSWORD" ] && echo "✓ Available" || echo "❌ Missing")"
+        echo "MACOS_SIGNING_IDENTITY: $([ -n "$MACOS_SIGNING_IDENTITY" ] && echo "✓ Available" || echo "❌ Missing")"
+        echo "MACOS_KEYCHAIN_PASSWORD: $([ -n "$MACOS_KEYCHAIN_PASSWORD" ] && echo "✓ Available" || echo "❌ Missing")"
         
         # Check if signing secrets are available
         if [ -z "$MACOS_CODESIGN_CERT" ]; then
           echo "⚠️  Code signing secrets not available, skipping signing"
+          echo "⚠️  App will NOT be properly signed for notarization!"
           exit 0
         fi
         
@@ -261,7 +271,6 @@ jobs:
         
         echo "✓ Code signing completed successfully"
       shell: bash
-      continue-on-error: true
 
     - name: Notarize macOS app
       if: github.event_name != 'pull_request'
@@ -270,6 +279,8 @@ jobs:
         MACOS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         MACOS_APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
       run: |
+        echo "=== macOS App Notarization ==="
+        
         # Check if notarization secrets are available
         if [ -z "$MACOS_APPLE_ID" ]; then
           echo "⚠️  Notarization secrets not available, skipping notarization"
@@ -277,6 +288,16 @@ jobs:
         fi
         
         APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
+        
+        # Check if the app was actually signed
+        echo "Checking app signature before notarization..."
+        if codesign -dv "$APP_PATH" 2>&1 | grep -q "Developer ID Application"; then
+          echo "✓ App appears to be properly signed with Developer ID"
+        else
+          echo "⚠️  WARNING: App may not be properly signed for notarization"
+          echo "Signature info:"
+          codesign -dv "$APP_PATH" 2>&1 || echo "Failed to check signature"
+        fi
         
         # Create a zip file for notarization
         echo "Creating archive for notarization..."
