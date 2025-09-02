@@ -68,17 +68,113 @@ jobs:
           # Clean up certificate file
           rm certificate.p12
 
-      - name: Build Flutter macOS
+      - name: Build Flutter macOS (Universal Binary)
         run: |
           cd flutter_furl
-          flutter build macos --release
+          
+          echo "=== Building Universal Binary for macOS ==="
+          # Build for both arm64 and x86_64 architectures
+          flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin
           
           # Verify the build output and architecture
           echo "Build completed. Checking app bundle..."
           ls -la build/macos/Build/Products/Release/
-          echo "Checking binary architecture..."
-          file build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl
-          lipo -info build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl || true
+          
+          echo "=== Checking binary architecture ==="
+          BINARY_PATH="build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl"
+          
+          if [ -f "$BINARY_PATH" ]; then
+            echo "Binary file details:"
+            file "$BINARY_PATH"
+            
+            echo "Architecture information:"
+            lipo -info "$BINARY_PATH" || echo "Not a fat binary or lipo failed"
+            
+            echo "Detailed architecture breakdown:"
+            lipo -detailed_info "$BINARY_PATH" || echo "Detailed info failed"
+            
+            # Check if it's a universal binary
+            if lipo -info "$BINARY_PATH" 2>/dev/null | grep -q "arm64.*x86_64\|x86_64.*arm64"; then
+              echo "✅ Universal binary detected (arm64 + x86_64)"
+            else
+              echo "⚠️  Not a universal binary, checking individual architectures..."
+              lipo -archs "$BINARY_PATH" || echo "Could not determine architectures"
+            fi
+          else
+            echo "❌ Binary not found at expected path: $BINARY_PATH"
+            find build -name "flutter_furl" -type f || echo "No flutter_furl binary found"
+          fi
+          
+          echo "=== Checking all frameworks for universal support ==="
+          find build/macos/Build/Products/Release/flutter_furl.app/Contents/Frameworks -name "*.framework" | while read framework; do
+            binary_name=$(basename "$framework" .framework)
+            framework_binary="$framework/Versions/A/$binary_name"
+            if [ -f "$framework_binary" ]; then
+              echo "Framework: $binary_name"
+              lipo -info "$framework_binary" 2>/dev/null || echo "  Single architecture or info failed"
+            fi
+          done
+
+      - name: Create Universal Binary (if needed)
+        run: |
+          cd flutter_furl
+          BINARY_PATH="build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl"
+          
+          # Check if we already have a universal binary
+          if lipo -info "$BINARY_PATH" 2>/dev/null | grep -q "arm64.*x86_64\|x86_64.*arm64"; then
+            echo "✅ Already have universal binary, skipping manual creation"
+          else
+            echo "=== Creating Universal Binary Manually ==="
+            
+            # Create backup of current build
+            cp -R "build/macos/Build/Products/Release/flutter_furl.app" "build/macos/Build/Products/Release/flutter_furl_backup.app"
+            
+            # Build for x86_64
+            echo "Building for x86_64..."
+            flutter build macos --release --target-platform darwin-x64
+            mv "build/macos/Build/Products/Release/flutter_furl.app" "build/macos/Build/Products/Release/flutter_furl_x64.app"
+            
+            # Build for arm64
+            echo "Building for arm64..."
+            flutter build macos --release --target-platform darwin-arm64
+            mv "build/macos/Build/Products/Release/flutter_furl.app" "build/macos/Build/Products/Release/flutter_furl_arm64.app"
+            
+            # Create universal binary
+            echo "Creating universal binary..."
+            cp -R "build/macos/Build/Products/Release/flutter_furl_arm64.app" "build/macos/Build/Products/Release/flutter_furl.app"
+            
+            # Combine the main executable
+            lipo -create \
+              "build/macos/Build/Products/Release/flutter_furl_x64.app/Contents/MacOS/flutter_furl" \
+              "build/macos/Build/Products/Release/flutter_furl_arm64.app/Contents/MacOS/flutter_furl" \
+              -output "build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl"
+            
+            # Combine frameworks if they exist and are different architectures
+            FRAMEWORKS_DIR="build/macos/Build/Products/Release/flutter_furl.app/Contents/Frameworks"
+            if [ -d "$FRAMEWORKS_DIR" ]; then
+              find "$FRAMEWORKS_DIR" -name "*.framework" | while read framework; do
+                binary_name=$(basename "$framework" .framework)
+                framework_binary="$framework/Versions/A/$binary_name"
+                
+                x64_framework="build/macos/Build/Products/Release/flutter_furl_x64.app/Contents/Frameworks/$binary_name.framework/Versions/A/$binary_name"
+                arm64_framework="build/macos/Build/Products/Release/flutter_furl_arm64.app/Contents/Frameworks/$binary_name.framework/Versions/A/$binary_name"
+                
+                if [ -f "$x64_framework" ] && [ -f "$arm64_framework" ]; then
+                  echo "Creating universal framework: $binary_name"
+                  lipo -create "$x64_framework" "$arm64_framework" -output "$framework_binary" || echo "Failed to create universal framework: $binary_name"
+                fi
+              done
+            fi
+            
+            echo "=== Verifying Universal Binary ==="
+            lipo -info "$BINARY_PATH"
+            file "$BINARY_PATH"
+            
+            # Clean up temporary builds
+            rm -rf "build/macos/Build/Products/Release/flutter_furl_x64.app"
+            rm -rf "build/macos/Build/Products/Release/flutter_furl_arm64.app"
+            rm -rf "build/macos/Build/Products/Release/flutter_furl_backup.app"
+          fi
 
       - name: Sign Application (Following Electron patterns)
         env:
@@ -112,20 +208,56 @@ jobs:
           APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
           DMG_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.dmg"
           
+          echo "=== Creating DMG with Applications folder ==="
+          
           # Create a temporary directory for DMG contents
           mkdir -p dmg_temp
           
           # Copy the app to the temporary directory
           cp -R "$APP_PATH" dmg_temp/
           
-          # Create the DMG
-          hdiutil create -volname "flutter_furl" -srcfolder dmg_temp -ov -format UDZO "$DMG_PATH"
+          # Create Applications folder symlink for easy installation
+          ln -s /Applications dmg_temp/Applications
+          
+          # Verify DMG contents
+          echo "DMG contents:"
+          ls -la dmg_temp/
+          
+          # Create the DMG with proper settings
+          hdiutil create -volname "flutter_furl" \
+            -srcfolder dmg_temp \
+            -ov \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "$DMG_PATH"
           
           # Clean up
           rm -rf dmg_temp
           
           echo "DMG created at: $DMG_PATH"
           ls -la "$DMG_PATH"
+          
+          # Test mount the DMG to verify it works
+          echo "=== Testing DMG mount ==="
+          MOUNT_POINT=$(hdiutil attach "$DMG_PATH" -nobrowse -mountpoint "/tmp/test_dmg_$$" | grep -o '/tmp/test_dmg_[0-9]*' | head -1)
+          if [ -n "$MOUNT_POINT" ]; then
+            echo "DMG mounted successfully at: $MOUNT_POINT"
+            echo "Contents of mounted DMG:"
+            ls -la "$MOUNT_POINT/"
+            
+            # Verify Applications symlink works
+            if [ -L "$MOUNT_POINT/Applications" ]; then
+              echo "✅ Applications symlink found"
+              ls -la "$MOUNT_POINT/Applications" || echo "Applications symlink target verification failed"
+            else
+              echo "❌ Applications symlink missing"
+            fi
+            
+            # Unmount
+            hdiutil detach "$MOUNT_POINT" -quiet || echo "Failed to unmount test DMG"
+          else
+            echo "❌ Failed to mount DMG for testing"
+          fi
 
       - name: Sign DMG
         env:
