@@ -456,10 +456,6 @@ jobs:
 
           ## 📱 GUI Applications (Flutter)
 
-          **📱 Android:**
-          - `app-release.apk` - Standard APK for sideloading
-          - `app-release.aab` - Android App Bundle for Play Store
-
           **🍎 macOS:**
           - `flutter_furl-macos-*.zip` - macOS application bundle (signed and notarized)
 
@@ -509,13 +505,10 @@ jobs:
           - `*.sig`: GPG signatures (Linux only)
 
           ## 📱 GUI Applications:
-          - **Android APK/AAB**: Install directly or publish to Play Store
           - **macOS App Bundle**: Native .app bundle for macOS (signed and notarized)
           - **Windows App**: Native Flutter application for Windows
 
           ### Installation Instructions
-
-          **📱 Android:** Download and install the APK, or use the AAB for Play Store distribution.
 
           **🍎 macOS GUI:** Download the ZIP, extract, and run the .app bundle. May require allowing in System Preferences > Security & Privacy.
 
