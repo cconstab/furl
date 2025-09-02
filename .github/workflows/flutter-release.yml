@@ -135,14 +135,14 @@ jobs:
     - name: Create macOS archive
       run: |
         cd build/macos/Build/Products/Release/
-        zip -r flutter_furl-macos-${{ github.run_number }}.zip flutter_furl.app/
-        mv flutter_furl-macos-${{ github.run_number }}.zip ../../../../../
+        zip -r flutter_furl-macos-${{ github.ref_name }}.zip flutter_furl.app/
+        mv flutter_furl-macos-${{ github.ref_name }}.zip ../../../../../
 
     - name: Upload macOS artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: macos-builds-${{ github.run_number }}
-        path: flutter_furl/flutter_furl-macos-${{ github.run_number }}.zip
+        name: macos-builds-${{ github.ref_name }}
+        path: flutter_furl/flutter_furl-macos-${{ github.ref_name }}.zip
         retention-days: 90
 
   build-windows:
@@ -178,14 +178,14 @@ jobs:
       shell: powershell
       run: |
         $buildPath = "build\windows\x64\runner\Release"
-        $zipPath = "flutter_furl-windows-${{ github.run_number }}.zip"
+        $zipPath = "flutter_furl-windows-${{ github.ref_name }}.zip"
         Compress-Archive -Path "$buildPath\*" -DestinationPath $zipPath -Force
 
     - name: Upload Windows artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-builds-${{ github.run_number }}
-        path: flutter_furl/flutter_furl-windows-${{ github.run_number }}.zip
+        name: windows-builds-${{ github.ref_name }}
+        path: flutter_furl/flutter_furl-windows-${{ github.ref_name }}.zip
         retention-days: 90
 
   add-to-release:
@@ -215,8 +215,8 @@ jobs:
         # Don't set name or body - let the main workflow handle that
         # This will add files to the existing release created by build-release.yml
         files: |
-          artifacts/macos-builds-${{ github.run_number }}/*
-          artifacts/windows-builds-${{ github.run_number }}/*
+          artifacts/macos-builds-${{ github.ref_name }}/*
+          artifacts/windows-builds-${{ github.ref_name }}/*
         draft: false
         prerelease: false
         append_body: true  # Add to existing release body
