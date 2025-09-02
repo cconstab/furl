@@ -32,7 +32,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.27.0'
+        flutter-version: 'stable'
         channel: 'stable'
         cache: true
 
@@ -40,7 +40,10 @@ jobs:
       run: flutter config --enable-windows-desktop
 
     - name: Get Flutter dependencies
-      run: flutter pub get
+      run: |
+        # Pin at_client_mobile to avoid incompatible 3.3.0
+        sed -i.bak 's/at_client_mobile: \^3\.2\.26/at_client_mobile: 3.2.26/' pubspec.yaml
+        flutter pub get
 
     - name: Analyze Flutter code
       run: flutter analyze --fatal-infos
