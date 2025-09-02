@@ -22,10 +22,14 @@ jobs:
           channel: 'stable'
 
       - name: Get dependencies
-        run: flutter pub get
+        run: |
+          cd flutter_furl
+          flutter pub get
 
       - name: Run tests
-        run: flutter test
+        run: |
+          cd flutter_furl
+          flutter test
 
       - name: Import Certificate (Electron CSC approach)
         env:
@@ -66,21 +70,22 @@ jobs:
 
       - name: Build Flutter macOS
         run: |
+          cd flutter_furl
           flutter build macos --release
           
           # Verify the build output and architecture
           echo "Build completed. Checking app bundle..."
           ls -la build/macos/Build/Products/Release/
           echo "Checking binary architecture..."
-          file build/macos/Build/Products/Release/furl.app/Contents/MacOS/furl
-          lipo -info build/macos/Build/Products/Release/furl.app/Contents/MacOS/furl || true
+          file build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl
+          lipo -info build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl || true
 
       - name: Sign Application (Following Electron patterns)
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          APP_PATH="build/macos/Build/Products/Release/furl.app"
+          APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
           
           echo "=== Deep signing all frameworks and binaries ==="
           # Sign using --deep flag like the Electron example suggests
@@ -91,7 +96,7 @@ jobs:
             --sign "$MACOS_SIGNING_IDENTITY" \
             --timestamp \
             --options runtime \
-            --entitlements macos/Runner/DebugProfile.entitlements \
+            --entitlements flutter_furl/macos/Runner/DebugProfile.entitlements \
             "$APP_PATH"
           
           echo "=== Verification ==="
@@ -104,8 +109,8 @@ jobs:
 
       - name: Create DMG
         run: |
-          APP_PATH="build/macos/Build/Products/Release/furl.app"
-          DMG_PATH="build/macos/Build/Products/Release/furl.dmg"
+          APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
+          DMG_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.dmg"
           
           # Create a temporary directory for DMG contents
           mkdir -p dmg_temp
@@ -114,7 +119,7 @@ jobs:
           cp -R "$APP_PATH" dmg_temp/
           
           # Create the DMG
-          hdiutil create -volname "furl" -srcfolder dmg_temp -ov -format UDZO "$DMG_PATH"
+          hdiutil create -volname "flutter_furl" -srcfolder dmg_temp -ov -format UDZO "$DMG_PATH"
           
           # Clean up
           rm -rf dmg_temp
@@ -126,7 +131,7 @@ jobs:
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          DMG_PATH="build/macos/Build/Products/Release/furl.dmg"
+          DMG_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.dmg"
           
           echo "=== Signing DMG ==="
           codesign --force \
@@ -147,7 +152,7 @@ jobs:
           APPLE_ID_PASS: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          DMG_PATH="build/macos/Build/Products/Release/furl.dmg"
+          DMG_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.dmg"
           
           echo "=== Starting notarization with notarytool ==="
           xcrun notarytool submit "$DMG_PATH" \
@@ -160,6 +165,6 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: furl-macos-dmg
-          path: build/macos/Build/Products/Release/furl.dmg
+          name: flutter_furl-macos-dmg
+          path: flutter_furl/build/macos/Build/Products/Release/flutter_furl.dmg
           retention-days: 30
