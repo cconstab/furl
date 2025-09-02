@@ -176,18 +176,39 @@ jobs:
         echo "Frameworks to be signed:"
         ls -la "$APP_PATH/Contents/Frameworks/"
         
-        # Sign the entire app bundle with deep signing (this will sign all nested components)
-        echo "Signing entire Flutter app bundle with deep signing..."
+        # Sign the app bundle using the proven approach from PicGuard
+        echo "Signing Flutter app bundle using file-by-file approach..."
+        
+        # Sign all individual files in the app bundle (based on PicGuard's approach)
+        echo "Finding and signing all files in the app bundle..."
+        cd "$APP_PATH"
+        
+        find . -type f | while read -r file; do
+          echo "Signing: $file"
+          /usr/bin/codesign \
+            --deep \
+            -s "$MACOS_SIGNING_IDENTITY" \
+            -f \
+            --timestamp \
+            -i "com.atsign.flutterFurl" \
+            -o runtime \
+            "$file" || echo "⚠️ Failed to sign $file (might not be signable)"
+        done
+        
+        cd ../../../../../..
+        echo "✓ Individual file signing completed"
+        
+        # Final signing of the main app bundle with entitlements
+        echo "Final signing of main app bundle..."
         /usr/bin/codesign \
-          --force \
-          --deep \
-          --options=runtime \
+          -f \
+          -o runtime \
           --entitlements "$ENTITLEMENTS_PATH" \
           --timestamp \
           -s "$MACOS_SIGNING_IDENTITY" \
           -v \
           "$APP_PATH"
-        echo "✓ Signed entire app bundle with deep signing"
+        echo "✓ Final app bundle signing completed"
         
         # Verify all signatures before notarization
         echo "Verifying all signatures..."
