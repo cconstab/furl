@@ -176,100 +176,80 @@ jobs:
         echo "Frameworks to be signed:"
         ls -la "$APP_PATH/Contents/Frameworks/"
         
-        # Sign the app bundle using proper framework signing order (based on PicGuard)
-        echo "Signing Flutter app bundle using proper framework signing order..."
+        # Sign the app bundle using a working Flutter approach
+        echo "Signing Flutter app bundle using bottom-up approach..."
         
-        # First, remove any existing signatures to start clean
-        echo "Removing existing signatures..."
-        find "$APP_PATH" -type f \( -name "*.framework" -o -name "*.dylib" -o -name "flutter_furl" \) -exec codesign --remove-signature {} \; 2>/dev/null || true
-        
-        # Sign Swift dylibs first (they're dependencies)
+        # Sign Swift dylibs first (they're leaf dependencies)
         echo "Signing Swift dylibs..."
         for dylib in "$APP_PATH/Contents/Frameworks"/libswift*.dylib; do
           if [ -f "$dylib" ]; then
             echo "Signing $(basename "$dylib")..."
-            /usr/bin/codesign \
-              -s "$MACOS_SIGNING_IDENTITY" \
-              -f \
+            codesign \
+              --sign "$MACOS_SIGNING_IDENTITY" \
+              --force \
               --timestamp \
-              -o runtime \
+              --options runtime \
               "$dylib"
           fi
         done
         
-        # Sign Flutter frameworks (sign the executables within frameworks)
-        echo "Signing Flutter framework executables..."
+        # Sign frameworks using --deep to handle all internal components
+        echo "Signing frameworks with deep signing..."
         for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
           if [ -d "$framework" ]; then
-            framework_name=$(basename "$framework" .framework)
-            executable="$framework/Versions/A/$framework_name"
-            
-            if [ -f "$executable" ]; then
-              echo "Signing framework executable: $framework_name"
-              /usr/bin/codesign \
-                -s "$MACOS_SIGNING_IDENTITY" \
-                -f \
-                --timestamp \
-                -o runtime \
-                "$executable"
-            fi
-          fi
-        done
-        
-        # Sign complete frameworks (this will re-sign the whole framework structure)
-        echo "Signing complete frameworks..."
-        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
-          if [ -d "$framework" ]; then
-            echo "Signing framework: $(basename "$framework")"
-            /usr/bin/codesign \
-              -s "$MACOS_SIGNING_IDENTITY" \
-              -f \
+            echo "Deep signing framework: $(basename "$framework")"
+            codesign \
+              --sign "$MACOS_SIGNING_IDENTITY" \
+              --force \
+              --deep \
               --timestamp \
-              -o runtime \
+              --options runtime \
               "$framework"
           fi
         done
         
         # Sign the main executable
         echo "Signing main executable..."
-        /usr/bin/codesign \
-          -s "$MACOS_SIGNING_IDENTITY" \
-          -f \
+        codesign \
+          --sign "$MACOS_SIGNING_IDENTITY" \
+          --force \
           --timestamp \
-          -o runtime \
+          --options runtime \
           "$APP_PATH/Contents/MacOS/flutter_furl"
         
         # Final signing of the main app bundle with entitlements
         echo "Final signing of main app bundle..."
-        /usr/bin/codesign \
-          -s "$MACOS_SIGNING_IDENTITY" \
-          -f \
-          -o runtime \
-          --entitlements "$ENTITLEMENTS_PATH" \
+        codesign \
+          --sign "$MACOS_SIGNING_IDENTITY" \
+          --force \
           --timestamp \
-          -v \
+          --options runtime \
+          --entitlements "$ENTITLEMENTS_PATH" \
           "$APP_PATH"
         echo "✓ App bundle signing completed"
         
         # Verify all signatures before notarization
         echo "Verifying all signatures..."
         echo "Main app signature:"
-        if /usr/bin/codesign --verify --verbose "$APP_PATH"; then
+        if codesign --verify --verbose "$APP_PATH" 2>&1; then
           echo "✓ Main app signature valid"
         else
           echo "❌ Main app signature INVALID"
           exit 1
         fi
         
-        # Verify framework signatures individually
+        # Verify framework signatures individually with detailed output
         echo "Verifying framework signatures..."
         for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
           if [ -d "$framework" ]; then
             echo "Verifying $(basename "$framework")..."
-            if /usr/bin/codesign --verify --verbose "$framework"; then
+            if codesign --verify --verbose --strict "$framework" 2>&1; then
               echo "✓ $(basename "$framework") signature valid"
             else
               echo "❌ $(basename "$framework") signature INVALID"
+              # Show detailed info for failed framework
+              echo "Framework info:"
+              codesign --display --verbose=4 "$framework" 2>&1 || true
               exit 1
             fi
           fi
@@ -280,7 +260,7 @@ jobs:
         for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
           if [ -f "$dylib" ]; then
             echo "Verifying $(basename "$dylib")..."
-            if /usr/bin/codesign --verify --verbose "$dylib"; then
+            if codesign --verify --verbose --strict "$dylib" 2>&1; then
               echo "✓ $(basename "$dylib") signature valid"
             else
               echo "❌ $(basename "$dylib") signature INVALID"
@@ -291,20 +271,21 @@ jobs:
         
         echo "✓ All signatures verified successfully"
         
-        # Display detailed signature information
+        # Show detailed signature information for debugging
         echo "=== Detailed Signature Information ==="
         echo "Main app signature details:"
         codesign --display --verbose=4 "$APP_PATH"
         
-        echo "First few framework signatures:"
-        count=0
-        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
-          if [ -d "$framework" ] && [ $count -lt 3 ]; then
-            echo "Framework: $(basename "$framework")"
-            codesign --display --verbose=2 "$framework"
-            count=$((count + 1))
-          fi
-        done
+        echo "=== Architecture Information ==="
+        file "$APP_PATH/Contents/MacOS/flutter_furl"
+        lipo -archs "$APP_PATH/Contents/MacOS/flutter_furl" || true
+        
+        echo "First framework signature details:"
+        first_framework=$(find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d | head -1)
+        if [ -n "$first_framework" ]; then
+          echo "Framework: $(basename "$first_framework")"
+          codesign --display --verbose=2 "$first_framework"
+        fi
         
         echo "✓ Code signing completed successfully"
         
