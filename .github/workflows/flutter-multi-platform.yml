@@ -1,0 +1,301 @@
+name: Flutter Multi-Platform Build
+
+on:
+  push:
+    tags:
+      - 'flutter-v*'
+  workflow_dispatch:
+    inputs:
+      build_android:
+        description: 'Build Android APK/AAB'
+        required: false
+        default: true
+        type: boolean
+      build_macos:
+        description: 'Build macOS app'
+        required: false
+        default: true
+        type: boolean
+      build_windows:
+        description: 'Build Windows app'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.build_android != 'false' }}
+    
+    defaults:
+      run:
+        working-directory: flutter_furl
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        channel: 'stable'
+        cache: true
+
+    - name: Get Flutter dependencies
+      run: flutter pub get
+
+    - name: Fix Android namespace issues
+      run: |
+        chmod +x fix_namespaces.sh
+        ./fix_namespaces.sh
+
+    - name: Build APK (release)
+      run: flutter build apk --release
+
+    - name: Build AAB (release)
+      run: flutter build appbundle --release
+
+    - name: Upload Android artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-builds-${{ github.run_number }}
+        path: |
+          flutter_furl/build/app/outputs/flutter-apk/app-release.apk
+          flutter_furl/build/app/outputs/bundle/release/app-release.aab
+        retention-days: 90
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    if: ${{ github.event.inputs.build_macos != 'false' }}
+    
+    defaults:
+      run:
+        working-directory: flutter_furl
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        channel: 'stable'
+        cache: true
+
+    - name: Enable macOS desktop support
+      run: flutter config --enable-macos-desktop
+
+    - name: Get Flutter dependencies
+      run: flutter pub get
+
+    - name: Build macOS app (release)
+      run: flutter build macos --release
+
+    - name: Code sign macOS app (release)
+      env:
+        MACOS_CODESIGN_CERT: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CODESIGN_CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+      run: |
+        # Check if signing secrets are available
+        if [ -z "$MACOS_CODESIGN_CERT" ]; then
+          echo "⚠️  Code signing secrets not available, skipping signing"
+          exit 0
+        fi
+        
+        echo "=== Code Signing macOS Flutter App ==="
+        
+        # Load certificate
+        CERT_PATH=$RUNNER_TEMP/furl-codesign.p12
+        echo -n "$MACOS_CODESIGN_CERT" | base64 --decode -o $CERT_PATH
+        
+        # Create keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        
+        # Import certificate
+        security import $CERT_PATH -P "$MACOS_CODESIGN_CERT_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+        security set-key-partition-list -S apple-tool:apple,:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        
+        APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
+        
+        # Sign the app bundle
+        /usr/bin/codesign \
+          --force \
+          --deep \
+          -s "$MACOS_SIGNING_IDENTITY" \
+          --options=runtime \
+          --entitlements ../entitlements.plist \
+          --timestamp \
+          -v \
+          "$APP_PATH"
+        
+        echo "✓ Code signing completed"
+      shell: bash
+      continue-on-error: true
+
+    - name: Notarize macOS app
+      env:
+        MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
+        MACOS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        MACOS_APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      run: |
+        # Check if notarization secrets are available
+        if [ -z "$MACOS_APPLE_ID" ]; then
+          echo "⚠️  Notarization secrets not available, skipping notarization"
+          exit 0
+        fi
+        
+        echo "=== Notarizing macOS Flutter App ==="
+        APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
+        
+        # Create a zip file for notarization
+        cd build/macos/Build/Products/Release/
+        zip -r flutter_furl-for-notarization.zip flutter_furl.app/
+        
+        # Submit for notarization
+        xcrun notarytool submit flutter_furl-for-notarization.zip \
+          --apple-id "$MACOS_APPLE_ID" \
+          --team-id "$MACOS_TEAM_ID" \
+          --password "$MACOS_APPLE_ID_PASSWORD" \
+          --wait
+        
+        # Staple the notarization ticket
+        xcrun stapler staple flutter_furl.app
+        
+        echo "✓ Notarization completed"
+        cd ../../../../../
+      shell: bash
+      continue-on-error: true
+
+    - name: Create macOS archive
+      run: |
+        cd build/macos/Build/Products/Release/
+        zip -r flutter_furl-macos-${{ github.run_number }}.zip flutter_furl.app/
+        mv flutter_furl-macos-${{ github.run_number }}.zip ../../../../../
+
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-builds-${{ github.run_number }}
+        path: flutter_furl/flutter_furl-macos-${{ github.run_number }}.zip
+        retention-days: 90
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    if: ${{ github.event.inputs.build_windows != 'false' }}
+    
+    defaults:
+      run:
+        working-directory: flutter_furl
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        channel: 'stable'
+        cache: true
+
+    - name: Enable Windows desktop support
+      run: flutter config --enable-windows-desktop
+
+    - name: Get Flutter dependencies
+      run: flutter pub get
+
+    - name: Build Windows app (release)
+      run: flutter build windows --release
+
+    - name: Create Windows archive
+      shell: powershell
+      run: |
+        $buildPath = "build\windows\x64\runner\Release"
+        $zipPath = "flutter_furl-windows-${{ github.run_number }}.zip"
+        Compress-Archive -Path "$buildPath\*" -DestinationPath $zipPath -Force
+
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-builds-${{ github.run_number }}
+        path: flutter_furl/flutter_furl-windows-${{ github.run_number }}.zip
+        retention-days: 90
+
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-android, build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/flutter-v')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: |
+        echo "Downloaded artifacts:"
+        find artifacts -type f -name "*.apk" -o -name "*.aab" -o -name "*.zip" | sort
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Flutter Furl ${{ github.ref_name }}
+        body: |
+          ## Flutter Furl Release ${{ github.ref_name }}
+          
+          ### Download Options:
+          
+          **Android:**
+          - `app-release.apk` - Standard APK for sideloading
+          - `app-release.aab` - Android App Bundle for Play Store
+          
+          **macOS:**
+          - `flutter_furl-macos-*.zip` - macOS application bundle
+          
+          **Windows:**
+          - `flutter_furl-windows-*.zip` - Windows executable and dependencies
+          
+          ### Installation Instructions:
+          
+          **Android:** Download and install the APK, or use the AAB for Play Store distribution.
+          
+          **macOS:** Download the ZIP, extract, and run the .app bundle. You may need to allow the app in System Preferences > Security & Privacy.
+          
+          **Windows:** Download the ZIP, extract to a folder, and run flutter_furl.exe.
+          
+          ---
+          
+          This release was automatically built from commit ${{ github.sha }}.
+        files: |
+          artifacts/android-builds-${{ github.run_number }}/*
+          artifacts/macos-builds-${{ github.run_number }}/*
+          artifacts/windows-builds-${{ github.run_number }}/*
+        draft: false
+        prerelease: false

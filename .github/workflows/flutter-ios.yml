@@ -1,0 +1,119 @@
+name: Flutter iOS Build
+
+on:
+  push:
+    branches: [ main, autobuild ]
+    paths:
+      - 'flutter_furl/**'
+      - '.github/workflows/flutter-ios.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'flutter_furl/**'
+      - '.github/workflows/flutter-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    
+    defaults:
+      run:
+        working-directory: flutter_furl
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        channel: 'stable'
+        cache: true
+
+    - name: Get Flutter dependencies
+      run: flutter pub get
+
+    - name: Analyze Flutter code
+      run: flutter analyze --fatal-infos
+
+    - name: Run Flutter tests
+      run: flutter test
+
+    - name: Build iOS app (debug - simulator)
+      run: flutter build ios --debug --simulator
+
+    - name: Build iOS app (release - no codesign)
+      run: flutter build ios --release --no-codesign
+
+    - name: Create iOS archive
+      run: |
+        # Create archive of the iOS build
+        cd build/ios/iphoneos/
+        if [ -d "Runner.app" ]; then
+          zip -r flutter_furl-ios-${{ github.run_number }}.zip Runner.app/
+          mv flutter_furl-ios-${{ github.run_number }}.zip ../../../../
+          echo "✓ iOS archive created successfully"
+        else
+          echo "✗ iOS app not found"
+          ls -la
+          exit 1
+        fi
+
+    - name: Upload iOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-app-${{ github.sha }}
+        path: |
+          flutter_furl/build/ios/iphonesimulator/Runner.app
+          flutter_furl/build/ios/iphoneos/Runner.app
+          flutter_furl/flutter_furl-ios-${{ github.run_number }}.zip
+        if-no-files-found: ignore
+        retention-days: 30
+
+    - name: Test iOS build
+      run: |
+        # Verify iOS builds were created
+        echo "Checking iOS simulator build..."
+        if [ -d "build/ios/iphonesimulator/Runner.app" ]; then
+          echo "✓ iOS simulator build created successfully"
+          ls -la "build/ios/iphonesimulator/Runner.app"
+        else
+          echo "⚠ iOS simulator build not found (this may be expected)"
+        fi
+        
+        echo "Checking iOS device build..."
+        if [ -d "build/ios/iphoneos/Runner.app" ]; then
+          echo "✓ iOS device build created successfully"
+          ls -la "build/ios/iphoneos/Runner.app"
+          
+          # Check for executable
+          if [ -f "build/ios/iphoneos/Runner.app/Runner" ]; then
+            echo "✓ iOS executable found"
+          else
+            echo "✗ iOS executable not found"
+            exit 1
+          fi
+        else
+          echo "✗ iOS device build not found"
+          echo "Contents of build/ios/:"
+          ls -la build/ios/ || echo "build/ios/ directory not found"
+          exit 1
+        fi
+
+    - name: Build info
+      run: |
+        echo "=== Build Information ==="
+        echo "Flutter version:"
+        flutter --version
+        echo ""
+        echo "iOS build outputs:"
+        find build/ios -name "*.app" -type d 2>/dev/null || echo "No .app bundles found"
+        echo ""
+        echo "Note: This build is unsigned and cannot be installed on physical devices."
+        echo "For App Store distribution, you'll need to set up code signing with certificates."

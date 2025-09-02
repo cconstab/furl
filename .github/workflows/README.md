@@ -83,7 +83,69 @@ Each release includes:
 - Node.js web component testing
 - WASM artifact uploads
 
-### 4. Docker Support
+### 4. Flutter Multi-Platform Builds
+
+**Purpose:** Build Flutter mobile and desktop applications for multiple platforms
+
+#### Individual Platform Workflows:
+
+**Android (`flutter-android.yml`):**
+- **Trigger:** Changes to `flutter_furl/` directory, pushes to main/autobuild, PRs
+- **Outputs:** APK (debug/release), AAB (Android App Bundle)
+- **Features:** 
+  - Java 17 setup
+  - Automated namespace fixes via `fix_namespaces.sh`
+  - Flutter analysis and testing
+  - Artifact uploads with 30-day retention
+
+**iOS (`flutter-ios.yml`):**
+- **Trigger:** Changes to `flutter_furl/` directory, pushes to main/autobuild, PRs
+- **Outputs:** iOS app bundles (unsigned)
+- **Features:**
+  - Simulator and device builds
+  - No code signing (for CI testing)
+  - Note: Requires manual code signing setup for distribution
+
+**macOS (`flutter-macos.yml`):**
+- **Trigger:** Changes to `flutter_furl/` directory, pushes to main/autobuild, PRs
+- **Outputs:** macOS .app bundle, DMG installer
+- **Features:**
+  - Debug and release builds
+  - DMG creation with fallback to ZIP
+  - Desktop support enablement
+
+**Windows (`flutter-windows.yml`):**
+- **Trigger:** Changes to `flutter_furl/` directory, pushes to main/autobuild, PRs
+- **Outputs:** Windows executable and dependencies
+- **Features:**
+  - Debug and release builds
+  - ZIP archive creation
+  - Desktop support enablement
+
+#### Multi-Platform Release Workflow (`flutter-multi-platform.yml`):
+
+**Trigger:** Git tags starting with `flutter-v*`, manual dispatch with platform selection
+
+**Purpose:** Coordinated builds across all Flutter platforms for releases
+
+**Features:**
+- **Selective builds:** Choose which platforms to build via workflow inputs
+- **Release automation:** Automatically creates GitHub releases for tagged versions
+- **Artifact management:** Extended 90-day retention for release builds
+- **Release notes:** Auto-generated with installation instructions
+
+**Release Process:**
+1. Tag with `flutter-v*` pattern (e.g., `flutter-v1.0.0`)
+2. Push tag to trigger multi-platform build
+3. Artifacts are automatically attached to GitHub release
+4. Installation instructions included in release notes
+
+**Manual Trigger Options:**
+- `build_android`: Build Android APK/AAB (default: true)
+- `build_macos`: Build macOS app (default: true)  
+- `build_windows`: Build Windows app (default: true)
+
+### 5. Docker Support
 
 Multi-stage Docker builds for containerized deployment:
 
@@ -101,6 +163,8 @@ docker run -it -v /path/to/files:/shared furl ./furl --help
 ## Usage Examples
 
 ### Manual Release
+
+**CLI Tools Release:**
 1. Create and push a git tag:
    ```bash
    git tag v1.2.0
@@ -108,10 +172,35 @@ docker run -it -v /path/to/files:/shared furl ./furl --help
    ```
 2. GitHub Actions automatically builds and creates a release
 
+**Flutter App Release:**
+1. Create and push a Flutter-specific tag:
+   ```bash
+   git tag flutter-v1.0.0
+   git push origin flutter-v1.0.0
+   ```
+2. Multi-platform Flutter build automatically triggers and creates release
+
 ### Development Testing
 - Push to any branch triggers CI validation
 - Pull requests get full platform testing
 - WASM changes trigger specialized builds
+- Flutter changes trigger platform-specific builds
+
+### Manual Flutter Builds
+Trigger individual platform builds manually:
+```bash
+# Via GitHub CLI
+gh workflow run flutter-android.yml
+gh workflow run flutter-macos.yml  
+gh workflow run flutter-windows.yml
+gh workflow run flutter-ios.yml
+
+# Or use the multi-platform workflow with custom options
+gh workflow run flutter-multi-platform.yml \
+  --field build_android=true \
+  --field build_macos=false \
+  --field build_windows=true
+```
 
 ### Docker Deployment
 - Released images available at `ghcr.io/cconstab/furl`
@@ -157,6 +246,33 @@ docker run -it -v /path/to/files:/shared furl ./furl --help
 ### macOS Universal
 - Separate x64 and ARM64 builds
 - Use ARM64 for Apple Silicon Macs (M1/M2/M3)
+
+### Flutter Platform Requirements
+
+**Android:**
+- Requires Java 17 for Android Gradle Plugin compatibility
+- Automatic namespace fixes applied via `fix_namespaces.sh`
+- Outputs both APK (sideloading) and AAB (Play Store) formats
+
+**iOS:**
+- Builds are unsigned for CI testing only
+- Physical device installation requires proper code signing setup
+- App Store distribution requires Apple Developer Program membership
+
+**macOS:**
+- Desktop support automatically enabled
+- DMG creation requires `create-dmg` (installed via Homebrew)
+- App may require user approval in Security & Privacy settings
+- **Code signing and notarization**: Automatically applied when secrets are available
+  - Uses same certificates as CLI tools (`MACOS_CERTIFICATE`, `MACOS_SIGNING_IDENTITY`, etc.)
+  - App bundles are deep-signed with runtime hardening
+  - Notarization ensures apps run without Gatekeeper warnings
+  - Signed apps are suitable for distribution outside the Mac App Store
+
+**Windows:**  
+- Desktop support automatically enabled
+- Outputs include all required dependencies
+- No additional runtime requirements for end users
 
 ## Troubleshooting
 

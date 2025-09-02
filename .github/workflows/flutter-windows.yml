@@ -1,0 +1,117 @@
+name: Flutter Windows Build
+
+on:
+  push:
+    branches: [ main, autobuild ]
+    paths:
+      - 'flutter_furl/**'
+      - '.github/workflows/flutter-windows.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'flutter_furl/**'
+      - '.github/workflows/flutter-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows App
+    runs-on: windows-latest
+    
+    defaults:
+      run:
+        working-directory: flutter_furl
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        channel: 'stable'
+        cache: true
+
+    - name: Enable Windows desktop support
+      run: flutter config --enable-windows-desktop
+
+    - name: Get Flutter dependencies
+      run: flutter pub get
+
+    - name: Analyze Flutter code
+      run: flutter analyze --fatal-infos
+
+    - name: Run Flutter tests
+      run: flutter test
+
+    - name: Build Windows app (debug)
+      run: flutter build windows --debug
+
+    - name: Build Windows app (release)
+      run: flutter build windows --release
+
+    - name: Create Windows installer (release)
+      shell: powershell
+      run: |
+        # Create a simple ZIP archive of the Windows build
+        $buildPath = "build\windows\x64\runner\Release"
+        $zipPath = "flutter_furl-windows.zip"
+        
+        if (Test-Path $buildPath) {
+          Write-Host "Creating Windows installer archive..."
+          Compress-Archive -Path "$buildPath\*" -DestinationPath $zipPath -Force
+          Write-Host "✓ Windows installer archive created: $zipPath"
+        } else {
+          Write-Host "✗ Windows build directory not found: $buildPath"
+          exit 1
+        }
+
+    - name: Upload Windows app artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-app-${{ github.sha }}
+        path: |
+          flutter_furl/build/windows/x64/runner/Release/**/*
+          flutter_furl/build/windows/x64/runner/Debug/**/*
+        retention-days: 30
+
+    - name: Upload Windows installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer-${{ github.sha }}
+        path: flutter_furl/flutter_furl-windows.zip
+        retention-days: 30
+
+    - name: Test Windows app
+      shell: powershell
+      run: |
+        # Verify app was created and has correct structure
+        $releasePath = "build\windows\x64\runner\Release"
+        $executablePath = "$releasePath\flutter_furl.exe"
+        
+        if (Test-Path $releasePath) {
+          Write-Host "✓ Release Windows app directory created successfully"
+          Get-ChildItem $releasePath
+          
+          if (Test-Path $executablePath) {
+            Write-Host "✓ Executable found: $executablePath"
+            
+            # Try to get file info
+            $fileInfo = Get-Item $executablePath
+            Write-Host "✓ Executable size: $($fileInfo.Length) bytes"
+          } else {
+            Write-Host "✗ Executable not found: $executablePath"
+            Write-Host "Contents of release directory:"
+            Get-ChildItem $releasePath -Recurse
+            exit 1
+          }
+        } else {
+          Write-Host "✗ Release Windows app directory not found: $releasePath"
+          Write-Host "Contents of build directory:"
+          Get-ChildItem "build" -Recurse -ErrorAction SilentlyContinue
+          exit 1
+        }
