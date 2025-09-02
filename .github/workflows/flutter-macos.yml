@@ -104,6 +104,14 @@ jobs:
         echo "Available signing identities:"
         security find-identity -v -p codesigning
         
+        echo "Checking signing identity: '$MACOS_SIGNING_IDENTITY'"
+        if ! security find-identity -v -p codesigning | grep -q "$MACOS_SIGNING_IDENTITY"; then
+          echo "❌ Signing identity '$MACOS_SIGNING_IDENTITY' not found!"
+          echo "Available identities:"
+          security find-identity -p codesigning
+          exit 1
+        fi
+        
         APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
         echo "App bundle contents:"
         ls -la "$APP_PATH"
@@ -111,17 +119,98 @@ jobs:
         echo "Main executable info:"
         file "$APP_PATH/Contents/MacOS/flutter_furl"
         
-        # Sign the app bundle (this will recursively sign all contents)
+        # Check if entitlements file exists, create a basic one if not
+        ENTITLEMENTS_PATH="../entitlements.plist"
+        if [ ! -f "$ENTITLEMENTS_PATH" ]; then
+          echo "Creating basic entitlements file..."
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > "$ENTITLEMENTS_PATH"
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$ENTITLEMENTS_PATH"
+          echo '<plist version="1.0">' >> "$ENTITLEMENTS_PATH"
+          echo '<dict>' >> "$ENTITLEMENTS_PATH"
+          echo '    <key>com.apple.security.app-sandbox</key>' >> "$ENTITLEMENTS_PATH"
+          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
+          echo '    <key>com.apple.security.files.user-selected.read-write</key>' >> "$ENTITLEMENTS_PATH"
+          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
+          echo '    <key>com.apple.security.network.client</key>' >> "$ENTITLEMENTS_PATH"
+          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
+          echo '    <key>com.apple.security.cs.allow-jit</key>' >> "$ENTITLEMENTS_PATH"
+          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
+          echo '    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>' >> "$ENTITLEMENTS_PATH"
+          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
+          echo '    <key>com.apple.security.cs.disable-library-validation</key>' >> "$ENTITLEMENTS_PATH"
+          echo '    <true/>' >> "$ENTITLEMENTS_PATH"
+          echo '</dict>' >> "$ENTITLEMENTS_PATH"
+          echo '</plist>' >> "$ENTITLEMENTS_PATH"
+        fi
+        
+        # Sign all frameworks first
+        echo "Signing frameworks individually..."
+        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
+          if [ -d "$framework" ]; then
+            echo "Signing framework: $(basename "$framework")"
+            /usr/bin/codesign \
+              --force \
+              --options=runtime \
+              --entitlements "$ENTITLEMENTS_PATH" \
+              --timestamp \
+              -s "$MACOS_SIGNING_IDENTITY" \
+              -v \
+              "$framework"
+            echo "✓ Signed $(basename "$framework")"
+          fi
+        done
+        
+        # Sign dynamic libraries
+        echo "Signing dynamic libraries..."
+        for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
+          if [ -f "$dylib" ]; then
+            echo "Signing dylib: $(basename "$dylib")"
+            /usr/bin/codesign \
+              --force \
+              --options=runtime \
+              --entitlements "$ENTITLEMENTS_PATH" \
+              --timestamp \
+              -s "$MACOS_SIGNING_IDENTITY" \
+              -v \
+              "$dylib"
+            echo "✓ Signed $(basename "$dylib")"
+          fi
+        done
+        
+        # Sign the main app bundle
         echo "Signing Flutter app bundle..."
         /usr/bin/codesign \
           --force \
-          --deep \
-          -s "$MACOS_SIGNING_IDENTITY" \
           --options=runtime \
-          --entitlements ../entitlements.plist \
+          --entitlements "$ENTITLEMENTS_PATH" \
           --timestamp \
+          -s "$MACOS_SIGNING_IDENTITY" \
           -v \
           "$APP_PATH"
+        echo "✓ Signed main app bundle"
+        
+        # Verify all signatures before notarization
+        echo "Verifying all signatures..."
+        echo "Main app signature:"
+        /usr/bin/codesign --verify --verbose "$APP_PATH"
+        
+        echo "Framework signatures:"
+        for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
+          if [ -d "$framework" ]; then
+            echo "Verifying $(basename "$framework"):"
+            /usr/bin/codesign --verify --verbose "$framework"
+          fi
+        done
+        
+        echo "Dynamic library signatures:"
+        for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
+          if [ -f "$dylib" ]; then
+            echo "Verifying $(basename "$dylib"):"
+            /usr/bin/codesign --verify --verbose "$dylib"
+          fi
+        done
+        
+        echo "✓ All signatures verified successfully"
         
         echo "Verifying app signature:"
         codesign --verify --verbose "$APP_PATH"
