@@ -286,7 +286,7 @@ jobs:
         echo "Signature info:"
         echo "$SIGNATURE_CHECK"
         
-        if echo "$SIGNATURE_CHECK" | grep -q "Developer ID Application"; then
+        if echo "$SIGNATURE_CHECK" | grep -q "Authority=Developer ID Application"; then
           echo "✓ App is properly signed with Developer ID Application certificate"
         elif echo "$SIGNATURE_CHECK" | grep -q "Authority="; then
           echo "⚠️  App is signed but may not be with the correct certificate type"
