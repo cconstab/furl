@@ -2,13 +2,22 @@
 
 This directory contains GitHub Actions workflows for automated building, testing, and releasing of the furl application.
 
+## Release Strategy
+
+Furl uses a **unified release approach** where both CLI tools and Flutter GUI apps are included in a single GitHub release:
+
+- **Single tag trigger**: `v*` (e.g., `v1.0.0`) triggers both workflows
+- **Two separate build workflows**: One for CLI tools, one for Flutter apps
+- **Single GitHub release**: Both workflows contribute files to the same release
+- **Comprehensive coverage**: Command-line tools + GUI apps for all platforms
+
 ## Workflows
 
 ### 1. Build Multi-Platform Releases (`build-release.yml`)
 
 **Trigger:** Git tags starting with `v*`, pull requests to main, manual dispatch
 
-**Purpose:** Builds furl binaries for multiple platforms and architectures:
+**Purpose:** Builds CLI tools and creates the main GitHub release
 
 #### Supported Platforms & Architectures:
 - **Linux:** 
@@ -27,13 +36,29 @@ This directory contains GitHub Actions workflows for automated building, testing
 - **Cross-compilation**: Docker BuildX with QEMU emulation for unsupported architectures
 - **Approach**: Follows the atsign-foundation/noports repository pattern for multi-architecture support
 
-#### Outputs:
+#### CLI Outputs:
 - Individual platform binaries (digitally signed)
 - Compressed archives (`.tar.gz` for Unix, `.zip` for Windows)
 - SHA256 checksums for all binaries
 - GPG signatures for Linux binaries
 - Docker images (multi-arch)
-- GitHub releases for tagged versions
+
+### 2. Flutter Release Build (`flutter-release.yml`)
+
+**Trigger:** Git tags starting with `v*`, manual dispatch
+
+**Purpose:** Builds Flutter GUI applications and adds them to the existing GitHub release
+
+#### Supported Platforms:
+- **Android**: APK and AAB for Play Store
+- **macOS**: Native .app bundle (signed and notarized)  
+- **Windows**: Native Flutter executable
+
+#### Flutter Outputs:
+- `app-release.apk` - Android APK for sideloading
+- `app-release.aab` - Android App Bundle for Play Store
+- `flutter_furl-macos-*.zip` - macOS app bundle
+- `flutter_furl-windows-*.zip` - Windows executable package
 
 #### Code Signing:
 - **Windows**: Authenticode signing with trusted certificate
@@ -41,12 +66,45 @@ This directory contains GitHub Actions workflows for automated building, testing
 - **Linux**: GPG detached signatures
 - **Verification**: SHA256 checksums for all platforms
 
-#### Release Assets:
-Each release includes:
+## Unified Release Assets
+
+Each release includes **both** CLI tools and GUI applications:
+
+### 🖥️ Command Line Tools:
 - `furl` / `furl.exe` - Main CLI application
 - `furl-server` / `furl-server.exe` - Local web server
+- `at_activate` / `at_activate.exe` - atPlatform onboarding tool
 - `web/` - Browser decryption interface
 - `wasm-crypto/` - WebAssembly crypto modules
+- `all-hashes.zip` - SHA256 checksums for all binaries
+- `*.sig` - GPG signatures (Linux only)
+
+### 📱 GUI Applications:
+- `app-release.apk` - Android APK for direct installation
+- `app-release.aab` - Android App Bundle for Play Store
+- `flutter_furl-macos-*.zip` - macOS application bundle
+- `flutter_furl-windows-*.zip` - Windows GUI application
+
+## Usage Examples
+
+### Creating a Release
+
+1. **Tag the release**: `git tag v1.0.0 && git push origin v1.0.0`
+2. **Both workflows run**: CLI and Flutter builds execute in parallel
+3. **Single release created**: Contains both CLI tools and GUI apps
+4. **All platforms covered**: Linux, macOS, Windows, Android
+
+### Workflow Dependencies
+
+```mermaid
+graph LR
+    A[Git Tag v*] --> B[build-release.yml]
+    A --> C[flutter-release.yml]
+    B --> D[Create GitHub Release]
+    C --> E[Add Flutter Apps to Release]
+    D --> F[Unified Release]
+    E --> F
+```
 
 ### 2. Continuous Integration (`ci.yml`)
 

@@ -439,6 +439,8 @@ jobs:
 
           ### Downloads
 
+          ## 🖥️ Command Line Tools
+
           **Linux:**
           - x64: `furl-linux-x64.tar.gz`
           - ARM64: `furl-linux-arm64.tar.gz` (Cross-compiled via Docker BuildX)
@@ -451,6 +453,18 @@ jobs:
 
           **Windows:**
           - x64: `furl-windows-x64.zip`
+
+          ## 📱 GUI Applications (Flutter)
+
+          **📱 Android:**
+          - `app-release.apk` - Standard APK for sideloading
+          - `app-release.aab` - Android App Bundle for Play Store
+
+          **🍎 macOS:**
+          - `flutter_furl-macos-*.zip` - macOS application bundle (signed and notarized)
+
+          **🪟 Windows:**
+          - `flutter_furl-windows-*.zip` - Windows executable and dependencies
 
           ### Cross-Compilation Notes
 
@@ -485,6 +499,7 @@ jobs:
 
           ### What's Included
 
+          ## 🖥️ Command Line Tools:
           - `furl` / `furl.exe`: Main CLI application
           - `furl-server` / `furl-server.exe`: Local web server for decryption
           - `at_activate` / `at_activate.exe`: atPlatform onboarding and authentication tool
@@ -492,6 +507,21 @@ jobs:
           - `wasm-crypto/`: WebAssembly crypto acceleration modules
           - `all-hashes.zip`: Contains all SHA256 checksums for every binary
           - `*.sig`: GPG signatures (Linux only)
+
+          ## 📱 GUI Applications:
+          - **Android APK/AAB**: Install directly or publish to Play Store
+          - **macOS App Bundle**: Native .app bundle for macOS (signed and notarized)
+          - **Windows App**: Native Flutter application for Windows
+
+          ### Installation Instructions
+
+          **📱 Android:** Download and install the APK, or use the AAB for Play Store distribution.
+
+          **🍎 macOS GUI:** Download the ZIP, extract, and run the .app bundle. May require allowing in System Preferences > Security & Privacy.
+
+          **🪟 Windows GUI:** Download the ZIP, extract to a folder, and run `flutter_furl.exe`.
+
+          **💻 Command Line:** Extract the appropriate archive for your platform and run the CLI tools.
 
         files: |
           release-files/*.tar.gz
