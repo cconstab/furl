@@ -154,7 +154,7 @@ packages:
     source: hosted
     version: "1.0.0"
   at_utils:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: at_utils
       sha256: "88a31fac0f046935cfced7c5fc7e1c2a781b6e0cc3d2101cbfd9bdf721425723"
@@ -825,7 +825,7 @@ packages:
     source: hosted
     version: "5.0.2"
   shared_preferences:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: shared_preferences
       sha256: "6e8bf70b7fef813df4e9a36f658ac46d107db4b4cfe1048b477d4e453a8159f5"

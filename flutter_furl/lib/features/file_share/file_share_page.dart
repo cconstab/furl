@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_furl/features/file_share/cubit/file_share_cubit.dart';
 import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
+import 'package:flutter_furl/widgets/atsign_manager_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'dart:io';
@@ -21,193 +22,302 @@ class _FileSharePageState extends State<FileSharePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF667eea), // Purple blue
-              Color(0xFF764ba2), // Purple
-            ],
+    return BlocListener<OnboardingCubit, OnboardingState>(
+      listener: (context, state) {
+        if (state is AtSignSwitching) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Switching to ${state.atSign}...'),
+              backgroundColor: const Color(0xFF667eea),
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF667eea), // Purple blue
+                Color(0xFF764ba2), // Purple
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // App bar
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    const Text('🔐', style: TextStyle(fontSize: 32)),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Furl - Secure File Sharing',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+          child: SafeArea(
+            child: Column(
+              children: [
+                // App bar
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      const Text('🔐', style: TextStyle(fontSize: 32)),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Furl - Secure File Sharing',
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
                       ),
+                      BlocBuilder<OnboardingCubit, OnboardingState>(
+                        builder: (context, state) {
+                          if (state is OnboardingCompleted) {
+                            return FutureBuilder<List<String>>(
+                              future: context.read<OnboardingCubit>().getStoredAtSigns(),
+                              builder: (context, snapshot) {
+                                final atSigns = snapshot.data ?? [];
+                                final hasMultipleAtSigns = atSigns.length > 1;
+
+                                if (hasMultipleAtSigns) {
+                                  return PopupMenuButton<String>(
+                                    onSelected: (selectedAtSign) {
+                                      if (selectedAtSign != state.atSign) {
+                                        context.read<OnboardingCubit>().switchAtSign(selectedAtSign);
+                                      }
+                                    },
+                                    itemBuilder: (context) => atSigns.map((atSign) {
+                                      final isCurrentAtSign = atSign == state.atSign;
+                                      return PopupMenuItem<String>(
+                                        value: atSign,
+                                        child: Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 12,
+                                              backgroundColor:
+                                                  isCurrentAtSign ? const Color(0xFF667eea) : Colors.grey.shade300,
+                                              child: Text(
+                                                atSign.substring(1, 2).toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: isCurrentAtSign ? Colors.white : Colors.grey.shade600,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              atSign,
+                                              style: TextStyle(
+                                                fontWeight: isCurrentAtSign ? FontWeight.bold : FontWeight.normal,
+                                                color: isCurrentAtSign ? const Color(0xFF667eea) : Colors.black87,
+                                              ),
+                                            ),
+                                            if (isCurrentAtSign) ...[
+                                              const Spacer(),
+                                              const Icon(Icons.check, size: 16, color: Color(0xFF667eea)),
+                                            ],
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(15),
+                                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            state.atSign,
+                                            style: const TextStyle(
+                                                fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            Icons.keyboard_arrow_down,
+                                            size: 16,
+                                            color: Colors.white.withOpacity(0.8),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  // Single atSign - just display it without dropdown
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(15),
+                                    ),
+                                    child: Text(
+                                      state.atSign,
+                                      style: const TextStyle(
+                                          fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
+                                    ),
+                                  );
+                                }
+                              },
+                            );
+                          }
+                          return const SizedBox();
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: Colors.white),
+                        onSelected: (value) {
+                          if (value == 'logout') {
+                            context.read<OnboardingCubit>().logout();
+                            context.read<FileShareCubit>().reset();
+                          } else if (value == 'manage_atsigns') {
+                            showDialog(
+                              context: context,
+                              builder: (context) => const AtSignManagerDialog(),
+                            );
+                          } else if (value == 'about') {
+                            _showAboutDialog(context);
+                          } else if (value == 'help') {
+                            _showHelpDialog(context);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'manage_atsigns',
+                            child: Row(children: [
+                              Icon(Icons.account_circle, size: 18),
+                              SizedBox(width: 8),
+                              Text('Manage atSigns')
+                            ]),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'help',
+                            child:
+                                Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 8), Text('Help')]),
+                          ),
+                          const PopupMenuItem(
+                            value: 'about',
+                            child:
+                                Row(children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('About')]),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'logout',
+                            child: Row(children: [Icon(Icons.logout, size: 18), SizedBox(width: 8), Text('Logout')]),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Main content in white container
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
+                      ],
                     ),
-                    BlocBuilder<OnboardingCubit, OnboardingState>(
-                      builder: (context, state) {
-                        if (state is OnboardingCompleted) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: Text(
-                              state.atSign,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
+                    child: BlocConsumer<FileShareCubit, FileShareState>(
+                      listener: (context, state) {
+                        if (state is FileShareError) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Text('❌', style: TextStyle(fontSize: 16)),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(state.message)),
+                                ],
+                              ),
+                              backgroundColor: Colors.red,
                             ),
                           );
                         }
-                        return const SizedBox();
                       },
-                    ),
-                    const SizedBox(width: 12),
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, color: Colors.white),
-                      onSelected: (value) {
-                        if (value == 'logout') {
-                          context.read<OnboardingCubit>().logout();
-                          context.read<FileShareCubit>().reset();
-                        } else if (value == 'about') {
-                          _showAboutDialog(context);
-                        } else if (value == 'help') {
-                          _showHelpDialog(context);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'help',
-                          child: Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 8), Text('Help')]),
-                        ),
-                        const PopupMenuItem(
-                          value: 'about',
-                          child: Row(children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('About')]),
-                        ),
-                        const PopupMenuItem(
-                          value: 'logout',
-                          child: Row(children: [Icon(Icons.logout, size: 18), SizedBox(width: 8), Text('Logout')]),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+                      builder: (context, state) {
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // File Drop Zone
+                              _buildDropZone(context, state),
 
-              // Main content in white container
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
-                    ],
-                  ),
-                  child: BlocConsumer<FileShareCubit, FileShareState>(
-                    listener: (context, state) {
-                      if (state is FileShareError) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Row(
-                              children: [
-                                const Text('❌', style: TextStyle(fontSize: 16)),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(state.message)),
+                              const SizedBox(height: 20),
+
+                              // Share Options Section (always visible)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '⚙️ Share Options',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ShareOptionsWidget(
+                                      initialTtl: _selectedTtl,
+                                      initialMessage: _customMessage,
+                                      onTtlChanged: (ttl) => setState(() => _selectedTtl = ttl),
+                                      onMessageChanged: (message) => setState(() => _customMessage = message),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              // Share Button (only visible when file is selected)
+                              if (state is FileSelected) ...[
+                                ElevatedButton(
+                                  onPressed: () {
+                                    final file = state.file;
+                                    final fileName = file.path.split('/').last;
+                                    context.read<FileShareCubit>().shareFile(
+                                          file,
+                                          fileName,
+                                          ttl: _selectedTtl,
+                                          message:
+                                              _customMessage?.trim().isEmpty == true ? null : _customMessage?.trim(),
+                                        );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF667eea),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  child: const Text(
+                                    '🔐 Encrypt and Share',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
                               ],
-                            ),
-                            backgroundColor: Colors.red,
+
+                              const SizedBox(height: 30),
+
+                              // Upload Progress or Results
+                              if (state is FileUploading) ...[
+                                _buildUploadProgress(context, state),
+                              ] else if (state is FileUploaded) ...[
+                                _buildUploadResult(context, state),
+                              ],
+                            ],
                           ),
                         );
-                      }
-                    },
-                    builder: (context, state) {
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.all(40),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // File Drop Zone
-                            _buildDropZone(context, state),
-
-                            const SizedBox(height: 20),
-
-                            // Share Options Section (always visible)
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade200),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    '⚙️ Share Options',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  ShareOptionsWidget(
-                                    initialTtl: _selectedTtl,
-                                    initialMessage: _customMessage,
-                                    onTtlChanged: (ttl) => setState(() => _selectedTtl = ttl),
-                                    onMessageChanged: (message) => setState(() => _customMessage = message),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            // Share Button (only visible when file is selected)
-                            if (state is FileSelected) ...[
-                              ElevatedButton(
-                                onPressed: () {
-                                  final file = state.file;
-                                  final fileName = file.path.split('/').last;
-                                  context.read<FileShareCubit>().shareFile(
-                                    file,
-                                    fileName,
-                                    ttl: _selectedTtl,
-                                    message: _customMessage?.trim().isEmpty == true ? null : _customMessage?.trim(),
-                                  );
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF667eea),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                child: const Text(
-                                  '🔐 Encrypt and Share',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-
-                            const SizedBox(height: 30),
-
-                            // Upload Progress or Results
-                            if (state is FileUploading) ...[
-                              _buildUploadProgress(context, state),
-                            ] else if (state is FileUploaded) ...[
-                              _buildUploadResult(context, state),
-                            ],
-                          ],
-                        ),
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

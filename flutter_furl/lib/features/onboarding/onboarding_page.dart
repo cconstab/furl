@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
+import 'package:flutter_furl/widgets/atsign_manager_dialog.dart';
 
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
@@ -149,6 +150,31 @@ class OnboardingPage extends StatelessWidget {
                                 ),
                               ),
                             ),
+
+                          const SizedBox(height: 16),
+
+                          // Manage existing atSigns button
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => const AtSignManagerDialog(),
+                                );
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF667eea),
+                                side: const BorderSide(color: Color(0xFF667eea)),
+                                minimumSize: const Size(double.infinity, 48),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: const Text(
+                                'Manage Existing atSigns',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
 
                           const SizedBox(height: 20),
 
