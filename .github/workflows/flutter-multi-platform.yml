@@ -49,15 +49,12 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.5'
+        flutter-version: '3.32.5'
         channel: 'stable'
         cache: true
 
     - name: Get Flutter dependencies
-      run: |
-        # Pin at_client_mobile to avoid incompatible 3.3.0
-        sed -i.bak 's/at_client_mobile: \^3\.2\.26/at_client_mobile: 3.2.26/' pubspec.yaml
-        flutter pub get
+      run: flutter pub get
 
     - name: Fix Android namespace issues
       run: |
@@ -95,7 +92,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.5'
+        flutter-version: '3.32.5'
         channel: 'stable'
         cache: true
 
@@ -103,10 +100,7 @@ jobs:
       run: flutter config --enable-macos-desktop
 
     - name: Get Flutter dependencies
-      run: |
-        # Pin at_client_mobile to avoid incompatible 3.3.0
-        sed -i.bak 's/at_client_mobile: \^3\.2\.26/at_client_mobile: 3.2.26/' pubspec.yaml
-        flutter pub get
+      run: flutter pub get
 
     - name: Build macOS app (release)
       run: flutter build macos --release
@@ -221,7 +215,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.5'
+        flutter-version: '3.32.5'
         channel: 'stable'
         cache: true
 
@@ -229,10 +223,7 @@ jobs:
       run: flutter config --enable-windows-desktop
 
     - name: Get Flutter dependencies
-      run: |
-        # Pin at_client_mobile to avoid incompatible 3.3.0
-        sed -i.bak 's/at_client_mobile: \^3\.2\.26/at_client_mobile: 3.2.26/' pubspec.yaml
-        flutter pub get
+      run: flutter pub get
 
     - name: Build Windows app (release)
       run: flutter build windows --release
