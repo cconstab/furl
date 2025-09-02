@@ -18,8 +18,19 @@ permissions:
 
 jobs:
   build-macos:
-    name: Build macOS App
-    runs-on: macos-latest
+    name: Build macOS App (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds - both architectures supported with native runners
+          - arch: x64
+            os: macos-13  # Intel runner
+            
+          - arch: arm64
+            os: macos-14  # M1/M2 runner
     
     defaults:
       run:
@@ -32,7 +43,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: 'stable'
+        flutter-version: '^3.24.5'
         channel: 'stable'
         cache: true
 
@@ -179,15 +190,15 @@ jobs:
           --icon "flutter_furl.app" 175 120 \
           --hide-extension "flutter_furl.app" \
           --app-drop-link 425 120 \
-          "flutter_furl.dmg" \
+          "flutter_furl-${{ matrix.arch }}.dmg" \
           "flutter_furl.app" || {
             echo "⚠️  DMG creation failed, will use ZIP archive instead"
           }
         
         # Move DMG to root if created successfully
-        if [ -f "flutter_furl.dmg" ]; then
-          mv flutter_furl.dmg ../../../../../
-          echo "✓ DMG created: flutter_furl.dmg"
+        if [ -f "flutter_furl-${{ matrix.arch }}.dmg" ]; then
+          mv flutter_furl-${{ matrix.arch }}.dmg ../../../../../
+          echo "✓ DMG created: flutter_furl-${{ matrix.arch }}.dmg"
         fi
         
         cd ../../../../../
@@ -196,9 +207,9 @@ jobs:
       run: |
         cd build/macos/Build/Products/Release/
         if [ -d "flutter_furl.app" ]; then
-          zip -r flutter_furl-macos.zip flutter_furl.app/
-          mv flutter_furl-macos.zip ../../../../../
-          echo "✓ macOS archive created: flutter_furl-macos.zip"
+          zip -r flutter_furl-macos-${{ matrix.arch }}.zip flutter_furl.app/
+          mv flutter_furl-macos-${{ matrix.arch }}.zip ../../../../../
+          echo "✓ macOS archive created: flutter_furl-macos-${{ matrix.arch }}.zip"
         else
           echo "✗ App bundle not found for archiving"
           exit 1
@@ -207,7 +218,7 @@ jobs:
     - name: Upload macOS app artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: macos-app-${{ github.sha }}
+        name: macos-app-${{ matrix.arch }}-${{ github.sha }}
         path: |
           flutter_furl/build/macos/Build/Products/Release/flutter_furl.app
           flutter_furl/build/macos/Build/Products/Debug/flutter_furl.app
@@ -216,10 +227,10 @@ jobs:
     - name: Upload macOS DMG/ZIP
       uses: actions/upload-artifact@v4
       with:
-        name: macos-installer-${{ github.sha }}
+        name: macos-installer-${{ matrix.arch }}-${{ github.sha }}
         path: |
-          flutter_furl/flutter_furl.dmg
-          flutter_furl/flutter_furl-macos.zip
+          flutter_furl/flutter_furl-${{ matrix.arch }}.dmg
+          flutter_furl/flutter_furl-macos-${{ matrix.arch }}.zip
         if-no-files-found: ignore
         retention-days: 30
 
