@@ -183,6 +183,7 @@ jobs:
             echo "Signing framework: $(basename "$framework")"
             /usr/bin/codesign \
               --force \
+              --deep \
               --options=runtime \
               --entitlements "$ENTITLEMENTS_PATH" \
               --timestamp \
@@ -210,10 +211,11 @@ jobs:
           fi
         done
         
-        # Sign the main app bundle
-        echo "Signing Flutter app bundle..."
+        # Sign the main app bundle with deep signing
+        echo "Signing Flutter app bundle with deep signing..."
         /usr/bin/codesign \
           --force \
+          --deep \
           --options=runtime \
           --entitlements "$ENTITLEMENTS_PATH" \
           --timestamp \
@@ -296,12 +298,18 @@ jobs:
         
         # Check if the app was actually signed
         echo "Checking app signature before notarization..."
-        if codesign -dv "$APP_PATH" 2>&1 | grep -q "Developer ID Application"; then
-          echo "✓ App appears to be properly signed with Developer ID"
+        SIGNATURE_CHECK=$(codesign -dv "$APP_PATH" 2>&1)
+        echo "Signature info:"
+        echo "$SIGNATURE_CHECK"
+        
+        if echo "$SIGNATURE_CHECK" | grep -q "Developer ID Application"; then
+          echo "✓ App is properly signed with Developer ID Application certificate"
+        elif echo "$SIGNATURE_CHECK" | grep -q "Authority="; then
+          echo "⚠️  App is signed but may not be with the correct certificate type"
+          echo "This might still work for notarization - proceeding..."
         else
-          echo "⚠️  WARNING: App may not be properly signed for notarization"
-          echo "Signature info:"
-          codesign -dv "$APP_PATH" 2>&1 || echo "Failed to check signature"
+          echo "❌ App does not appear to be signed properly"
+          exit 1
         fi
         
         # Create a zip file for notarization
