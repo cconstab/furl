@@ -6,6 +6,7 @@ import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
 import 'package:flutter_furl/widgets/atsign_manager_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:path/path.dart' as path;
 import 'dart:io';
 import 'dart:math';
 
@@ -279,7 +280,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                 ElevatedButton(
                                   onPressed: () {
                                     final file = state.file;
-                                    final fileName = file.path.split('/').last;
+                                    final fileName = path.basename(file.path);
                                     context.read<FileShareCubit>().shareFile(
                                           file,
                                           fileName,
@@ -369,10 +370,10 @@ class _FileSharePageState extends State<FileSharePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (state is FileSelected) ...[
-                  Text(_getFileIcon(state.file.path.split('/').last), style: const TextStyle(fontSize: 48)),
+                  Text(_getFileIcon(path.basename(state.file.path)), style: const TextStyle(fontSize: 48)),
                   const SizedBox(height: 8),
                   Text(
-                    state.file.path.split('/').last,
+                    path.basename(state.file.path),
                     style: const TextStyle(fontSize: 16, color: Color(0xFF667eea), fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
