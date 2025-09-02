@@ -255,7 +255,7 @@ jobs:
           APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
           DMG_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.dmg"
           
-          echo "=== Creating DMG with Applications folder and custom icon ==="
+          echo "=== Creating DMG with Applications folder ==="
           
           # Create a temporary directory for DMG contents
           mkdir -p dmg_temp
@@ -266,43 +266,11 @@ jobs:
           # Create Applications folder symlink for easy installation
           ln -s /Applications dmg_temp/Applications
           
-          # Generate a DMG icon (smaller version for volume icon)
-          cd flutter_furl
-          rsvg-convert assets/icons/padlock_icon.svg -w 128 -h 128 -o ../dmg_temp/.VolumeIcon.icns.png
-          
-          # Convert PNG to ICNS for DMG volume icon
-          # Create iconset directory
-          mkdir -p ../dmg_temp/VolumeIcon.iconset
-          
-          # Generate different sizes for the iconset
-          rsvg-convert assets/icons/padlock_icon.svg -w 16 -h 16 -o ../dmg_temp/VolumeIcon.iconset/icon_16x16.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 32 -h 32 -o ../dmg_temp/VolumeIcon.iconset/icon_16x16@2x.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 32 -h 32 -o ../dmg_temp/VolumeIcon.iconset/icon_32x32.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 64 -h 64 -o ../dmg_temp/VolumeIcon.iconset/icon_32x32@2x.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 128 -h 128 -o ../dmg_temp/VolumeIcon.iconset/icon_128x128.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 256 -h 256 -o ../dmg_temp/VolumeIcon.iconset/icon_128x128@2x.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 256 -h 256 -o ../dmg_temp/VolumeIcon.iconset/icon_256x256.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 512 -h 512 -o ../dmg_temp/VolumeIcon.iconset/icon_256x256@2x.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 512 -h 512 -o ../dmg_temp/VolumeIcon.iconset/icon_512x512.png
-          rsvg-convert assets/icons/padlock_icon.svg -w 1024 -h 1024 -o ../dmg_temp/VolumeIcon.iconset/icon_512x512@2x.png
-          
-          # Create ICNS file
-          iconutil -c icns ../dmg_temp/VolumeIcon.iconset -o ../dmg_temp/.VolumeIcon.icns
-          
-          # Clean up iconset directory
-          rm -rf ../dmg_temp/VolumeIcon.iconset
-          rm -f ../dmg_temp/.VolumeIcon.icns.png
-          
-          # Set the volume icon to be hidden (invisible in Finder)
-          chflags hidden ../dmg_temp/.VolumeIcon.icns
-          
-          cd ..
-          
           # Verify DMG contents
           echo "DMG contents:"
           ls -la dmg_temp/
           
-          # Create the DMG with proper settings and custom icon
+          # Create the DMG with proper settings (no custom volume icon)
           hdiutil create -volname "flutter_furl" \
             -srcfolder dmg_temp \
             -ov \
