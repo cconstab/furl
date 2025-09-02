@@ -23,7 +23,7 @@ void main() {
 
       // Verify that we have a MaterialApp with proper structure
       expect(find.byType(MaterialApp), findsOneWidget);
-      
+
       // The app should not crash during initial load
       expect(tester.takeException(), isNull);
     });

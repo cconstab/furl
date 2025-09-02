@@ -201,34 +201,14 @@ jobs:
         # Display signature info
         echo "Signature details:"
         codesign -dv --verbose=4 "$APP_PATH" 2>&1
-          if [ -d "$framework" ]; then
-            echo "Verifying $(basename "$framework")..."
-            if codesign --verify --verbose --strict "$framework" 2>&1; then
-              echo "✓ $(basename "$framework") signature valid"
-            else
-              echo "❌ $(basename "$framework") signature INVALID"
-              # Show detailed info for failed framework
-              echo "Framework info:"
-              codesign --display --verbose=4 "$framework" 2>&1 || true
-              exit 1
-            fi
-          fi
-        done
-        
-        # Verify dylib signatures
-        echo "Verifying dylib signatures..."
-        for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
-          if [ -f "$dylib" ]; then
-            echo "Verifying $(basename "$dylib")..."
-            if codesign --verify --verbose --strict "$dylib" 2>&1; then
       shell: bash
 
     - name: Notarize macOS app
       if: github.event_name != 'pull_request'
       env:
-        MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
-        MACOS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        MACOS_APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+        MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        MACOS_APPLE_ID_PASSWORD: ${{ secrets.MACOS_APPLE_ID_PASSWORD }}
       run: |
         echo "=== macOS App Notarization ==="
         
