@@ -1,256 +1,165 @@
-name: Build and Sign Flutter macOS App (Lando Version)
+name: Build Flutter macOS (Electron-inspired approach)
 
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-macos:
     runs-on: macos-14
     
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.32.5'
-        channel: 'stable'
-        
-    - name: Set up working directory
-      run: cd flutter_furl
-      
-    - name: Get dependencies
-      run: |
-        cd flutter_furl
-        flutter pub get
-        
-    - name: Build macOS app
-      run: |
-        cd flutter_furl
-        # Build universal binary (arm64 + x86_64)
-        flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin
-        
-        # Verify the binary architectures
-        echo "Built app architectures:"
-        file build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl
-        lipo -info build/macos/Build/Products/Release/flutter_furl.app/Contents/MacOS/flutter_furl || echo "Not a universal binary"
-        
-    - name: Create entitlements file
-      run: |
-        cat > entitlements.plist << EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>com.apple.security.app-sandbox</key>
-          <true/>
-          <key>com.apple.security.network.client</key>
-          <true/>
-          <key>com.apple.security.files.user-selected.read-write</key>
-          <true/>
-          <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-          <true/>
-        </dict>
-        </plist>
-        EOF
-        
-    - name: Debug secrets availability
-      run: |
-        echo "Checking secret availability..."
-        echo "MACOS_CERTIFICATE length: ${#MACOS_CERTIFICATE}"
-        echo "MACOS_CERTIFICATE_PASSWORD length: ${#MACOS_CERTIFICATE_PASSWORD}"
-        echo "MACOS_KEYCHAIN_PASSWORD length: ${#MACOS_KEYCHAIN_PASSWORD}"
-        echo "APPLE_TEAM_ID length: ${#APPLE_TEAM_ID}"
-        echo "APPLE_ID length: ${#APPLE_ID}"
-        echo "APPLE_APP_PASSWORD length: ${#APPLE_APP_PASSWORD}"
-        echo "MACOS_SIGNING_IDENTITY length: ${#MACOS_SIGNING_IDENTITY}"
-      env:
-        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-        
-    - name: Sign macOS app (Custom Approach)
-      if: github.event_name != 'pull_request'
-      env:
-        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
-        MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-      run: |
-        echo "=== Setting up signing environment ==="
-        
-        # Decode and import certificate
-        echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-        
-        # Create keychain
-        KEYCHAIN_PATH="$HOME/Library/Keychains/build.keychain"
-        security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
-        security set-keychain-settings -lut 21600 build.keychain
-        security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
-        security list-keychain -d user -s build.keychain
-        
-        # Import certificate
-        security import certificate.p12 -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k build.keychain
-        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" build.keychain
-        
-        echo "Available signing identities:"
-        security find-identity -v -p codesigning
-        
-        APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
-        
-        # Verify app exists
-        if [ ! -d "$APP_PATH" ]; then
-          echo "❌ App not found at: $APP_PATH"
-          find flutter_furl/build -name "*.app" -type d || true
-          exit 1
-        fi
-        
-        # Check that we have the signing identity available
-        echo "Checking for signing identity: $MACOS_SIGNING_IDENTITY"
-        if ! security find-identity -v -p codesigning | grep -q "$MACOS_SIGNING_IDENTITY"; then
-          echo "❌ Signing identity '$MACOS_SIGNING_IDENTITY' not found!"
-          echo "Available identities:"
-          security find-identity -v -p codesigning
-          exit 1
-        fi
-        
-        # Sign frameworks first (required for proper nested signing)
-        echo "Signing individual frameworks and dylibs..."
-        find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d | while read framework; do
-          echo "  Signing framework: $(basename "$framework")"
-          codesign --force --options runtime --timestamp \
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.5'
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Import Certificate (Electron CSC approach)
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          # Decode certificate from base64 and save as certificate.p12
+          echo "$CSC_LINK" | base64 --decode > certificate.p12
+          
+          # Create keychain with partition list support
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          
+          # Import certificate with proper flags
+          security import certificate.p12 \
+            -k build.keychain \
+            -P "$CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -x
+          
+          # Set partition list (critical for newer macOS versions)
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$MACOS_KEYCHAIN_PASSWORD" \
+            build.keychain
+          
+          # Verify certificate is available
+          echo "=== Available signing identities ==="
+          security find-identity -v -p codesigning build.keychain
+          
+          # Clean up certificate file
+          rm certificate.p12
+
+      - name: Build Flutter macOS
+        run: |
+          flutter build macos --release
+          
+          # Verify the build output and architecture
+          echo "Build completed. Checking app bundle..."
+          ls -la build/macos/Build/Products/Release/
+          echo "Checking binary architecture..."
+          file build/macos/Build/Products/Release/furl.app/Contents/MacOS/furl
+          lipo -info build/macos/Build/Products/Release/furl.app/Contents/MacOS/furl || true
+
+      - name: Sign Application (Following Electron patterns)
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/furl.app"
+          
+          echo "=== Deep signing all frameworks and binaries ==="
+          # Sign using --deep flag like the Electron example suggests
+          codesign --force \
+            --deep \
+            --verify \
+            --verbose=4 \
             --sign "$MACOS_SIGNING_IDENTITY" \
-            --verbose "$framework" || {
-            echo "❌ Failed to sign framework: $framework"
-            exit 1
-          }
-        done
-        
-        find "$APP_PATH/Contents/Frameworks" -name "*.dylib" -type f | while read dylib; do
-          echo "  Signing dylib: $(basename "$dylib")"
-          codesign --force --options runtime --timestamp \
+            --timestamp \
+            --options runtime \
+            --entitlements macos/Runner/DebugProfile.entitlements \
+            "$APP_PATH"
+          
+          echo "=== Verification ==="
+          codesign --verify --deep --verbose=4 "$APP_PATH"
+          codesign --display --verbose=4 "$APP_PATH"
+          
+          # Check all signed components
+          echo "=== Checking all signatures in bundle ==="
+          codesign -dv --verbose=4 "$APP_PATH"
+
+      - name: Create DMG
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/furl.app"
+          DMG_PATH="build/macos/Build/Products/Release/furl.dmg"
+          
+          # Create a temporary directory for DMG contents
+          mkdir -p dmg_temp
+          
+          # Copy the app to the temporary directory
+          cp -R "$APP_PATH" dmg_temp/
+          
+          # Create the DMG
+          hdiutil create -volname "furl" -srcfolder dmg_temp -ov -format UDZO "$DMG_PATH"
+          
+          # Clean up
+          rm -rf dmg_temp
+          
+          echo "DMG created at: $DMG_PATH"
+          ls -la "$DMG_PATH"
+
+      - name: Sign DMG
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          DMG_PATH="build/macos/Build/Products/Release/furl.dmg"
+          
+          echo "=== Signing DMG ==="
+          codesign --force \
+            --verify \
+            --verbose=4 \
             --sign "$MACOS_SIGNING_IDENTITY" \
-            --verbose "$dylib" || {
-            echo "❌ Failed to sign dylib: $dylib" 
-            exit 1
-          }
-        done
-        
-        # Now sign the main app bundle
-        echo "Signing main app bundle..."
-        codesign \
-          --sign "$MACOS_SIGNING_IDENTITY" \
-          --force \
-          --options runtime \
-          --timestamp \
-          --entitlements entitlements.plist \
-          --verbose \
-          "$APP_PATH" || {
-          echo "❌ Failed to sign main app bundle"
-          exit 1
-        }
-        
-        # Verify signature thoroughly
-        echo "Verifying signature..."
-        
-        # Check main app signature
-        echo "Checking main app signature..."
-        codesign -dvvv "$APP_PATH" || {
-          echo "❌ Failed to get signature details for main app"
-          exit 1
-        }
-        
-        codesign --verify --deep --strict --verbose=2 "$APP_PATH" || {
-          echo "❌ Main app signature verification failed"
-          exit 1
-        }
-        
-        # Verify individual components
-        echo "Verifying framework signatures..."
-        find "$APP_PATH/Contents/Frameworks" -name "*.framework" -o -name "*.dylib" | while read component; do
-          echo "  Verifying: $(basename "$component")"
-          codesign --verify --verbose "$component" || {
-            echo "❌ Signature verification failed for: $component"
-            exit 1
-          }
-        done
-        
-        echo "✅ All signatures verified successfully"
-        
-    - name: Notarize macOS app
-      if: github.event_name != 'pull_request'
-      env:
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-      run: |
-        echo "=== macOS App Notarization ==="
-        
-        APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
-        
-        # Create archive for notarization
-        echo "Creating archive for notarization..."
-        cd flutter_furl/build/macos/Build/Products/Release/
-        zip -r flutter_furl-for-notarization.zip flutter_furl.app/
-        
-        echo "Submitting app for notarization..."
-        SUBMISSION_ID=$(xcrun notarytool submit flutter_furl-for-notarization.zip \
-          --apple-id "$APPLE_ID" \
-          --team-id "$APPLE_TEAM_ID" \
-          --password "$APPLE_APP_PASSWORD" \
-          --wait \
-          --output-format json | jq -r '.id // empty')
-        
-        if [ -z "$SUBMISSION_ID" ]; then
-          echo "❌ Failed to get submission ID"
-          exit 1
-        fi
-        
-        echo "Submission ID: $SUBMISSION_ID"
-        
-        # Check notarization status
-        NOTARY_STATUS=$(xcrun notarytool info "$SUBMISSION_ID" \
-          --apple-id "$APPLE_ID" \
-          --team-id "$APPLE_TEAM_ID" \
-          --password "$APPLE_APP_PASSWORD" \
-          --output-format json | jq -r '.status // empty')
-        
-        echo "Notarization status: $NOTARY_STATUS"
-        
-        if [ "$NOTARY_STATUS" != "Accepted" ]; then
-          echo "❌ Notarization failed with status: $NOTARY_STATUS"
-          echo "Getting detailed logs..."
-          xcrun notarytool log "$SUBMISSION_ID" \
+            --timestamp \
+            --options runtime \
+            "$DMG_PATH"
+          
+          echo "=== Verifying DMG signature ==="
+          codesign --verify --verbose=4 "$DMG_PATH"
+          codesign --display --verbose=4 "$DMG_PATH"
+
+      - name: Notarize Application (Using Electron env var names)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASS: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_PATH="build/macos/Build/Products/Release/furl.dmg"
+          
+          echo "=== Starting notarization with notarytool ==="
+          xcrun notarytool submit "$DMG_PATH" \
             --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASS" \
             --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_PASSWORD" || true
-          exit 1
-        fi
-        
-        echo "✓ Notarization completed successfully"
-        
-        # Staple the notarization ticket
-        echo "Stapling notarization ticket..."
-        if xcrun stapler staple flutter_furl.app; then
-          echo "✓ Stapling successful"
-          xcrun stapler validate flutter_furl.app
-        else
-          echo "❌ Stapling failed"
-        fi
-        
-        cd ../../../../../
-        
-    - name: Upload signed app
-      if: github.event_name != 'pull_request'
-      uses: actions/upload-artifact@v4
-      with:
-        name: flutter-furl-macos-signed
-        path: flutter_furl/build/macos/Build/Products/Release/flutter_furl.app
+            --wait \
+            --timeout 30m
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: furl-macos-dmg
+          path: build/macos/Build/Products/Release/furl.dmg
+          retention-days: 30
