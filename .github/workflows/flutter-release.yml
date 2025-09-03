@@ -46,14 +46,10 @@ jobs:
       run: flutter config --enable-macos-desktop
 
     - name: Get Flutter dependencies
-      run: |
-        cd flutter_furl
-        flutter pub get
+      run: flutter pub get
 
     - name: Build macOS app (release)
-      run: |
-        cd flutter_furl
-        flutter build macos --release
+      run: flutter build macos --release
 
     - name: Code sign macOS app (release)
       env:
@@ -101,7 +97,7 @@ jobs:
         # Clean up certificate file
         rm certificate.p12
         
-        APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
+        APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
         
         echo "=== Deep signing all frameworks and binaries ==="
         # Sign using --deep flag like the Electron example suggests
@@ -112,7 +108,7 @@ jobs:
           --sign "$MACOS_SIGNING_IDENTITY" \
           --timestamp \
           --options runtime \
-          --entitlements flutter_furl/macos/Runner/DebugProfile.entitlements \
+          --entitlements macos/Runner/DebugProfile.entitlements \
           "$APP_PATH"
         
         echo "=== Verification ==="
@@ -136,10 +132,10 @@ jobs:
         fi
         
         echo "=== Notarizing macOS Flutter App ==="
-        APP_PATH="flutter_furl/build/macos/Build/Products/Release/flutter_furl.app"
+        APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
         
         # Create a zip file for notarization (Apple requires app bundles to be zipped)
-        cd flutter_furl/build/macos/Build/Products/Release/
+        cd build/macos/Build/Products/Release/
         zip -r flutter_furl-for-notarization.zip flutter_furl.app/
         
         # Submit for notarization with proper error handling
@@ -193,7 +189,7 @@ jobs:
 
     - name: Create macOS archive
       run: |
-        cd flutter_furl/build/macos/Build/Products/Release/
+        cd build/macos/Build/Products/Release/
         zip -r flutter_furl-macos-${{ github.ref_name }}.zip flutter_furl.app/
         mv flutter_furl-macos-${{ github.ref_name }}.zip ../../../../../
 
