@@ -276,12 +276,14 @@ jobs:
         # Create flutter-hashes directory
         mkdir -p flutter-hashes
         
-        # Generate hashes for Flutter apps
-        find artifacts -name "flutter_furl-*.zip" -type f | while read file; do
+        # Generate hashes for Flutter apps (handle both ZIP and DMG)
+        find artifacts -name "flutter_furl-*" -type f \( -name "*.zip" -o -name "*.dmg" \) | while read file; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
             echo "Generating hash for $filename"
-            sha256sum "$file" | cut -d' ' -f1 > "flutter-hashes/${filename%.zip}.sha256"
+            # Extract base name without extension for hash filename
+            base_name="${filename%.*}"
+            sha256sum "$file" | cut -d' ' -f1 > "flutter-hashes/${base_name}.sha256"
           fi
         done
         
@@ -344,13 +346,13 @@ jobs:
           ### Download Options:
           
           **🍎 macOS:**
-          - `flutter_furl-macos-*.zip` - macOS application bundle (signed and notarized)
+          - `flutter_furl-macos-*.dmg` - macOS installer disk image (signed and notarized)
           
           **🪟 Windows:**
           - `flutter_furl-windows-*.zip` - Windows executable and dependencies
           
           ### Installation Instructions:
           
-          **macOS:** Download the ZIP, extract, and run the .app bundle. May require allowing in System Preferences > Security & Privacy.
+          **macOS:** Download the DMG, open it, and drag the app to Applications folder.
           
           **Windows:** Download the ZIP, extract to a folder, and run `flutter_furl.exe`.
