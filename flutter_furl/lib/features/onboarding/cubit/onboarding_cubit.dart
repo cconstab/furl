@@ -188,21 +188,8 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
       _logger.info('Starting fresh onboarding. Current atSign: $currentAtSign, All atSigns: $allCurrentAtSigns');
 
-      // Get all atSigns from keychain and temporarily clear them
-      final keyChainManager = KeyChainManager.getInstance();
-      final keychainAtSigns = await keyChainManager.getAtSignListFromKeychain();
-
-      // Temporarily clear all atSigns from biometric storage to force fresh onboarding
-      for (final atSign in keychainAtSigns) {
-        try {
-          await keyChainManager.resetAtSignFromKeychain(atSign);
-          _logger.info('Temporarily cleared $atSign from biometric storage');
-        } catch (e) {
-          _logger.warning('Failed to clear $atSign from biometric storage: $e');
-        }
-      }
-
-      // Reset the AtClientManager to ensure clean state
+      // Just reset the AtClientManager to ensure clean state for new onboarding
+      // Don't clear biometric storage - that's what was causing the CRAM secret issue
       AtClientManager.getInstance().reset();
 
       // Get storage paths
@@ -224,7 +211,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
       _logger.info('Using storage path: ${atClientStorageDir.path}');
 
-      // Start the onboarding process with clean biometric storage
+      // Start the onboarding process - this should show the file picker for atKeys
       final result = await AtOnboarding.onboard(
         context: context,
         config: AtOnboardingConfig(
@@ -244,7 +231,6 @@ class OnboardingCubit extends Cubit<OnboardingState> {
           _logger.info('Added new atSign $newAtSign to AtSignManager');
 
           // If there was a current atSign, switch back to it
-          // This will restore the biometric storage data through the normal switch process
           if (currentAtSign != null && currentAtSign.isNotEmpty) {
             final success = await AtSignManager.switchToAtSign(currentAtSign);
             if (success) {
