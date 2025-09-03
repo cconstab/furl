@@ -332,19 +332,8 @@ class _FileSharePageState extends State<FileSharePage> {
         if (files.isNotEmpty) {
           final file = File(files.first.path);
 
-          // Check file size for drag and drop
+          // Process dropped file
           try {
-            final fileSize = await file.length();
-            if (!_isFileSizeValid(fileSize)) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('File too large! Maximum size is 100 MB.\nDropped file: ${_formatFileSize(fileSize)}'),
-                  backgroundColor: Colors.red.shade600,
-                ),
-              );
-              return;
-            }
-
             context.read<FileShareCubit>().selectFile(file);
           } catch (e) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing dropped file: $e')));
@@ -383,12 +372,11 @@ class _FileSharePageState extends State<FileSharePage> {
                     builder: (context, snapshot) {
                       if (snapshot.hasData) {
                         final size = snapshot.data!;
-                        final isValid = _isFileSizeValid(size);
                         return Text(
                           _formatFileSize(size),
                           style: TextStyle(
                             fontSize: 14,
-                            color: isValid ? Colors.grey.shade600 : Colors.red.shade600,
+                            color: Colors.grey.shade600,
                             fontWeight: FontWeight.normal,
                           ),
                         );
@@ -739,11 +727,6 @@ String _formatFileSize(int bytes) {
   return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
 }
 
-bool _isFileSizeValid(int bytes) {
-  const maxSizeInBytes = 100 * 1024 * 1024; // 100 MB limit
-  return bytes <= maxSizeInBytes;
-}
-
 String _formatExpiration(DateTime expiresAt) {
   final now = DateTime.now();
   final difference = expiresAt.difference(now);
@@ -779,7 +762,7 @@ void _showAboutDialog(BuildContext context) {
           children: [
             const Text('File Upload Limits', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
-            const Text('Maximum file size: 100 MB'),
+            const Text('Maximum file size: No limit'),
             const Text('Supported file types: All'),
             const SizedBox(height: 16),
             const Text('Security Features', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -859,18 +842,6 @@ void _selectFile(BuildContext context) async {
 
     if (result != null) {
       File file = File(result.files.single.path!);
-
-      // Check file size
-      final fileSize = await file.length();
-      if (!_isFileSizeValid(fileSize)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('File too large! Maximum size is 100 MB.\nSelected file: ${_formatFileSize(fileSize)}'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
-        return;
-      }
 
       // Select the file (don't upload yet - wait for user to click Encrypt and Share button)
       context.read<FileShareCubit>().selectFile(file);
