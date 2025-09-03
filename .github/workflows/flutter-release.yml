@@ -100,12 +100,12 @@ jobs:
 
     - name: Notarize macOS app
       env:
-        MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
-        MACOS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        MACOS_APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_ID_PASS: ${{ secrets.APPLE_APP_PASSWORD }}
       run: |
         # Check if notarization secrets are available
-        if [ -z "$MACOS_APPLE_ID" ]; then
+        if [ -z "$APPLE_ID" ]; then
           echo "⚠️  Notarization secrets not available, skipping notarization"
           exit 0
         fi
@@ -113,21 +113,39 @@ jobs:
         echo "=== Notarizing macOS Flutter App ==="
         APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
         
-        # Create a zip file for notarization
+        # Create a zip file for notarization (Apple requires app bundles to be zipped)
         cd build/macos/Build/Products/Release/
         zip -r flutter_furl-for-notarization.zip flutter_furl.app/
         
-        # Submit for notarization
-        xcrun notarytool submit flutter_furl-for-notarization.zip \
-          --apple-id "$MACOS_APPLE_ID" \
-          --team-id "$MACOS_TEAM_ID" \
-          --password "$MACOS_APPLE_ID_PASSWORD" \
-          --wait
+        # Submit for notarization with proper error handling
+        echo "Submitting for notarization..."
+        SUBMISSION_ID=$(xcrun notarytool submit flutter_furl-for-notarization.zip \
+          --apple-id "$APPLE_ID" \
+          --team-id "$APPLE_TEAM_ID" \
+          --password "$APPLE_ID_PASS" \
+          --wait \
+          --timeout 30m \
+          --output-format json | jq -r '.id // empty')
         
-        # Staple the notarization ticket
-        xcrun stapler staple flutter_furl.app
+        if [ -n "$SUBMISSION_ID" ]; then
+          echo "Submission ID: $SUBMISSION_ID"
+          
+          # Check status and get detailed info if failed
+          xcrun notarytool info "$SUBMISSION_ID" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_ID_PASS"
+          
+          # Staple the notarization ticket
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple flutter_furl.app
+          
+          echo "✓ Notarization completed successfully"
+        else
+          echo "❌ Failed to get submission ID"
+          exit 1
+        fi
         
-        echo "✓ Notarization completed"
         cd ../../../../../
       shell: bash
       continue-on-error: true
