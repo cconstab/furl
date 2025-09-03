@@ -119,85 +119,93 @@ jobs:
       shell: bash
       continue-on-error: true
 
-    - name: Notarize macOS app
+    - name: Create DMG
+      run: |
+        APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
+        DMG_PATH="build/macos/Build/Products/Release/flutter_furl.dmg"
+        
+        echo "=== Creating DMG with Applications folder ==="
+        
+        # Create a temporary directory for DMG contents
+        mkdir -p dmg_temp
+        
+        # Copy the app to the temporary directory
+        cp -R "$APP_PATH" dmg_temp/
+        
+        # Create Applications folder symlink for easy installation
+        ln -s /Applications dmg_temp/Applications
+        
+        # Verify DMG contents
+        echo "DMG contents:"
+        ls -la dmg_temp/
+        
+        # Create the DMG with proper settings (no custom volume icon)
+        hdiutil create -volname "flutter_furl" \
+          -srcfolder dmg_temp \
+          -ov \
+          -format UDZO \
+          -imagekey zlib-level=9 \
+          "$DMG_PATH"
+        
+        # Clean up
+        rm -rf dmg_temp
+        
+        echo "DMG created at: $DMG_PATH"
+        ls -la "$DMG_PATH"
+
+    - name: Sign DMG
+      env:
+        MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      run: |
+        DMG_PATH="build/macos/Build/Products/Release/flutter_furl.dmg"
+        
+        echo "=== Signing DMG ==="
+        codesign --force \
+          --verify \
+          --verbose=4 \
+          --sign "$MACOS_SIGNING_IDENTITY" \
+          --timestamp \
+          --options runtime \
+          "$DMG_PATH"
+        
+        echo "=== Verifying DMG signature ==="
+        codesign --verify --verbose=4 "$DMG_PATH"
+        codesign --display --verbose=4 "$DMG_PATH"
+
+    - name: Notarize DMG (Using working method)
       env:
         APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         APPLE_ID_PASS: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        # Check if notarization secrets are available
-        if [ -z "$APPLE_ID" ]; then
-          echo "⚠️  Notarization secrets not available, skipping notarization"
-          exit 0
-        fi
+        DMG_PATH="build/macos/Build/Products/Release/flutter_furl.dmg"
         
-        echo "=== Notarizing macOS Flutter App ==="
-        APP_PATH="build/macos/Build/Products/Release/flutter_furl.app"
+        echo "=== Starting notarization of DMG ==="
+        echo "DMG file: $DMG_PATH"
+        ls -la "$DMG_PATH"
         
-        # Create a zip file for notarization (Apple requires app bundles to be zipped)
-        cd build/macos/Build/Products/Release/
-        zip -r flutter_furl-for-notarization.zip flutter_furl.app/
-        
-        # Submit for notarization with proper error handling
-        echo "Submitting for notarization..."
-        SUBMISSION_ID=$(xcrun notarytool submit flutter_furl-for-notarization.zip \
+        # Submit the DMG for notarization (this method works!)
+        xcrun notarytool submit "$DMG_PATH" \
           --apple-id "$APPLE_ID" \
-          --team-id "$APPLE_TEAM_ID" \
           --password "$APPLE_ID_PASS" \
+          --team-id "$APPLE_TEAM_ID" \
           --wait \
-          --timeout 30m \
-          --output-format json | jq -r '.id // empty')
-        
-        if [ -n "$SUBMISSION_ID" ]; then
-          echo "Submission ID: $SUBMISSION_ID"
-          
-          # Check status and get detailed info
-          echo "Getting submission status..."
-          SUBMISSION_INFO=$(xcrun notarytool info "$SUBMISSION_ID" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_ID_PASS" \
-            --output-format json)
-          
-          echo "Submission info: $SUBMISSION_INFO"
-          
-          STATUS=$(echo "$SUBMISSION_INFO" | jq -r '.status // empty')
-          echo "Notarization status: $STATUS"
-          
-          if [ "$STATUS" = "Accepted" ]; then
-            # Staple the notarization ticket
-            echo "Stapling notarization ticket..."
-            xcrun stapler staple flutter_furl.app
-            echo "✓ Notarization completed successfully"
-          else
-            echo "❌ Notarization failed with status: $STATUS"
-            echo "Getting detailed logs..."
-            xcrun notarytool log "$SUBMISSION_ID" \
-              --apple-id "$APPLE_ID" \
-              --team-id "$APPLE_TEAM_ID" \
-              --password "$APPLE_ID_PASS"
-            exit 1
-          fi
-        else
-          echo "❌ Failed to get submission ID"
-          exit 1
-        fi
-        
-        cd ../../../../../
+          --timeout 30m
       shell: bash
       continue-on-error: true
 
     - name: Create macOS archive
       run: |
-        cd build/macos/Build/Products/Release/
-        zip -r flutter_furl-macos-${{ github.ref_name }}.zip flutter_furl.app/
-        mv flutter_furl-macos-${{ github.ref_name }}.zip ../../../../../
+        DMG_PATH="build/macos/Build/Products/Release/flutter_furl.dmg"
+        
+        # Copy the DMG to the release artifact location
+        cp "$DMG_PATH" "flutter_furl-macos-${{ github.ref_name }}.dmg"
 
     - name: Upload macOS artifacts
       uses: actions/upload-artifact@v4
       with:
         name: macos-builds-${{ github.ref_name }}
-        path: flutter_furl/flutter_furl-macos-${{ github.ref_name }}.zip
+        path: flutter_furl-macos-${{ github.ref_name }}.dmg
         retention-days: 90
 
   build-windows:
