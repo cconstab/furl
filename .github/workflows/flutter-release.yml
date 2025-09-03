@@ -194,19 +194,39 @@ jobs:
       shell: bash
       continue-on-error: true
 
-    - name: Create macOS archive
+    - name: Prepare macOS artifact for release
       run: |
         DMG_PATH="build/macos/Build/Products/Release/flutter_furl.dmg"
+        RELEASE_DMG="flutter_furl-macos-${{ github.ref_name }}.dmg"
+        RELEASE_ZIP="flutter_furl-macos-${{ github.ref_name }}.dmg.zip"
         
-        # Copy the DMG to the release artifact location
-        cp "$DMG_PATH" "flutter_furl-macos-${{ github.ref_name }}.dmg"
+        # Copy and rename the DMG 
+        cp "$DMG_PATH" "$RELEASE_DMG"
+        
+        echo "✅ Created DMG: $RELEASE_DMG"
+        ls -la "$RELEASE_DMG"
+        
+        # Create ZIP archive containing the DMG
+        echo "=== Creating ZIP archive ==="
+        zip -9 "$RELEASE_ZIP" "$RELEASE_DMG"
+        
+        echo "✅ Created ZIP archive: $RELEASE_ZIP"
+        ls -la "$RELEASE_ZIP"
+        
+        # Show compression ratio
+        DMG_SIZE=$(stat -f%z "$RELEASE_DMG")
+        ZIP_SIZE=$(stat -f%z "$RELEASE_ZIP")
+        echo "DMG size: $(numfmt --to=iec $DMG_SIZE)"
+        echo "ZIP size: $(numfmt --to=iec $ZIP_SIZE)"
+        echo "Compression: $(echo "scale=1; ($DMG_SIZE - $ZIP_SIZE) * 100 / $DMG_SIZE" | bc)% reduction"
 
     - name: Upload macOS artifacts
       uses: actions/upload-artifact@v4
       with:
         name: macos-builds-${{ github.ref_name }}
-        path: flutter_furl-macos-${{ github.ref_name }}.dmg
+        path: flutter_furl-macos-${{ github.ref_name }}.dmg.zip
         retention-days: 90
+        if-no-files-found: error
 
   build-windows:
     name: Build Windows
@@ -281,8 +301,12 @@ jobs:
           if [ -f "$file" ]; then
             filename=$(basename "$file")
             echo "Generating hash for $filename"
-            # Extract base name without extension for hash filename
-            base_name="${filename%.*}"
+            # Extract base name, handling double extensions like .dmg.zip
+            if [[ "$filename" == *.dmg.zip ]]; then
+              base_name="${filename%.dmg.zip}"
+            else
+              base_name="${filename%.*}"
+            fi
             sha256sum "$file" | cut -d' ' -f1 > "flutter-hashes/${base_name}.sha256"
           fi
         done
@@ -346,13 +370,13 @@ jobs:
           ### Download Options:
           
           **🍎 macOS:**
-          - `flutter_furl-macos-*.dmg` - macOS installer disk image (signed and notarized)
+          - `flutter_furl-macos-*.dmg.zip` - Compressed macOS installer (contains signed and notarized DMG)
           
           **🪟 Windows:**
           - `flutter_furl-windows-*.zip` - Windows executable and dependencies
           
           ### Installation Instructions:
           
-          **macOS:** Download the DMG, open it, and drag the app to Applications folder.
+          **macOS:** Download the ZIP, extract to get the DMG file, open the DMG, and drag the app to Applications folder.
           
           **Windows:** Download the ZIP, extract to a folder, and run `flutter_furl.exe`.
