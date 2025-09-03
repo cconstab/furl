@@ -224,7 +224,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: macos-builds-${{ github.ref_name }}
-        path: flutter_furl-macos-${{ github.ref_name }}.dmg.zip
+        path: flutter_furl/flutter_furl-macos-${{ github.ref_name }}.dmg.zip
         retention-days: 90
         if-no-files-found: error
 
