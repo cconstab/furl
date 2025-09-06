@@ -303,7 +303,7 @@ jobs:
   # Native ARM64 builds using GitHub's ARM64 runners
   native_arm64_build:
     name: Build Linux ARM64 (Native)
-    runs-on: ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     
     steps:
     - name: Checkout repository
