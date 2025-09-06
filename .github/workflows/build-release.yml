@@ -353,8 +353,17 @@ jobs:
     - name: Create release archive
       run: |
         cd build
-        if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz ]; then
-          mv furl-${{ matrix.platform }}-${{ matrix.arch }}.tgz furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
+        echo "Contents of build directory:"
+        ls -la
+        
+        # The Docker build creates furl-linux-{arch}.tar.gz files
+        if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz ]; then
+          mv furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
+          echo "✅ Found and renamed furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+        else
+          echo "❌ Expected file furl-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz not found"
+          echo "Available files:"
+          find . -name "*.tar.gz" -o -name "*.tgz" | head -10
         fi
 
     - name: Generate checksums
@@ -362,6 +371,39 @@ jobs:
         cd build
         if [ -f furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz ]; then
           sha256sum furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz | cut -d' ' -f1 > furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256
+          echo "✅ Generated checksum for furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz"
+          echo "Checksum: $(cat furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256)"
+        else
+          echo "❌ Cannot generate checksum - file furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz not found"
+          echo "Available files for checksum:"
+          ls -la
+        fi
+
+    - name: Verify files before upload
+      run: |
+        cd build
+        echo "=== Verifying files before upload ==="
+        echo "Expected files:"
+        echo "  - furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz"
+        echo "  - furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256"
+        echo ""
+        echo "Actual files in build directory:"
+        ls -la
+        echo ""
+        
+        TAR_FILE="furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz"
+        SHA_FILE="furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256"
+        
+        if [ -f "$TAR_FILE" ]; then
+          echo "✅ $TAR_FILE exists ($(du -h "$TAR_FILE" | cut -f1))"
+        else
+          echo "❌ $TAR_FILE missing"
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "✅ $SHA_FILE exists"
+        else
+          echo "❌ $SHA_FILE missing"
         fi
 
     - name: Upload cross-compiled artifacts
@@ -372,6 +414,7 @@ jobs:
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256
         retention-days: 30
+        if-no-files-found: warn
 
   release:
     name: Create Release
