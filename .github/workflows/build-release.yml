@@ -300,9 +300,60 @@ jobs:
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.zip
         retention-days: 30
 
-  # Docker BuildX job for ARM/RISC-V cross-compilation
+  # Native ARM64 builds using GitHub's ARM64 runners
+  native_arm64_build:
+    name: Build Linux ARM64 (Native)
+    runs-on: ubuntu-24.04-arm64
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+
+    - name: Get dependencies
+      run: dart pub get
+
+    - name: Build executables
+      run: |
+        mkdir -p build
+        dart compile exe bin/furl.dart -o build/furl
+        dart compile exe bin/furl_server.dart -o build/furl-server
+        dart compile exe bin/at_activate.dart -o build/at_activate
+        
+        # Copy web assets
+        cp -r web build/
+        cp -r wasm-crypto build/
+
+    - name: Create archive
+      run: |
+        cd build
+        tar -czf furl-linux-arm64-${{ github.ref_name }}.tar.gz furl furl-server at_activate web/ wasm-crypto/
+        
+        echo "✅ Created native ARM64 build:"
+        ls -la furl-linux-arm64-${{ github.ref_name }}.tar.gz
+
+    - name: Generate checksum
+      run: |
+        cd build
+        sha256sum furl-linux-arm64-${{ github.ref_name }}.tar.gz | cut -d' ' -f1 > furl-linux-arm64-${{ github.ref_name }}.sha256
+        echo "Checksum: $(cat furl-linux-arm64-${{ github.ref_name }}.sha256)"
+
+    - name: Upload native ARM64 artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: furl-native-linux-arm64
+        path: |
+          build/furl-linux-arm64-${{ github.ref_name }}.tar.gz
+          build/furl-linux-arm64-${{ github.ref_name }}.sha256
+        retention-days: 30
+
+  # Docker BuildX job for ARM v7 and RISC-V (no native runners available)
   other_build:
-    name: Build ARM/RISC-V via Docker BuildX
+    name: Build ARM v7/RISC-V via Docker BuildX
     runs-on: ubuntu-latest
     
     strategy:
@@ -312,10 +363,6 @@ jobs:
           - platform: linux
             arch: arm
             docker-platform: linux/arm/v7
-            
-          - platform: linux
-            arch: arm64
-            docker-platform: linux/arm64
             
           - platform: linux
             arch: riscv64
@@ -419,7 +466,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build, other_build]
+    needs: [build, native_arm64_build, other_build]
     if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
@@ -486,7 +533,7 @@ jobs:
 
           **Linux:**
           - x64: `furl-linux-x64-${{ github.ref_name }}.tar.gz`
-          - ARM64: `furl-linux-arm64-${{ github.ref_name }}.tar.gz` (Cross-compiled via Docker BuildX)
+          - ARM64: `furl-linux-arm64-${{ github.ref_name }}.tar.gz` (Native ARM64 runner)
           - ARM v7: `furl-linux-arm-${{ github.ref_name }}.tar.gz` (Cross-compiled via Docker BuildX)
           - RISC-V 64: `furl-linux-riscv64-${{ github.ref_name }}.tar.gz` (Cross-compiled via Docker BuildX)
 
@@ -572,7 +619,7 @@ jobs:
   docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [build, other_build]
+    needs: [build, native_arm64_build, other_build]
     
     steps:
     - name: Checkout repository
