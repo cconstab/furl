@@ -294,7 +294,7 @@ jobs:
     - name: Upload release archive
       uses: actions/upload-artifact@v4
       with:
-        name: furl-archive-${{ matrix.platform }}-${{ matrix.arch }}
+        name: furl-archive-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}
         path: |
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.zip
@@ -330,11 +330,25 @@ jobs:
 
     - name: Create archive
       run: |
-        cd build
-        tar -czf furl-linux-arm64-${{ github.ref_name }}.tar.gz furl furl-server at_activate web/ wasm-crypto/
+        # Create a furl directory for proper archive structure (matching other builds)
+        mkdir -p furl-linux-arm64-temp/furl
         
-        echo "✅ Created native ARM64 build:"
-        ls -la furl-linux-arm64-${{ github.ref_name }}.tar.gz
+        # Copy files to the furl subdirectory
+        cp build/furl furl-linux-arm64-temp/furl/
+        cp build/furl-server furl-linux-arm64-temp/furl/
+        cp build/at_activate furl-linux-arm64-temp/furl/
+        cp -r build/web furl-linux-arm64-temp/furl/
+        cp -r build/wasm-crypto furl-linux-arm64-temp/furl/
+        
+        # Create archive with proper directory structure
+        cd furl-linux-arm64-temp
+        tar -czf ../furl-linux-arm64-${{ github.ref_name }}.tar.gz furl/
+        
+        echo "✅ Created native ARM64 build with proper directory structure:"
+        ls -la ../furl-linux-arm64-${{ github.ref_name }}.tar.gz
+        
+        # Move the archive to build directory for consistency
+        mv ../furl-linux-arm64-${{ github.ref_name }}.tar.gz ../build/
 
     - name: Generate checksum
       run: |
@@ -345,7 +359,7 @@ jobs:
     - name: Upload native ARM64 artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: furl-native-linux-arm64
+        name: furl-native-linux-arm64-${{ github.ref_name }}
         path: |
           build/furl-linux-arm64-${{ github.ref_name }}.tar.gz
           build/furl-linux-arm64-${{ github.ref_name }}.sha256
@@ -456,7 +470,7 @@ jobs:
     - name: Upload cross-compiled artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: furl-cross-${{ matrix.platform }}-${{ matrix.arch }}
+        name: furl-cross-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}
         path: |
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
           build/furl-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.ref_name }}.sha256
