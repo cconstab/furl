@@ -12,6 +12,8 @@ import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pointycastle/export.dart';
 import 'package:furl/validation.dart';
+import 'package:furl/config_manager.dart';
+import 'package:furl/filebin_resolver.dart';
 
 /// Calculate SHA-512 hash of a file
 Future<String> calculateFileSha512(String filePath) async {
@@ -22,7 +24,12 @@ Future<String> calculateFileSha512(String filePath) async {
 }
 
 /// Display a progress bar for long-running operations
-void showProgressBar(String label, int current, int total, {bool quiet = false}) {
+void showProgressBar(
+  String label,
+  int current,
+  int total, {
+  bool quiet = false,
+}) {
   if (quiet) return; // Skip progress bars in quiet mode
 
   const int barWidth = 40;
@@ -45,7 +52,8 @@ String generateStrongPin(int length) {
   // Character set: uppercase, lowercase, numbers, and safe special characters
   // Excludes: 0, O, 1, l, I for readability
   // Excludes: quotes, spaces, and URL-problematic characters
-  const String chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
+  const String chars =
+      'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
 
   final random = SecureRandom('AES/CTR/AUTO-SEED-PRNG');
   final seed = Uint8List(32);
@@ -77,7 +85,12 @@ Future<Uint8List> encryptFileStream(
   final fileSize = await file.length();
 
   if (!quiet) {
-    showProgressBar('🔒 Starting streaming encryption for $fileName', 0, fileSize, quiet: quiet);
+    showProgressBar(
+      '🔒 Starting streaming encryption for $fileName',
+      0,
+      fileSize,
+      quiet: quiet,
+    );
   }
 
   // Stream the file data but encrypt all at once to maintain CTR integrity
@@ -91,7 +104,12 @@ Future<Uint8List> encryptFileStream(
     processedBytes += chunk.length;
 
     if (!quiet) {
-      showProgressBar('🔒 Reading $fileName', processedBytes, fileSize, quiet: quiet);
+      showProgressBar(
+        '🔒 Reading $fileName',
+        processedBytes,
+        fileSize,
+        quiet: quiet,
+      );
     }
   }
 
@@ -125,7 +143,9 @@ Future<(File, String)> encryptFileStreamChaCha20ToFile(
 
   // Create temporary file for encrypted output to avoid memory accumulation
   final tempDir = Directory.systemTemp;
-  final tempFile = File('${tempDir.path}/furl_encrypted_${DateTime.now().millisecondsSinceEpoch}.tmp');
+  final tempFile = File(
+    '${tempDir.path}/furl_encrypted_${DateTime.now().millisecondsSinceEpoch}.tmp',
+  );
   final sink = tempFile.openWrite();
 
   // Initialize buffer for SHA-512 hash calculation of original file
@@ -149,7 +169,9 @@ Future<(File, String)> encryptFileStreamChaCha20ToFile(
     try {
       while (processedBytes < fileSize) {
         final remainingBytes = fileSize - processedBytes;
-        final currentChunkSize = remainingBytes < chunkSize ? remainingBytes : chunkSize;
+        final currentChunkSize = remainingBytes < chunkSize
+            ? remainingBytes
+            : chunkSize;
 
         // Read chunk
         final chunkBytes = await randomAccessFile.read(currentChunkSize);
@@ -160,15 +182,28 @@ Future<(File, String)> encryptFileStreamChaCha20ToFile(
         final encryptedChunk = Uint8List(chunkBytes.length);
 
         // Process chunk through ChaCha20 - maintains keystream state
-        cipher.processBytes(chunkBytes, 0, chunkBytes.length, encryptedChunk, 0);
+        cipher.processBytes(
+          chunkBytes,
+          0,
+          chunkBytes.length,
+          encryptedChunk,
+          0,
+        );
 
         // Write encrypted chunk directly to temp file
         sink.add(encryptedChunk);
         processedBytes += chunkBytes.length;
 
         // Update progress only when we've processed a meaningful amount
-        if (!quiet && (processedBytes - lastProgressUpdate >= progressUpdateInterval || processedBytes == fileSize)) {
-          showProgressBar('🔒 Encrypting $fileName', processedBytes, fileSize, quiet: quiet);
+        if (!quiet &&
+            (processedBytes - lastProgressUpdate >= progressUpdateInterval ||
+                processedBytes == fileSize)) {
+          showProgressBar(
+            '🔒 Encrypting $fileName',
+            processedBytes,
+            fileSize,
+            quiet: quiet,
+          );
           lastProgressUpdate = processedBytes;
         }
       }
@@ -202,7 +237,13 @@ Future<Uint8List> encryptFileStreamChaCha20(
   bool quiet = false,
   int chunkSize = 64 * 1024, // 64KB chunks
 }) async {
-  final (tempFile, _) = await encryptFileStreamChaCha20ToFile(filePath, key, nonce, quiet: quiet, chunkSize: chunkSize);
+  final (tempFile, _) = await encryptFileStreamChaCha20ToFile(
+    filePath,
+    key,
+    nonce,
+    quiet: quiet,
+    chunkSize: chunkSize,
+  );
 
   try {
     // Read the final result - only loads complete file into memory at the end
@@ -243,7 +284,9 @@ Future<Uint8List> encryptWithProgress(
       // Estimate ~50MB/s encryption speed
       final estimatedSeconds = (fileSize / (50 * 1024 * 1024)).clamp(1.0, 30.0);
       final steps = (estimatedSeconds * 10).round(); // 10 updates per second
-      final stepDelay = Duration(milliseconds: (estimatedSeconds * 1000 / steps).round());
+      final stepDelay = Duration(
+        milliseconds: (estimatedSeconds * 1000 / steps).round(),
+      );
 
       // Start progress display
       for (int i = 0; i < steps; i++) {
@@ -263,7 +306,12 @@ Future<Uint8List> encryptWithProgress(
 
 /// Upload with progress tracking
 /// Upload file with progress tracking from a file (memory efficient)
-Future<http.Response> uploadFileWithProgress(String url, File file, String fileName, {bool quiet = false}) async {
+Future<http.Response> uploadFileWithProgress(
+  String url,
+  File file,
+  String fileName, {
+  bool quiet = false,
+}) async {
   final dio = Dio()
     ..options.connectTimeout =
         Duration(minutes: 5) // 5 minute connection timeout
@@ -279,7 +327,9 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
     final fileSize = await file.length();
 
     if (!quiet) {
-      print('📤 Starting upload of $fileName (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB)...');
+      print(
+        '📤 Starting upload of $fileName (${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB)...',
+      );
     }
 
     // Use file stream for upload
@@ -301,18 +351,24 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
       ),
       onSendProgress: (int sent, int total) {
         final now = DateTime.now();
-        final timeSinceLastUpdate = now.difference(lastProgressTime).inMilliseconds / 1000.0;
+        final timeSinceLastUpdate =
+            now.difference(lastProgressTime).inMilliseconds / 1000.0;
 
         // Update progress more frequently for large files and show speed
         final shouldUpdate =
             sent == total ||
             sent % (total ~/ 500).clamp(256, 128 * 1024) == 0 ||
-            timeSinceLastUpdate >= 0.5; // Force update every 500ms for smooth progress
+            timeSinceLastUpdate >=
+                0.5; // Force update every 500ms for smooth progress
 
         if (shouldUpdate) {
           // Calculate upload speed
           final bytesSinceLastUpdate = sent - lastSentBytes;
-          final speedMBps = bytesSinceLastUpdate / (1024 * 1024 * (timeSinceLastUpdate > 0 ? timeSinceLastUpdate : 1));
+          final speedMBps =
+              bytesSinceLastUpdate /
+              (1024 *
+                  1024 *
+                  (timeSinceLastUpdate > 0 ? timeSinceLastUpdate : 1));
 
           if (!quiet) {
             final progressMsg = timeSinceLastUpdate > 0 && sent < total
@@ -331,17 +387,25 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
     return http.Response(
       response.data.toString(),
       response.statusCode ?? 500,
-      headers: response.headers.map.map((key, value) => MapEntry(key, value.join('; '))),
+      headers: response.headers.map.map(
+        (key, value) => MapEntry(key, value.join('; ')),
+      ),
     );
   } catch (e) {
     if (e is DioException) {
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
-          throw Exception('Upload failed: Connection timeout after 5 minutes. Please check your internet connection.');
+          throw Exception(
+            'Upload failed: Connection timeout after 5 minutes. Please check your internet connection.',
+          );
         case DioExceptionType.sendTimeout:
-          throw Exception('Upload failed: Send timeout after 2 hours. File may be too large or connection too slow.');
+          throw Exception(
+            'Upload failed: Send timeout after 2 hours. File may be too large or connection too slow.',
+          );
         case DioExceptionType.receiveTimeout:
-          throw Exception('Upload failed: Server response timeout after 30 minutes.');
+          throw Exception(
+            'Upload failed: Server response timeout after 30 minutes.',
+          );
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode;
           if (statusCode == 413) {
@@ -350,13 +414,21 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
               'Upload failed: File too large (${(fileSizeKnown / (1024 * 1024)).toStringAsFixed(1)}MB). Server limit exceeded.',
             );
           } else if (statusCode == 404) {
-            throw Exception('Upload failed: Server endpoint not found (404). Please verify the upload URL.');
+            throw Exception(
+              'Upload failed: Server endpoint not found (404). Please verify the upload URL.',
+            );
           } else if (statusCode == 403) {
-            throw Exception('Upload failed: Access forbidden (403). Server may have rejected the upload.');
+            throw Exception(
+              'Upload failed: Access forbidden (403). Server may have rejected the upload.',
+            );
           } else if (statusCode == 429) {
-            throw Exception('Upload failed: Rate limit exceeded (429). Please wait and try again later.');
+            throw Exception(
+              'Upload failed: Rate limit exceeded (429). Please wait and try again later.',
+            );
           } else {
-            throw Exception('Upload failed: Server returned $statusCode - ${e.response?.data}');
+            throw Exception(
+              'Upload failed: Server returned $statusCode - ${e.response?.data}',
+            );
           }
         default:
           throw Exception('Upload failed: ${e.message}');
@@ -368,7 +440,12 @@ Future<http.Response> uploadFileWithProgress(String url, File file, String fileN
 }
 
 /// Upload data with progress tracking (kept for compatibility)
-Future<http.Response> uploadWithProgress(String url, Uint8List data, String fileName, {bool quiet = false}) async {
+Future<http.Response> uploadWithProgress(
+  String url,
+  Uint8List data,
+  String fileName, {
+  bool quiet = false,
+}) async {
   final dio = Dio()
     ..options.connectTimeout =
         Duration(minutes: 5) // 5 minute connection timeout
@@ -384,7 +461,10 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     final response = await dio.post(
       url,
       data: data, // Send raw bytes, not FormData
-      options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
+      options: Options(
+        headers: {'Content-Type': 'application/octet-stream'},
+        responseType: ResponseType.plain,
+      ),
       onSendProgress: (int sent, int total) {
         showProgressBar('📤 Uploading $fileName', sent, total);
       },
@@ -394,17 +474,25 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
     return http.Response(
       response.data.toString(),
       response.statusCode ?? 500,
-      headers: response.headers.map.map((key, value) => MapEntry(key, value.join('; '))),
+      headers: response.headers.map.map(
+        (key, value) => MapEntry(key, value.join('; ')),
+      ),
     );
   } catch (e) {
     if (e is DioException) {
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
-          throw Exception('Upload failed: Connection timeout after 5 minutes. Please check your internet connection.');
+          throw Exception(
+            'Upload failed: Connection timeout after 5 minutes. Please check your internet connection.',
+          );
         case DioExceptionType.sendTimeout:
-          throw Exception('Upload failed: Send timeout after 2 hours. File may be too large or connection too slow.');
+          throw Exception(
+            'Upload failed: Send timeout after 2 hours. File may be too large or connection too slow.',
+          );
         case DioExceptionType.receiveTimeout:
-          throw Exception('Upload failed: Server response timeout after 30 minutes.');
+          throw Exception(
+            'Upload failed: Server response timeout after 30 minutes.',
+          );
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode;
           if (statusCode == 413) {
@@ -412,13 +500,21 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
               'Upload failed: File too large (${(data.length / (1024 * 1024)).toStringAsFixed(1)}MB). Server limit exceeded.',
             );
           } else if (statusCode == 404) {
-            throw Exception('Upload failed: Server endpoint not found (404). Please verify the upload URL.');
+            throw Exception(
+              'Upload failed: Server endpoint not found (404). Please verify the upload URL.',
+            );
           } else if (statusCode == 403) {
-            throw Exception('Upload failed: Access forbidden (403). Server may have rejected the upload.');
+            throw Exception(
+              'Upload failed: Access forbidden (403). Server may have rejected the upload.',
+            );
           } else if (statusCode == 429) {
-            throw Exception('Upload failed: Rate limit exceeded (429). Please wait and try again later.');
+            throw Exception(
+              'Upload failed: Rate limit exceeded (429). Please wait and try again later.',
+            );
           } else {
-            throw Exception('Upload failed: Server returned $statusCode - ${e.response?.data}');
+            throw Exception(
+              'Upload failed: Server returned $statusCode - ${e.response?.data}',
+            );
           }
         default:
           throw Exception('Upload failed: ${e.message}');
@@ -430,7 +526,11 @@ Future<http.Response> uploadWithProgress(String url, Uint8List data, String file
 
     final uri = Uri.parse(url);
     final request = http.MultipartRequest('POST', uri);
-    final multipartFile = http.MultipartFile.fromBytes('file', data, filename: '$fileName.encrypted');
+    final multipartFile = http.MultipartFile.fromBytes(
+      'file',
+      data,
+      filename: '$fileName.encrypted',
+    );
     request.files.add(multipartFile);
     request.headers['Content-Type'] = 'application/octet-stream';
 
@@ -464,7 +564,9 @@ int parseTtl(String ttlString) {
 
   if (match == null) {
     print('Invalid TTL format: $ttlString');
-    print('Use format like: 30s (seconds), 10m (minutes), 2h (hours), 1d (days)');
+    print(
+      'Use format like: 30s (seconds), 10m (minutes), 2h (hours), 1d (days)',
+    );
     print('Or just a number for seconds: 3600');
     exit(1);
   }
@@ -543,7 +645,10 @@ Future<void> receiveFileViaHttp(
 }) async {
   try {
     // 1. Parse furl URL to extract metadata
-    String cleanUrl = furlUrl.replaceAll('\\?', '?').replaceAll('\\&', '&').replaceAll('\\=', '=');
+    String cleanUrl = furlUrl
+        .replaceAll('\\?', '?')
+        .replaceAll('\\&', '&')
+        .replaceAll('\\=', '=');
 
     final uri = Uri.parse(cleanUrl);
     final key = uri.queryParameters['key'];
@@ -632,11 +737,16 @@ Future<void> receiveFileViaHttp(
     }
 
     // Decrypt the ChaCha20 key
-    final keyDecrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
+    final keyDecrypter = encrypt.Encrypter(
+      encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr),
+    );
     late Uint8List chaCha20Key;
 
     try {
-      final decryptedKey = keyDecrypter.decryptBytes(encrypt.Encrypted(encryptedKey), iv: encrypt.IV(keyIv));
+      final decryptedKey = keyDecrypter.decryptBytes(
+        encrypt.Encrypted(encryptedKey),
+        iv: encrypt.IV(keyIv),
+      );
       chaCha20Key = Uint8List.fromList(decryptedKey);
       if (verbose) {
         print('DEBUG: Decrypted ChaCha20 key length: ${chaCha20Key.length}');
@@ -711,7 +821,9 @@ Future<void> receiveFileViaHttp(
 
     if (exitCode != 0) {
       final errorMessage = String.fromCharCodes(errorBuffer);
-      throw Exception('Download failed (curl exit code $exitCode): $errorMessage');
+      throw Exception(
+        'Download failed (curl exit code $exitCode): $errorMessage',
+      );
     }
 
     // Verify the file was downloaded
@@ -797,7 +909,10 @@ Future<void> receiveFile(
 
     // 2. Parse furl URL to extract metadata key
     // Handle shell-escaped URLs by replacing escaped characters
-    String cleanUrl = furlUrl.replaceAll('\\?', '?').replaceAll('\\&', '&').replaceAll('\\=', '=');
+    String cleanUrl = furlUrl
+        .replaceAll('\\?', '?')
+        .replaceAll('\\&', '&')
+        .replaceAll('\\=', '=');
 
     final uri = Uri.parse(cleanUrl);
     if (verbose) {
@@ -912,11 +1027,15 @@ String formatDuration(int seconds) {
   } else if (seconds < 3600) {
     final minutes = seconds ~/ 60;
     final remainingSeconds = seconds % 60;
-    return remainingSeconds == 0 ? '${minutes}m' : '${minutes}m ${remainingSeconds}s';
+    return remainingSeconds == 0
+        ? '${minutes}m'
+        : '${minutes}m ${remainingSeconds}s';
   } else if (seconds < 86400) {
     final hours = seconds ~/ 3600;
     final remainingMinutes = (seconds % 3600) ~/ 60;
-    return remainingMinutes == 0 ? '${hours}h' : '${hours}h ${remainingMinutes}m';
+    return remainingMinutes == 0
+        ? '${hours}h'
+        : '${hours}h ${remainingMinutes}m';
   } else {
     final days = seconds ~/ 86400;
     final remainingHours = (seconds % 86400) ~/ 3600;
@@ -935,13 +1054,19 @@ Future<void> main(List<String> arguments) async {
     print('Arguments:');
     print('  atSign                Your atSign (e.g., @alice)');
     print('  file_path             Path to the file to encrypt and share');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
+    print(
+      '  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)',
+    );
     print('');
     print('Options:');
     print('  -v, --verbose         Enable verbose logging');
     print('  -q, --quiet           Disable progress bars');
-    print('  -s, --server <url>    Furl server URL (default: https://furl.host)');
-    print('  -m, --message <text>  Custom message for recipient (max 140 chars)');
+    print(
+      '  -s, --server <url>    Furl server URL (default: https://furl.host)',
+    );
+    print(
+      '  -m, --message <text>  Custom message for recipient (max 140 chars)',
+    );
     print('  --no-file-size        Hide file size on download page');
     print('  -h, --help            Show this help message');
     print('');
@@ -955,7 +1080,42 @@ Future<void> main(List<String> arguments) async {
     print('Options:');
     print('  -v, --verbose         Enable verbose logging');
     print('  -q, --quiet           Disable progress bars');
-    print('  -o, --output <dir>    Output directory (default: current directory)');
+    print(
+      '  -o, --output <dir>    Output directory (default: current directory)',
+    );
+    print('');
+    print('CONFIGURE FILEBIN:');
+    print(
+      'Usage: furl set-filebin <myatsign> <filebin-url> [config-atsign] [options]',
+    );
+    print('       furl publish-filebin <atsign> <filebin-url> [options]');
+    print('');
+    print('Arguments:');
+    print('  myatsign              Your atSign (for personal config)');
+    print(
+      '  filebin-url           The filebin server URL (e.g., https://filebin.net)',
+    );
+    print(
+      '  config-atsign         Optional: atSign to check for public config (default: @furl)',
+    );
+    print('');
+    print('Options:');
+    print('  -v, --verbose         Enable verbose logging');
+    print('');
+    print('Filebin Resolution Order:');
+    print('  1. Your private config: private:filebin_override.furl@myatsign');
+    print(
+      '  2. Public org config:   public:filebin.furl@furl (or @config-atsign)',
+    );
+    print('  3. Default fallback:    https://filebin.net');
+    print('');
+    print(
+      'Configuration is stored in atKeys (not local files), so it automatically',
+    );
+    print(
+      'syncs across all your devices. Organizations can publish a filebin URL',
+    );
+    print('that all employees can use by default.');
     print('');
     print('TTL Examples:');
     print('  30s                   30 seconds');
@@ -972,25 +1132,57 @@ Future<void> main(List<String> arguments) async {
     print('  furl @alice document.pdf 2d --server http://localhost:8080');
     print('  furl @alice document.pdf 12h -m "Here is the contract"');
     print('  furl @alice document.pdf 1d --no-file-size');
-    print('  furl @alice document.pdf 12h --server https://my-furl-server.com -v');
+    print(
+      '  furl @alice document.pdf 12h --server https://my-furl-server.com -v',
+    );
     print('');
     print('Receive Examples:');
-    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"');
-    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" -o ~/Downloads');
-    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" --verbose');
+    print(
+      '  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"',
+    );
+    print(
+      '  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" -o ~/Downloads',
+    );
+    print(
+      '  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" --verbose',
+    );
+    print('');
+    print('Configuration Examples:');
+    print('  # Set personal filebin override');
+    print('  furl set-filebin @alice https://filebin.example.com');
+    print('');
+    print('  # Use company filebin with fallback to @mycompany public config');
+    print('  furl set-filebin @alice https://filebin.net @mycompany');
+    print('');
+    print('  # Publish org-wide filebin config (admins only)');
+    print('  furl publish-filebin @mycompany https://filebin.example.com');
+    print('');
+    print('  # Use verbose logging to see atClient operations');
+    print('  furl set-filebin @alice https://filebin.example.com -v');
     print('');
     print('The program will:');
-    print('  SEND: 1. Encrypt your file with ChaCha20 (streaming optimized)');
-    print('        2. Upload the encrypted file to filebin.net');
-    print('        3. Store decryption metadata securely on the atPlatform');
-    print('        4. Generate a secure URL for the recipient');
-    print('        5. Generate a strong PIN with special characters for additional security');
-    print('        6. Calculate SHA-512 hash for integrity verification');
-    print('        7. Display the expiration time based on TTL');
+    print('  SEND: 1. Resolve filebin server (from atKey config or default)');
+    print('        2. Encrypt your file with ChaCha20 (streaming optimized)');
+    print('        3. Upload the encrypted file to configured filebin server');
+    print('        4. Store decryption metadata securely on the atPlatform');
+    print('        5. Generate a secure URL for the recipient');
+    print(
+      '        6. Generate a strong PIN with special characters for additional security',
+    );
+    print('        7. Calculate SHA-512 hash for integrity verification');
+    print('        8. Display the expiration time based on TTL');
     print('');
-    print('  RECEIVE: 1. Download and decrypt the file using the provided URL and PIN');
+    print(
+      '  RECEIVE: 1. Download and decrypt the file using the provided URL and PIN',
+    );
     print('           2. Verify file integrity with SHA-512 hash');
     print('           3. Save the decrypted file to the specified location');
+    print('');
+    print(
+      '  CONFIG: 1. Store filebin preferences in atKeys (device-independent)',
+    );
+    print('          2. Support personal and organization-wide configuration');
+    print('          3. Automatic sync across all your devices');
     exit(0);
   }
 
@@ -1006,10 +1198,14 @@ Future<void> main(List<String> arguments) async {
       print('Options:');
       print('  -v, --verbose         Enable verbose logging');
       print('  -q, --quiet           Disable progress bars');
-      print('  -o, --output <dir>    Output directory (default: current directory)');
+      print(
+        '  -o, --output <dir>    Output directory (default: current directory)',
+      );
       print('');
       print('Example:');
-      print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"');
+      print(
+        '  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"',
+      );
       print('');
       print('Use --help for detailed information.');
       exit(1);
@@ -1028,19 +1224,236 @@ Future<void> main(List<String> arguments) async {
         verbose = true;
       } else if (arguments[i] == '-q' || arguments[i] == '--quiet') {
         quiet = true;
-      } else if ((arguments[i] == '-o' || arguments[i] == '--output') && i + 1 < arguments.length) {
+      } else if ((arguments[i] == '-o' || arguments[i] == '--output') &&
+          i + 1 < arguments.length) {
         outputDir = arguments[i + 1];
         i++; // Skip the next argument as it's the output directory
       }
     }
 
     try {
-      await receiveFileViaHttp(furlUrl, pin, outputDir: outputDir, verbose: verbose, quiet: quiet);
+      await receiveFileViaHttp(
+        furlUrl,
+        pin,
+        outputDir: outputDir,
+        verbose: verbose,
+        quiet: quiet,
+      );
     } catch (e) {
       print('Error: $e');
       exit(1);
     }
     return;
+  }
+
+  // Check if this is a set-filebin command
+  if (arguments.isNotEmpty && arguments[0] == 'set-filebin') {
+    if (arguments.length < 3) {
+      print(
+        'Usage: furl set-filebin <myatsign> <filebin-url> [config-atsign] [options]',
+      );
+      print('');
+      print('Arguments:');
+      print(
+        '  myatsign              Your atSign (to store your personal config)',
+      );
+      print(
+        '  filebin-url           The filebin server URL (e.g., https://filebin.net)',
+      );
+      print(
+        '  config-atsign         Optional: atSign to lookup public config (default: @furl)',
+      );
+      print('');
+      print('Options:');
+      print('  -v, --verbose         Enable verbose logging');
+      print('');
+      print('Examples:');
+      print('  # Set personal filebin override');
+      print('  furl set-filebin @alice https://filebin.example.com');
+      print('');
+      print('  # Set personal override and use org config as fallback');
+      print('  furl set-filebin @alice https://my-filebin.com @mycompany');
+      print('');
+      print('This will:');
+      print(
+        '  1. Store your personal filebin URL in: private:filebin_override.furl@myatsign',
+      );
+      print(
+        '  2. Set which public atSign to check for org-wide config (default: @furl)',
+      );
+      print('');
+      print('The filebin URL will be resolved in this order:');
+      print(
+        '  1. Your private override: private:filebin_override.furl@myatsign',
+      );
+      print('  2. Public config: public:filebin.furl@<config-atsign>');
+      print('  3. Default fallback: https://filebin.net');
+      print('');
+      print('To publish org-wide config (admins only):');
+      print('  furl publish-filebin @mycompany https://filebin.example.com');
+      exit(1);
+    }
+
+    final myAtSign = arguments[1];
+    final filebinUrl = arguments[2];
+
+    // Parse optional arguments
+    bool verbose = false;
+    var configAtSign = ConfigManager.defaultConfigAtSign;
+
+    // Process arguments: [cmd, atsign, url, optional_config_atsign, optional_flags...]
+    for (int i = 3; i < arguments.length; i++) {
+      if (arguments[i] == '-v' || arguments[i] == '--verbose') {
+        verbose = true;
+      } else if (!arguments[i].startsWith('-')) {
+        // First non-flag argument after url is config-atsign
+        configAtSign = arguments[i];
+      }
+    }
+
+    // Set logging level
+    if (!verbose) {
+      AtSignLogger.root_level = 'severe';
+    }
+
+    // Validate URL format
+    try {
+      final uri = Uri.parse(filebinUrl);
+      if (!uri.scheme.startsWith('http') || uri.host.isEmpty) {
+        print('Error: Invalid URL format. Please provide a valid HTTPS URL');
+        print('Example: https://filebin.example.com');
+        exit(1);
+      }
+    } catch (e) {
+      print('Error: Invalid URL format: $e');
+      print('Example: https://filebin.example.com');
+      exit(1);
+    }
+
+    // Ensure atSigns have @ prefix
+    final normalizedMyAtSign = myAtSign.startsWith('@')
+        ? myAtSign
+        : '@$myAtSign';
+    final normalizedConfigAtSign = configAtSign.startsWith('@')
+        ? configAtSign
+        : '@$configAtSign';
+
+    try {
+      // Get atClient for the user
+      print('🔐 Authenticating as $normalizedMyAtSign...');
+      final atClient = await _getAtClient(normalizedMyAtSign, false);
+
+      // Store in private atKey
+      await ConfigManager.setPrivateOverride(
+        atClient,
+        filebinUrl,
+        normalizedConfigAtSign,
+      );
+
+      print('✓ Personal filebin URL set: $filebinUrl');
+      print('✓ Stored in: private:filebin_override.furl$normalizedMyAtSign');
+      print('✓ Will check public config from: $normalizedConfigAtSign');
+      print('');
+      print('✓ Configuration saved successfully!');
+      print(
+        'All furl operations from $normalizedMyAtSign will now use: $filebinUrl',
+      );
+      print('');
+      print('Note: This is your personal override.');
+      print(
+        'It takes precedence over public:filebin.furl$normalizedConfigAtSign',
+      );
+    } catch (e) {
+      print('Error: Failed to set filebin configuration: $e');
+      exit(1);
+    }
+    exit(0);
+  }
+
+  // Check if this is a publish-filebin command (for org admins)
+  if (arguments.isNotEmpty && arguments[0] == 'publish-filebin') {
+    if (arguments.length < 3) {
+      print('Usage: furl publish-filebin <atsign> <filebin-url> [options]');
+      print('');
+      print('Arguments:');
+      print('  atsign                Your atSign (to publish from)');
+      print(
+        '  filebin-url           The filebin server URL for everyone to use',
+      );
+      print('');
+      print('Options:');
+      print('  -v, --verbose         Enable verbose logging');
+      print('');
+      print('Example:');
+      print('  furl publish-filebin @mycompany https://filebin.example.com');
+      print('');
+      print('This will:');
+      print('  1. Store the URL in: public:filebin.furl@atsign');
+      print('  2. Make it readable by all furl clients');
+      print('  3. Allow org-wide filebin configuration');
+      print('');
+      print(
+        'After publishing, any furl client can automatically use your filebin.',
+      );
+      print('Users can also explicitly configure it with:');
+      print('  furl set-filebin @alice <your-url> @mycompany');
+      exit(1);
+    }
+
+    final atSign = arguments[1];
+    final filebinUrl = arguments[2];
+
+    // Parse optional verbose flag
+    bool verbose = false;
+    for (int i = 3; i < arguments.length; i++) {
+      if (arguments[i] == '-v' || arguments[i] == '--verbose') {
+        verbose = true;
+      }
+    }
+
+    // Set logging level
+    if (!verbose) {
+      AtSignLogger.root_level = 'severe';
+    }
+
+    // Validate URL format
+    try {
+      final uri = Uri.parse(filebinUrl);
+      if (!uri.scheme.startsWith('http') || uri.host.isEmpty) {
+        print('Error: Invalid URL format. Please provide a valid HTTPS URL');
+        print('Example: https://filebin.example.com');
+        exit(1);
+      }
+    } catch (e) {
+      print('Error: Invalid URL format: $e');
+      print('Example: https://filebin.example.com');
+      exit(1);
+    }
+
+    // Ensure atSign has @ prefix
+    final normalizedAtSign = atSign.startsWith('@') ? atSign : '@$atSign';
+
+    try {
+      // Get atClient for the admin
+      print('🔐 Authenticating as $normalizedAtSign...');
+      final atClient = await _getAtClient(normalizedAtSign, false);
+
+      // Publish to public atKey
+      await ConfigManager.setPublicConfig(atClient, filebinUrl);
+
+      print('✓ Public filebin URL published: $filebinUrl');
+      print('✓ Stored in: public:filebin.furl$normalizedAtSign');
+      print('');
+      print('✓ Configuration published successfully!');
+      print('');
+      print('All furl clients will now automatically use this filebin server.');
+      print('Users can optionally set it as their default with:');
+      print('  furl set-filebin @theiratsign $filebinUrl $normalizedAtSign');
+    } catch (e) {
+      print('Error: Failed to publish filebin configuration: $e');
+      exit(1);
+    }
+    exit(0);
   }
 
   // Original send file logic
@@ -1049,13 +1462,17 @@ Future<void> main(List<String> arguments) async {
     print('       furl receive <atSign> <furl_url> <pin> [options]');
     print('');
     print('Arguments:');
-    print('  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)');
+    print(
+      '  ttl                   Time-to-live: 30s, 10m, 2h, 1d (max: 6d, or seconds as number)',
+    );
     print('');
     print('Examples:');
     print('  furl @alice document.pdf 1h');
     print('  furl @alice document.pdf 30m -v');
     print('  furl @alice document.pdf 2d --server http://localhost:8080');
-    print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"');
+    print(
+      '  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF"',
+    );
     print('');
     print('Use --help for detailed information.');
     exit(1);
@@ -1093,10 +1510,12 @@ Future<void> main(List<String> arguments) async {
       quiet = true;
     } else if (arguments[i] == '--no-file-size') {
       hideFileSize = true;
-    } else if ((arguments[i] == '-s' || arguments[i] == '--server') && i + 1 < arguments.length) {
+    } else if ((arguments[i] == '-s' || arguments[i] == '--server') &&
+        i + 1 < arguments.length) {
       serverUrl = arguments[i + 1];
       i++; // Skip the next argument as it's the server URL
-    } else if ((arguments[i] == '-m' || arguments[i] == '--message') && i + 1 < arguments.length) {
+    } else if ((arguments[i] == '-m' || arguments[i] == '--message') &&
+        i + 1 < arguments.length) {
       customMessage = arguments[i + 1];
       if (customMessage.length > 140) {
         print('Error: Message cannot exceed 140 characters');
@@ -1114,7 +1533,9 @@ Future<void> main(List<String> arguments) async {
 
   try {
     // 1. Generate ChaCha20 key and nonce using secure random
-    final chaCha20Key = encrypt.Key.fromSecureRandom(32); // 32-byte key for ChaCha20
+    final chaCha20Key = encrypt.Key.fromSecureRandom(
+      32,
+    ); // 32-byte key for ChaCha20
     final chaCha20Nonce = encrypt.IV.fromSecureRandom(
       8,
     ); // 8-byte nonce for ChaCha20 (some implementations use 8 bytes)
@@ -1127,13 +1548,20 @@ Future<void> main(List<String> arguments) async {
     final fileName = filePath.split(Platform.pathSeparator).last;
     final fileSize = await File(filePath).length();
     final isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB threshold
-    final isSuperLargeFile = fileSize > 100 * 1024 * 1024; // 100MB threshold for special handling
+    final isSuperLargeFile =
+        fileSize > 100 * 1024 * 1024; // 100MB threshold for special handling
 
     // Warn user about super large files
     if (isSuperLargeFile && !quiet) {
-      print('⚠️  Large file detected: ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB');
-      print('   This may take a significant amount of time to encrypt and upload.');
-      print('   The process may appear to hang after encryption completes - this is normal.');
+      print(
+        '⚠️  Large file detected: ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB',
+      );
+      print(
+        '   This may take a significant amount of time to encrypt and upload.',
+      );
+      print(
+        '   The process may appear to hang after encryption completes - this is normal.',
+      );
       print('   Upload speeds depend on your internet connection.');
       print('');
     }
@@ -1148,16 +1576,23 @@ Future<void> main(List<String> arguments) async {
       sha512Hash = await calculateFileSha512(filePath);
     }
 
-    // 4. Upload encrypted file to filebin.net
+    // 4. Get AtClient first (needed for filebin resolution and metadata storage)
+    if (!quiet) print('🔐 Authenticating...');
+    final atClient = await _getAtClient(atSign, verbose);
+
+    // Resolve the filebin URL from configuration (checks atKeys)
+    final filebinBaseUrl = await FilebinResolver.resolveFilebinUrl(atClient);
+
+    // 5. Upload encrypted file to configured filebin server
     String fileUrl;
     File? tempEncryptedFile;
 
     try {
-      // Upload to filebin.net - they require a bin first, then file upload
+      // Upload to filebin - they require a bin first, then file upload
       // Use UUID for bin ID instead of timestamp for better security
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
-      final uploadUrl = 'https://filebin.net/$binId/$fileName.encrypted';
+      final uploadUrl = '$filebinBaseUrl/$binId/$fileName.encrypted';
 
       http.Response uploadResp;
 
@@ -1169,7 +1604,10 @@ Future<void> main(List<String> arguments) async {
           );
         }
 
-        final (tempFile, calculatedSha512Hash) = await encryptFileStreamChaCha20ToFile(
+        final (
+          tempFile,
+          calculatedSha512Hash,
+        ) = await encryptFileStreamChaCha20ToFile(
           filePath,
           chaCha20Key.bytes,
           chaCha20Nonce.bytes,
@@ -1182,12 +1620,19 @@ Future<void> main(List<String> arguments) async {
         if (!quiet) {
           print('✅ Encryption complete. Starting upload...');
           if (isSuperLargeFile) {
-            print('   Upload progress will be shown below. Large uploads may take considerable time.');
+            print(
+              '   Upload progress will be shown below. Large uploads may take considerable time.',
+            );
           }
         }
 
         // Upload directly from file
-        uploadResp = await uploadFileWithProgress(uploadUrl, tempEncryptedFile, fileName, quiet: quiet);
+        uploadResp = await uploadFileWithProgress(
+          uploadUrl,
+          tempEncryptedFile,
+          fileName,
+          quiet: quiet,
+        );
       } else {
         // For small files: use existing in-memory approach
         final encryptedBytes = await encryptFileStreamChaCha20(
@@ -1202,23 +1647,31 @@ Future<void> main(List<String> arguments) async {
           print('✅ Encryption complete. Starting upload...');
         }
 
-        uploadResp = await uploadWithProgress(uploadUrl, encryptedBytes, fileName, quiet: quiet);
+        uploadResp = await uploadWithProgress(
+          uploadUrl,
+          encryptedBytes,
+          fileName,
+          quiet: quiet,
+        );
       }
 
       if (uploadResp.statusCode == 201 || uploadResp.statusCode == 200) {
         fileUrl = uploadUrl;
         // print('File uploaded to: $fileUrl');
       } else {
-        throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
+        throw Exception(
+          'Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}',
+        );
       }
     } catch (e) {
-      print('Error uploading to filebin.net: $e');
+      print('Error uploading to filebin server ($filebinBaseUrl): $e');
       // Fallback: simulate upload for testing
       print('Simulating upload...');
       final uuid = Uuid();
-      fileUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_$fileName.encrypted';
+      fileUrl =
+          '$filebinBaseUrl/simulated/${uuid.v4().replaceAll('-', '')}_$fileName.encrypted';
       print('File would be uploaded to: $fileUrl');
-      print('Note: Ensure network connectivity for actual filebin.net upload');
+      print('Note: Ensure network connectivity for actual filebin upload');
     } finally {
       // Clean up temporary file if it was created
       if (tempEncryptedFile != null && await tempEncryptedFile.exists()) {
@@ -1234,9 +1687,14 @@ Future<void> main(List<String> arguments) async {
     final digest = sha256.convert(pinBytes + salt);
     final derivedKey = Uint8List.fromList(digest.bytes);
 
-    final keyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
+    final keyEncrypter = encrypt.Encrypter(
+      encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr),
+    );
     final keyIv = encrypt.IV.fromSecureRandom(16);
-    final encryptedChaCha20Key = keyEncrypter.encryptBytes(chaCha20Key.bytes, iv: keyIv);
+    final encryptedChaCha20Key = keyEncrypter.encryptBytes(
+      chaCha20Key.bytes,
+      iv: keyIv,
+    );
 
     // 6. Store encrypted ChaCha20 key, salt, nonce, and file URL in public atKey
     //print('Storing secrets in atPlatform...');
@@ -1244,7 +1702,10 @@ Future<void> main(List<String> arguments) async {
     // Use a public atKey with leading underscore to make it invisible to scan verb
     // Generate a UUID-based random identifier instead of timestamp for security
     final uuid = Uuid();
-    final randomId = uuid.v4().replaceAll('-', ''); // Remove dashes for cleaner ID
+    final randomId = uuid.v4().replaceAll(
+      '-',
+      '',
+    ); // Remove dashes for cleaner ID
     final atKeyName = '_furl_$randomId';
 
     final secretPayload = jsonEncode({
@@ -1255,13 +1716,15 @@ Future<void> main(List<String> arguments) async {
       'file_nonce': base64Encode(chaCha20Nonce.bytes),
       'file_name': fileName,
       'cipher': 'chacha20', // Indicate which cipher was used
-      'sha512_hash': sha512Hash, // SHA-512 hash of original file for integrity verification
-      if (customMessage != null) 'message': customMessage, // Custom message for recipient
-      if (!hideFileSize) 'file_size': fileSize, // File size in bytes (unless hidden)
+      'sha512_hash':
+          sha512Hash, // SHA-512 hash of original file for integrity verification
+      if (customMessage != null)
+        'message': customMessage, // Custom message for recipient
+      if (!hideFileSize)
+        'file_size': fileSize, // File size in bytes (unless hidden)
     });
 
-    // Get AtClient using the correct onboarding pattern from the demos
-    final atClient = await _getAtClient(atSign, verbose);
+    // Store metadata in atKey (atClient was already created earlier)
     final atKey = AtKey()
       ..key = atKeyName
       ..metadata = (Metadata()
@@ -1277,12 +1740,21 @@ Future<void> main(List<String> arguments) async {
       final storageStepDelay = Duration(milliseconds: 80);
 
       for (int i = 0; i <= storageSteps; i++) {
-        showProgressBar('🏗️ Storing metadata on atPlatform', i, storageSteps, quiet: quiet);
+        showProgressBar(
+          '🏗️ Storing metadata on atPlatform',
+          i,
+          storageSteps,
+          quiet: quiet,
+        );
         if (i < storageSteps && !quiet) await Future.delayed(storageStepDelay);
       }
     }
 
-    await atClient.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
+    await atClient.put(
+      atKey,
+      secretPayload,
+      putRequestOptions: putRequestOptions,
+    );
     //print('Secrets stored in atPlatform with public key: $atKeyName');
 
     // 7. Verify the data is retrievable from remote server before exiting
@@ -1301,24 +1773,37 @@ Future<void> main(List<String> arguments) async {
 
         // Force a fresh lookup from the atServer (not cached)
         final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
-        final retrievedData = await atClient.get(atKey, getRequestOptions: getRequestOptions);
+        final retrievedData = await atClient.get(
+          atKey,
+          getRequestOptions: getRequestOptions,
+        );
         if (retrievedData.value != null) {
           //print('✓ Data successfully verified on remote atServer');
           dataVerified = true;
         } else {
           retryCount++;
-          print('⏳ Attempt $retryCount/$maxRetries - waiting for remote sync...');
+          print(
+            '⏳ Attempt $retryCount/$maxRetries - waiting for remote sync...',
+          );
         }
       } catch (e) {
         retryCount++;
-        print('⏳ Attempt $retryCount/$maxRetries - waiting for remote sync... ($e)');
+        print(
+          '⏳ Attempt $retryCount/$maxRetries - waiting for remote sync... ($e)',
+        );
       }
-      await Future.delayed(Duration(seconds: 2)); // Wait 2 seconds between attempts
+      await Future.delayed(
+        Duration(seconds: 2),
+      ); // Wait 2 seconds between attempts
     }
 
     if (!dataVerified) {
-      print('⚠️  Warning: Could not verify data sync to remote server after $maxRetries attempts');
-      print('   The data may still be syncing. Try the download in a few minutes.');
+      print(
+        '⚠️  Warning: Could not verify data sync to remote server after $maxRetries attempts',
+      );
+      print(
+        '   The data may still be syncing. Try the download in a few minutes.',
+      );
     }
 
     // 8. Print retrieval URL
@@ -1329,7 +1814,9 @@ Future<void> main(List<String> arguments) async {
 
     // Calculate and display expiration time
     final expirationTime = DateTime.now().add(Duration(seconds: ttl));
-    final formattedExpiration = expirationTime.toLocal().toString().split('.')[0]; // Remove microseconds
+    final formattedExpiration = expirationTime.toLocal().toString().split(
+      '.',
+    )[0]; // Remove microseconds
     print('PIN expires: $formattedExpiration (TTL: ${formatDuration(ttl)})');
 
     // print('\nNote: Make sure the server is running:');
@@ -1350,7 +1837,8 @@ Future<void> main(List<String> arguments) async {
 Future<AtClient> _getAtClient(String atSign, bool verbose) async {
   try {
     // Generate preferences following the pattern from at_demos
-    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE']!;
 
     final preference = AtOnboardingPreference()
       ..hiveStoragePath = '$home/.atsign/storage/$atSign'
@@ -1383,7 +1871,9 @@ Future<AtClient> _getAtClient(String atSign, bool verbose) async {
   } catch (e) {
     print('Failed to create AtClient: $e');
     print('Make sure:');
-    print('1. You have activated your atSign: dart run at_activate --atsign $atSign');
+    print(
+      '1. You have activated your atSign: dart run at_activate --atsign $atSign',
+    );
     print('2. Your atKeys file exists at: ~/.atsign/keys/${atSign}_key.atKeys');
     print('3. You have proper network connectivity');
     exit(6);

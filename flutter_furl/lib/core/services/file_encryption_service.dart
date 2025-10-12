@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:pointycastle/export.dart';
+import 'filebin_resolver.dart';
 
 class FileEncryptionService {
   static const String defaultServerUrl = 'https://furl.host';
@@ -19,7 +20,8 @@ class FileEncryptionService {
     // Character set: uppercase, lowercase, numbers, and safe special characters
     // Excludes: 0, O, 1, l, I for readability
     // Excludes: quotes, spaces, and URL-problematic characters
-    const String chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
+    const String chars =
+        'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
 
     final random = SecureRandom('AES/CTR/AUTO-SEED-PRNG');
     final seed = Uint8List(32);
@@ -45,7 +47,8 @@ class FileEncryptionService {
   }
 
   /// Encrypt file using ChaCha20 (matching CLI implementation exactly)
-  static Future<Uint8List> encryptFileChaCha20(File file, Uint8List key, Uint8List nonce) async {
+  static Future<Uint8List> encryptFileChaCha20(
+      File file, Uint8List key, Uint8List nonce) async {
     // Create ChaCha20 cipher
     final cipher = ChaCha20Engine();
     final params = ParametersWithIV<KeyParameter>(KeyParameter(key), nonce);
@@ -81,23 +84,31 @@ class FileEncryptionService {
 
       // Sanitize filename for URL - remove or replace problematic characters
       final sanitizedFileName = fileName
-          .replaceAll('@', '_at_')
           .replaceAll(' ', '_')
           .replaceAll('/', '_')
           .replaceAll('\\', '_')
+          .replaceAll(':', '_')
+          .replaceAll('*', '_')
           .replaceAll('?', '_')
-          .replaceAll('#', '_')
+          .replaceAll('"', '_')
+          .replaceAll('<', '_')
+          .replaceAll('>', '_')
+          .replaceAll('|', '_')
           .replaceAll('&', '_')
           .replaceAll('=', '_')
           .replaceAll('%', '_');
 
-      final uploadUrl = 'https://filebin.net/$binId/${sanitizedFileName}.encrypted';
+      // Resolve the filebin URL from configuration
+      final filebinBaseUrl = await FilebinResolver.resolveFilebinUrl();
+      final uploadUrl = '$filebinBaseUrl/$binId/${sanitizedFileName}.encrypted';
 
       // Upload with progress tracking
       final response = await dio.post(
         uploadUrl,
         data: encryptedBytes,
-        options: Options(headers: {'Content-Type': 'application/octet-stream'}, responseType: ResponseType.plain),
+        options: Options(
+            headers: {'Content-Type': 'application/octet-stream'},
+            responseType: ResponseType.plain),
         onSendProgress: (int sent, int total) {
           if (onProgress != null) {
             onProgress(sent / total);
@@ -108,7 +119,8 @@ class FileEncryptionService {
       if (response.statusCode == 201 || response.statusCode == 200) {
         return uploadUrl;
       } else {
-        throw Exception('Upload failed: ${response.statusCode} - ${response.data}');
+        throw Exception(
+            'Upload failed: ${response.statusCode} - ${response.data}');
       }
     } catch (e) {
       _logger.severe('Upload error: $e');
@@ -143,9 +155,11 @@ class FileEncryptionService {
       final digest = sha256.convert(pinBytes + salt);
       final derivedKey = Uint8List.fromList(digest.bytes);
 
-      final keyEncrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
+      final keyEncrypter = encrypt.Encrypter(
+          encrypt.AES(encrypt.Key(derivedKey), mode: encrypt.AESMode.ctr));
       final keyIv = encrypt.IV.fromSecureRandom(16);
-      final encryptedChaCha20Key = keyEncrypter.encryptBytes(chaCha20Key, iv: keyIv);
+      final encryptedChaCha20Key =
+          keyEncrypter.encryptBytes(chaCha20Key, iv: keyIv);
 
       // Generate unique atKey name
       final uuid = Uuid();
@@ -167,7 +181,8 @@ class FileEncryptionService {
       });
 
       // Get atClient (use provided one or get from manager)
-      final atClientInstance = atClient ?? AtClientManager.getInstance().atClient;
+      final atClientInstance =
+          atClient ?? AtClientManager.getInstance().atClient;
 
       // Create atKey
       final atKey = AtKey()
@@ -178,7 +193,8 @@ class FileEncryptionService {
 
       // Store in atPlatform
       final putRequestOptions = PutRequestOptions()..useRemoteAtServer = true;
-      await atClientInstance.put(atKey, secretPayload, putRequestOptions: putRequestOptions);
+      await atClientInstance.put(atKey, secretPayload,
+          putRequestOptions: putRequestOptions);
 
       _logger.info('Metadata stored in atPlatform with key: $atKeyName');
 

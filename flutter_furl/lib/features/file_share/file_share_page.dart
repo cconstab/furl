@@ -59,14 +59,19 @@ class _FileSharePageState extends State<FileSharePage> {
                       const Expanded(
                         child: Text(
                           'Furl - Secure File Sharing',
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
                         ),
                       ),
                       BlocBuilder<OnboardingCubit, OnboardingState>(
                         builder: (context, state) {
                           if (state is OnboardingCompleted) {
                             return FutureBuilder<List<String>>(
-                              future: context.read<OnboardingCubit>().getStoredAtSigns(),
+                              future: context
+                                  .read<OnboardingCubit>()
+                                  .getStoredAtSigns(),
                               builder: (context, snapshot) {
                                 final atSigns = snapshot.data ?? [];
                                 final hasMultipleAtSigns = atSigns.length > 1;
@@ -75,24 +80,33 @@ class _FileSharePageState extends State<FileSharePage> {
                                   return PopupMenuButton<String>(
                                     onSelected: (selectedAtSign) {
                                       if (selectedAtSign != state.atSign) {
-                                        context.read<OnboardingCubit>().switchAtSign(selectedAtSign);
+                                        context
+                                            .read<OnboardingCubit>()
+                                            .switchAtSign(selectedAtSign);
                                       }
                                     },
-                                    itemBuilder: (context) => atSigns.map((atSign) {
-                                      final isCurrentAtSign = atSign == state.atSign;
+                                    itemBuilder: (context) =>
+                                        atSigns.map((atSign) {
+                                      final isCurrentAtSign =
+                                          atSign == state.atSign;
                                       return PopupMenuItem<String>(
                                         value: atSign,
                                         child: Row(
                                           children: [
                                             CircleAvatar(
                                               radius: 12,
-                                              backgroundColor:
-                                                  isCurrentAtSign ? const Color(0xFF667eea) : Colors.grey.shade300,
+                                              backgroundColor: isCurrentAtSign
+                                                  ? const Color(0xFF667eea)
+                                                  : Colors.grey.shade300,
                                               child: Text(
-                                                atSign.substring(1, 2).toUpperCase(),
+                                                atSign
+                                                    .substring(1, 2)
+                                                    .toUpperCase(),
                                                 style: TextStyle(
                                                   fontSize: 10,
-                                                  color: isCurrentAtSign ? Colors.white : Colors.grey.shade600,
+                                                  color: isCurrentAtSign
+                                                      ? Colors.white
+                                                      : Colors.grey.shade600,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -101,24 +115,34 @@ class _FileSharePageState extends State<FileSharePage> {
                                             Text(
                                               atSign,
                                               style: TextStyle(
-                                                fontWeight: isCurrentAtSign ? FontWeight.bold : FontWeight.normal,
-                                                color: isCurrentAtSign ? const Color(0xFF667eea) : Colors.black87,
+                                                fontWeight: isCurrentAtSign
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                                color: isCurrentAtSign
+                                                    ? const Color(0xFF667eea)
+                                                    : Colors.black87,
                                               ),
                                             ),
                                             if (isCurrentAtSign) ...[
                                               const Spacer(),
-                                              const Icon(Icons.check, size: 16, color: Color(0xFF667eea)),
+                                              const Icon(Icons.check,
+                                                  size: 16,
+                                                  color: Color(0xFF667eea)),
                                             ],
                                           ],
                                         ),
                                       );
                                     }).toList(),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
                                       decoration: BoxDecoration(
                                         color: Colors.white.withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(15),
-                                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                                        border: Border.all(
+                                            color:
+                                                Colors.white.withOpacity(0.3),
+                                            width: 1),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -126,13 +150,16 @@ class _FileSharePageState extends State<FileSharePage> {
                                           Text(
                                             state.atSign,
                                             style: const TextStyle(
-                                                fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.white),
                                           ),
                                           const SizedBox(width: 4),
                                           Icon(
                                             Icons.keyboard_arrow_down,
                                             size: 16,
-                                            color: Colors.white.withOpacity(0.8),
+                                            color:
+                                                Colors.white.withOpacity(0.8),
                                           ),
                                         ],
                                       ),
@@ -141,7 +168,8 @@ class _FileSharePageState extends State<FileSharePage> {
                                 } else {
                                   // Single atSign - just display it without dropdown
                                   return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: Colors.white.withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(15),
@@ -149,7 +177,9 @@ class _FileSharePageState extends State<FileSharePage> {
                                     child: Text(
                                       state.atSign,
                                       style: const TextStyle(
-                                          fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.white),
                                     ),
                                   );
                                 }
@@ -189,18 +219,28 @@ class _FileSharePageState extends State<FileSharePage> {
                           const PopupMenuDivider(),
                           const PopupMenuItem(
                             value: 'help',
-                            child:
-                                Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 8), Text('Help')]),
+                            child: Row(children: [
+                              Icon(Icons.help_outline, size: 18),
+                              SizedBox(width: 8),
+                              Text('Help')
+                            ]),
                           ),
                           const PopupMenuItem(
                             value: 'about',
-                            child:
-                                Row(children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('About')]),
+                            child: Row(children: [
+                              Icon(Icons.info_outline, size: 18),
+                              SizedBox(width: 8),
+                              Text('About')
+                            ]),
                           ),
                           const PopupMenuDivider(),
                           const PopupMenuItem(
                             value: 'logout',
-                            child: Row(children: [Icon(Icons.logout, size: 18), SizedBox(width: 8), Text('Logout')]),
+                            child: Row(children: [
+                              Icon(Icons.logout, size: 18),
+                              SizedBox(width: 8),
+                              Text('Logout')
+                            ]),
                           ),
                         ],
                       ),
@@ -216,7 +256,10 @@ class _FileSharePageState extends State<FileSharePage> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(15),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 40,
+                            offset: const Offset(0, 20)),
                       ],
                     ),
                     child: BlocConsumer<FileShareCubit, FileShareState>(
@@ -226,7 +269,8 @@ class _FileSharePageState extends State<FileSharePage> {
                             SnackBar(
                               content: Row(
                                 children: [
-                                  const Text('❌', style: TextStyle(fontSize: 16)),
+                                  const Text('❌',
+                                      style: TextStyle(fontSize: 16)),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(state.message)),
                                 ],
@@ -253,21 +297,26 @@ class _FileSharePageState extends State<FileSharePage> {
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade50,
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey.shade200),
+                                  border:
+                                      Border.all(color: Colors.grey.shade200),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
                                       '⚙️ Share Options',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                     const SizedBox(height: 16),
                                     ShareOptionsWidget(
                                       initialTtl: _selectedTtl,
                                       initialMessage: _customMessage,
-                                      onTtlChanged: (ttl) => setState(() => _selectedTtl = ttl),
-                                      onMessageChanged: (message) => setState(() => _customMessage = message),
+                                      onTtlChanged: (ttl) =>
+                                          setState(() => _selectedTtl = ttl),
+                                      onMessageChanged: (message) => setState(
+                                          () => _customMessage = message),
                                     ),
                                   ],
                                 ),
@@ -286,18 +335,25 @@ class _FileSharePageState extends State<FileSharePage> {
                                           fileName,
                                           ttl: _selectedTtl,
                                           message:
-                                              _customMessage?.trim().isEmpty == true ? null : _customMessage?.trim(),
+                                              _customMessage?.trim().isEmpty ==
+                                                      true
+                                                  ? null
+                                                  : _customMessage?.trim(),
                                         );
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF667eea),
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 30, vertical: 15),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8)),
                                   ),
                                   child: const Text(
                                     '🔐 Encrypt and Share',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600),
                                   ),
                                 ),
                               ],
@@ -336,7 +392,8 @@ class _FileSharePageState extends State<FileSharePage> {
           try {
             context.read<FileShareCubit>().selectFile(file);
           } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing dropped file: $e')));
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error processing dropped file: $e')));
           }
         }
       },
@@ -344,12 +401,16 @@ class _FileSharePageState extends State<FileSharePage> {
         height: 200,
         decoration: BoxDecoration(
           border: Border.all(
-            color: state is FileSelected ? const Color(0xFF667eea) : const Color(0xFFe1e5e9),
+            color: state is FileSelected
+                ? const Color(0xFF667eea)
+                : const Color(0xFFe1e5e9),
             width: 2,
             style: BorderStyle.solid,
           ),
           borderRadius: BorderRadius.circular(8),
-          color: state is FileSelected ? const Color(0xFF667eea).withOpacity(0.1) : const Color(0xFFf0f0f0),
+          color: state is FileSelected
+              ? const Color(0xFF667eea).withOpacity(0.1)
+              : const Color(0xFFf0f0f0),
         ),
         child: InkWell(
           onTap: () => _selectFile(context),
@@ -359,11 +420,15 @@ class _FileSharePageState extends State<FileSharePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (state is FileSelected) ...[
-                  Text(_getFileIcon(path.basename(state.file.path)), style: const TextStyle(fontSize: 48)),
+                  Text(_getFileIcon(path.basename(state.file.path)),
+                      style: const TextStyle(fontSize: 48)),
                   const SizedBox(height: 8),
                   Text(
                     path.basename(state.file.path),
-                    style: const TextStyle(fontSize: 16, color: Color(0xFF667eea), fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF667eea),
+                        fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
@@ -381,7 +446,8 @@ class _FileSharePageState extends State<FileSharePage> {
                           ),
                         );
                       }
-                      return const Text('...', style: TextStyle(fontSize: 14, color: Colors.grey));
+                      return const Text('...',
+                          style: TextStyle(fontSize: 14, color: Colors.grey));
                     },
                   ),
                 ] else ...[
@@ -390,7 +456,10 @@ class _FileSharePageState extends State<FileSharePage> {
                   Text(
                     'Drag and drop a file here\nor click to select',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.normal),
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.normal),
                   ),
                 ],
               ],
@@ -405,7 +474,8 @@ class _FileSharePageState extends State<FileSharePage> {
 Widget _buildUploadProgress(BuildContext context, FileUploading state) {
   return Container(
     padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(color: const Color(0xFFf0f0f0), borderRadius: BorderRadius.circular(8)),
+    decoration: BoxDecoration(
+        color: const Color(0xFFf0f0f0), borderRadius: BorderRadius.circular(8)),
     child: Column(
       children: [
         Row(
@@ -416,7 +486,10 @@ Widget _buildUploadProgress(BuildContext context, FileUploading state) {
             Expanded(
               child: Text(
                 state.status,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black87),
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -436,13 +509,17 @@ Widget _buildUploadProgress(BuildContext context, FileUploading state) {
             widthFactor: state.progress,
             child: Container(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
+                gradient: LinearGradient(
+                    colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
                 borderRadius: BorderRadius.all(Radius.circular(10)),
               ),
               child: Center(
                 child: Text(
                   '${(state.progress * 100).toInt()}%',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14),
                 ),
               ),
             ),
@@ -471,7 +548,10 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
             Expanded(
               child: Text(
                 'File Shared Successfully!',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF27ae60)),
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF27ae60)),
               ),
             ),
           ],
@@ -483,7 +563,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
           children: [
             Text('🔗', style: TextStyle(fontSize: 20)),
             SizedBox(width: 8),
-            Text('Share URL:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('Share URL:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 8),
@@ -497,7 +578,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
           child: Row(
             children: [
               Expanded(
-                child: Text(state.url, style: const TextStyle(fontFamily: 'monospace')),
+                child: Text(state.url,
+                    style: const TextStyle(fontFamily: 'monospace')),
               ),
               IconButton(
                 onPressed: () {
@@ -527,7 +609,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
           children: [
             Text('🔑', style: TextStyle(fontSize: 20)),
             SizedBox(width: 8),
-            Text('Access PIN:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('Access PIN:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 8),
@@ -543,7 +626,10 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
               Expanded(
                 child: Text(
                   state.pin,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
               IconButton(
@@ -584,12 +670,16 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                 children: [
                   const Text('📄', style: TextStyle(fontSize: 18)),
                   const SizedBox(width: 8),
-                  const Text('File Details:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const Text('File Details:',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Name: ${state.fileName}', style: const TextStyle(fontSize: 13)),
-              Text('Size: ${_formatFileSize(state.fileSize)}', style: const TextStyle(fontSize: 13)),
+              Text('Name: ${state.fileName}',
+                  style: const TextStyle(fontSize: 13)),
+              Text('Size: ${_formatFileSize(state.fileSize)}',
+                  style: const TextStyle(fontSize: 13)),
               Text(
                 'Expires: ${_formatExpiration(state.expiresAt)}',
                 style: const TextStyle(fontSize: 13, color: Colors.orange),
@@ -605,7 +695,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
             Expanded(
               child: ElevatedButton(
                 onPressed: () {
-                  final message = 'File shared via Furl 🔐:\n\n🔗 URL: ${state.url}\n🔑 PIN: ${state.pin}';
+                  final message =
+                      'File shared via Furl 🔐:\n\n🔗 URL: ${state.url}\n🔑 PIN: ${state.pin}';
                   Clipboard.setData(ClipboardData(text: message));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -622,8 +713,10 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF667eea),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -634,7 +727,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                     Flexible(
                       child: Text(
                         'Copy All',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -650,8 +744,10 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                 },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Color(0xFF667eea), width: 2),
-                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -662,7 +758,10 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                     Flexible(
                       child: Text(
                         'Send File',
-                        style: TextStyle(color: Color(0xFF667eea), fontWeight: FontWeight.w600, fontSize: 14),
+                        style: TextStyle(
+                            color: Color(0xFF667eea),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -760,18 +859,21 @@ void _showAboutDialog(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('File Upload Limits', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('File Upload Limits',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             const Text('Maximum file size: No limit'),
             const Text('Supported file types: All'),
             const SizedBox(height: 16),
-            const Text('Security Features', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('Security Features',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             const Text('• End-to-end encryption'),
             const Text('• Automatic PIN generation'),
             const Text('• Secure atSign authentication'),
             const SizedBox(height: 16),
-            const Text('Version Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('Version Information',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             const Text('Version: 1.0.0'),
             const Text('Secure file sharing powered by atSign'),
@@ -780,7 +882,8 @@ void _showAboutDialog(BuildContext context) {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close', style: TextStyle(color: Color(0xFF667eea))),
+            child:
+                const Text('Close', style: TextStyle(color: Color(0xFF667eea))),
           ),
         ],
       );
@@ -804,7 +907,8 @@ void _showHelpDialog(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Follow these simple steps:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('Follow these simple steps:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             const Text('📁 1. Drag and drop a file or click to select'),
             const SizedBox(height: 8),
@@ -816,7 +920,8 @@ void _showHelpDialog(BuildContext context) {
             const SizedBox(height: 8),
             const Text('🔑 5. Recipients use the PIN to decrypt the file'),
             const SizedBox(height: 16),
-            const Text('Tips:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const Text('Tips:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),
             const Text('• Set expiration time from 30 minutes to 6 days'),
             const SizedBox(height: 4),
@@ -828,7 +933,8 @@ void _showHelpDialog(BuildContext context) {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it!', style: TextStyle(color: Color(0xFF667eea))),
+            child: const Text('Got it!',
+                style: TextStyle(color: Color(0xFF667eea))),
           ),
         ],
       );
@@ -847,7 +953,8 @@ void _selectFile(BuildContext context) async {
       context.read<FileShareCubit>().selectFile(file);
     }
   } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
   }
 }
 
@@ -887,7 +994,8 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
   void initState() {
     super.initState();
     _selectedTtl = widget.initialTtl;
-    _messageController = TextEditingController(text: widget.initialMessage ?? '');
+    _messageController =
+        TextEditingController(text: widget.initialMessage ?? '');
   }
 
   @override
@@ -905,7 +1013,8 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
         DropdownButtonFormField<String>(
           value: _selectedTtl,
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(6),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -916,7 +1025,8 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
             ),
           ),
           items: _ttlOptions.map((option) {
-            return DropdownMenuItem<String>(value: option['value'], child: Text(option['label']!));
+            return DropdownMenuItem<String>(
+                value: option['value'], child: Text(option['label']!));
           }).toList(),
           onChanged: (value) {
             setState(() {
@@ -929,13 +1039,15 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
         const SizedBox(height: 16),
 
         // Message Field
-        const Text('💬 Message (optional):', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        const Text('💬 Message (optional):',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         TextField(
           controller: _messageController,
           decoration: InputDecoration(
             hintText: 'Add a message for the recipient (max 140 characters)',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(6),
               borderSide: BorderSide(color: Colors.grey.shade300),

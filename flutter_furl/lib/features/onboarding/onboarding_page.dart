@@ -14,7 +14,8 @@ class OnboardingPage extends StatelessWidget {
           if (state is OnboardingError) {
             ScaffoldMessenger.of(
               context,
-            ).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+            ).showSnackBar(SnackBar(
+                content: Text(state.message), backgroundColor: Colors.red));
           }
         },
         builder: (context, state) {
@@ -47,17 +48,24 @@ class OnboardingPage extends StatelessWidget {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(15),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10)),
                         ],
                       ),
-                      child: const Center(child: Text('🔐', style: TextStyle(fontSize: 60))),
+                      child: const Center(
+                          child: Text('🔐', style: TextStyle(fontSize: 60))),
                     ),
                     const SizedBox(height: 40),
 
                     // Welcome text
                     const Text(
                       'Furl',
-                      style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                     ),
                     const SizedBox(height: 16),
                     const Padding(
@@ -65,7 +73,8 @@ class OnboardingPage extends StatelessWidget {
                       child: Text(
                         'Secure File Sharing with atSign authentication.\nShare files privately and securely.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 18, color: Colors.white, height: 1.5),
+                        style: TextStyle(
+                            fontSize: 18, color: Colors.white, height: 1.5),
                       ),
                     ),
                     const SizedBox(height: 60),
@@ -78,7 +87,10 @@ class OnboardingPage extends StatelessWidget {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(15),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 40,
+                              offset: const Offset(0, 20)),
                         ],
                       ),
                       child: Column(
@@ -88,7 +100,9 @@ class OnboardingPage extends StatelessWidget {
                             children: [
                               Text('🔑', style: TextStyle(fontSize: 24)),
                               SizedBox(width: 12),
-                              Expanded(child: Text('Secure atSign authentication', style: TextStyle(fontSize: 16))),
+                              Expanded(
+                                  child: Text('Secure atSign authentication',
+                                      style: TextStyle(fontSize: 16))),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -97,7 +111,8 @@ class OnboardingPage extends StatelessWidget {
                               Text('📁', style: TextStyle(fontSize: 24)),
                               SizedBox(width: 12),
                               Expanded(
-                                child: Text('End-to-end encrypted file sharing', style: TextStyle(fontSize: 16)),
+                                child: Text('End-to-end encrypted file sharing',
+                                    style: TextStyle(fontSize: 16)),
                               ),
                             ],
                           ),
@@ -106,7 +121,9 @@ class OnboardingPage extends StatelessWidget {
                             children: [
                               Text('🔗', style: TextStyle(fontSize: 24)),
                               SizedBox(width: 12),
-                              Expanded(child: Text('Simple URL + PIN sharing', style: TextStyle(fontSize: 16))),
+                              Expanded(
+                                  child: Text('Simple URL + PIN sharing',
+                                      style: TextStyle(fontSize: 16))),
                             ],
                           ),
                           const SizedBox(height: 40),
@@ -119,14 +136,16 @@ class OnboardingPage extends StatelessWidget {
                                   width: 24,
                                   height: 24,
                                   child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Theme.of(context).colorScheme.primary),
                                     strokeWidth: 3,
                                   ),
                                 ),
                                 const SizedBox(height: 16),
                                 const Text(
                                   'Setting up your atSign...',
-                                  style: TextStyle(color: Colors.black87, fontSize: 16),
+                                  style: TextStyle(
+                                      color: Colors.black87, fontSize: 16),
                                 ),
                               ],
                             )
@@ -135,18 +154,23 @@ class OnboardingPage extends StatelessWidget {
                               width: double.infinity,
                               child: ElevatedButton(
                                 onPressed: () {
-                                  context.read<OnboardingCubit>().startOnboarding(context);
+                                  context
+                                      .read<OnboardingCubit>()
+                                      .startOnboarding(context);
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF667eea),
                                   foregroundColor: Colors.white,
                                   minimumSize: const Size(double.infinity, 56),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
                                   elevation: 2,
                                 ),
                                 child: const Text(
                                   'Get Started with atSign',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
@@ -160,18 +184,22 @@ class OnboardingPage extends StatelessWidget {
                               onPressed: () {
                                 showDialog(
                                   context: context,
-                                  builder: (context) => const AtSignManagerDialog(),
+                                  builder: (context) =>
+                                      const AtSignManagerDialog(),
                                 );
                               },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF667eea),
-                                side: const BorderSide(color: Color(0xFF667eea)),
+                                side:
+                                    const BorderSide(color: Color(0xFF667eea)),
                                 minimumSize: const Size(double.infinity, 48),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
                               ),
                               child: const Text(
                                 'Manage Existing atSigns',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ),
@@ -182,7 +210,8 @@ class OnboardingPage extends StatelessWidget {
                           const Text(
                             'By continuing, you agree to set up an atSign for secure authentication and file sharing.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: Colors.black54),
+                            style:
+                                TextStyle(fontSize: 14, color: Colors.black54),
                           ),
                         ],
                       ),

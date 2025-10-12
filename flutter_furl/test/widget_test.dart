@@ -6,7 +6,8 @@ import 'package:flutter_furl/main.dart';
 
 void main() {
   group('FurlApp Tests', () {
-    testWidgets('App should start without crashing', (WidgetTester tester) async {
+    testWidgets('App should start without crashing',
+        (WidgetTester tester) async {
       // Build our app and trigger a frame.
       await tester.pumpWidget(const FurlApp());
 

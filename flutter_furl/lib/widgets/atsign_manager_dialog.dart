@@ -168,17 +168,22 @@ class _AtSignManagerDialogState extends State<AtSignManagerDialog> {
                 final atSign = _storedAtSigns[index];
                 return BlocBuilder<OnboardingCubit, OnboardingState>(
                   builder: (context, state) {
-                    final isCurrentAtSign = state is OnboardingCompleted && state.atSign == atSign;
+                    final isCurrentAtSign =
+                        state is OnboardingCompleted && state.atSign == atSign;
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: isCurrentAtSign ? const Color(0xFF667eea) : Colors.grey[300],
+                          backgroundColor: isCurrentAtSign
+                              ? const Color(0xFF667eea)
+                              : Colors.grey[300],
                           child: Text(
                             atSign.substring(1, 2).toUpperCase(),
                             style: TextStyle(
-                              color: isCurrentAtSign ? Colors.white : Colors.grey[600],
+                              color: isCurrentAtSign
+                                  ? Colors.white
+                                  : Colors.grey[600],
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -186,16 +191,21 @@ class _AtSignManagerDialogState extends State<AtSignManagerDialog> {
                         title: Text(
                           atSign,
                           style: TextStyle(
-                            fontWeight: isCurrentAtSign ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isCurrentAtSign
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
-                        subtitle: isCurrentAtSign ? const Text('Current atSign') : null,
+                        subtitle: isCurrentAtSign
+                            ? const Text('Current atSign')
+                            : null,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (!isCurrentAtSign)
                               IconButton(
-                                icon: const Icon(Icons.switch_account, color: Color(0xFF667eea)),
+                                icon: const Icon(Icons.switch_account,
+                                    color: Color(0xFF667eea)),
                                 onPressed: () => _switchToAtSign(atSign),
                                 tooltip: 'Switch to this atSign',
                               ),
