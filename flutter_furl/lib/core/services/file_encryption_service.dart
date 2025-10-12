@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:pointycastle/export.dart';
+import 'filebin_resolver.dart';
 
 class FileEncryptionService {
   static const String defaultServerUrl = 'https://furl.host';
@@ -81,17 +82,23 @@ class FileEncryptionService {
 
       // Sanitize filename for URL - remove or replace problematic characters
       final sanitizedFileName = fileName
-          .replaceAll('@', '_at_')
           .replaceAll(' ', '_')
           .replaceAll('/', '_')
           .replaceAll('\\', '_')
+          .replaceAll(':', '_')
+          .replaceAll('*', '_')
           .replaceAll('?', '_')
-          .replaceAll('#', '_')
+          .replaceAll('"', '_')
+          .replaceAll('<', '_')
+          .replaceAll('>', '_')
+          .replaceAll('|', '_')
           .replaceAll('&', '_')
           .replaceAll('=', '_')
           .replaceAll('%', '_');
 
-      final uploadUrl = 'https://filebin.net/$binId/${sanitizedFileName}.encrypted';
+      // Resolve the filebin URL from configuration
+      final filebinBaseUrl = await FilebinResolver.resolveFilebinUrl();
+      final uploadUrl = '$filebinBaseUrl/$binId/${sanitizedFileName}.encrypted';
 
       // Upload with progress tracking
       final response = await dio.post(

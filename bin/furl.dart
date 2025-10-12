@@ -12,6 +12,8 @@ import 'package:at_utils/at_logger.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pointycastle/export.dart';
 import 'package:furl/validation.dart';
+import 'package:furl/config_manager.dart';
+import 'package:furl/filebin_resolver.dart';
 
 /// Calculate SHA-512 hash of a file
 Future<String> calculateFileSha512(String filePath) async {
@@ -957,6 +959,27 @@ Future<void> main(List<String> arguments) async {
     print('  -q, --quiet           Disable progress bars');
     print('  -o, --output <dir>    Output directory (default: current directory)');
     print('');
+    print('CONFIGURE FILEBIN:');
+    print('Usage: furl set-filebin <myatsign> <filebin-url> [config-atsign] [options]');
+    print('       furl publish-filebin <atsign> <filebin-url> [options]');
+    print('');
+    print('Arguments:');
+    print('  myatsign              Your atSign (for personal config)');
+    print('  filebin-url           The filebin server URL (e.g., https://filebin.net)');
+    print('  config-atsign         Optional: atSign to check for public config (default: @furl)');
+    print('');
+    print('Options:');
+    print('  -v, --verbose         Enable verbose logging');
+    print('');
+    print('Filebin Resolution Order:');
+    print('  1. Your private config: private:filebin_override.furl@myatsign');
+    print('  2. Public org config:   public:filebin.furl@furl (or @config-atsign)');
+    print('  3. Default fallback:    https://filebin.net');
+    print('');
+    print('Configuration is stored in atKeys (not local files), so it automatically');
+    print('syncs across all your devices. Organizations can publish a filebin URL');
+    print('that all employees can use by default.');
+    print('');
     print('TTL Examples:');
     print('  30s                   30 seconds');
     print('  10m                   10 minutes');
@@ -979,18 +1002,36 @@ Future<void> main(List<String> arguments) async {
     print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" -o ~/Downloads');
     print('  furl receive "https://furl.host/furl.html?atSign=@alice&key=abc123" "AB3!cd9eF" --verbose');
     print('');
+    print('Configuration Examples:');
+    print('  # Set personal filebin override');
+    print('  furl set-filebin @alice https://filebin.example.com');
+    print('');
+    print('  # Use company filebin with fallback to @mycompany public config');
+    print('  furl set-filebin @alice https://filebin.net @mycompany');
+    print('');
+    print('  # Publish org-wide filebin config (admins only)');
+    print('  furl publish-filebin @mycompany https://filebin.example.com');
+    print('');
+    print('  # Use verbose logging to see atClient operations');
+    print('  furl set-filebin @alice https://filebin.example.com -v');
+    print('');
     print('The program will:');
-    print('  SEND: 1. Encrypt your file with ChaCha20 (streaming optimized)');
-    print('        2. Upload the encrypted file to filebin.net');
-    print('        3. Store decryption metadata securely on the atPlatform');
-    print('        4. Generate a secure URL for the recipient');
-    print('        5. Generate a strong PIN with special characters for additional security');
-    print('        6. Calculate SHA-512 hash for integrity verification');
-    print('        7. Display the expiration time based on TTL');
+    print('  SEND: 1. Resolve filebin server (from atKey config or default)');
+    print('        2. Encrypt your file with ChaCha20 (streaming optimized)');
+    print('        3. Upload the encrypted file to configured filebin server');
+    print('        4. Store decryption metadata securely on the atPlatform');
+    print('        5. Generate a secure URL for the recipient');
+    print('        6. Generate a strong PIN with special characters for additional security');
+    print('        7. Calculate SHA-512 hash for integrity verification');
+    print('        8. Display the expiration time based on TTL');
     print('');
     print('  RECEIVE: 1. Download and decrypt the file using the provided URL and PIN');
     print('           2. Verify file integrity with SHA-512 hash');
     print('           3. Save the decrypted file to the specified location');
+    print('');
+    print('  CONFIG: 1. Store filebin preferences in atKeys (device-independent)');
+    print('          2. Support personal and organization-wide configuration');
+    print('          3. Automatic sync across all your devices');
     exit(0);
   }
 
@@ -1041,6 +1082,186 @@ Future<void> main(List<String> arguments) async {
       exit(1);
     }
     return;
+  }
+
+  // Check if this is a set-filebin command
+  if (arguments.isNotEmpty && arguments[0] == 'set-filebin') {
+    if (arguments.length < 3) {
+      print('Usage: furl set-filebin <myatsign> <filebin-url> [config-atsign] [options]');
+      print('');
+      print('Arguments:');
+      print('  myatsign              Your atSign (to store your personal config)');
+      print('  filebin-url           The filebin server URL (e.g., https://filebin.net)');
+      print('  config-atsign         Optional: atSign to lookup public config (default: @furl)');
+      print('');
+      print('Options:');
+      print('  -v, --verbose         Enable verbose logging');
+      print('');
+      print('Examples:');
+      print('  # Set personal filebin override');
+      print('  furl set-filebin @alice https://filebin.example.com');
+      print('');
+      print('  # Set personal override and use org config as fallback');
+      print('  furl set-filebin @alice https://my-filebin.com @mycompany');
+      print('');
+      print('This will:');
+      print('  1. Store your personal filebin URL in: private:filebin_override.furl@myatsign');
+      print('  2. Set which public atSign to check for org-wide config (default: @furl)');
+      print('');
+      print('The filebin URL will be resolved in this order:');
+      print('  1. Your private override: private:filebin_override.furl@myatsign');
+      print('  2. Public config: public:filebin.furl@<config-atsign>');
+      print('  3. Default fallback: https://filebin.net');
+      print('');
+      print('To publish org-wide config (admins only):');
+      print('  furl publish-filebin @mycompany https://filebin.example.com');
+      exit(1);
+    }
+
+    final myAtSign = arguments[1];
+    final filebinUrl = arguments[2];
+
+    // Parse optional arguments
+    bool verbose = false;
+    var configAtSign = ConfigManager.defaultConfigAtSign;
+
+    // Process arguments: [cmd, atsign, url, optional_config_atsign, optional_flags...]
+    for (int i = 3; i < arguments.length; i++) {
+      if (arguments[i] == '-v' || arguments[i] == '--verbose') {
+        verbose = true;
+      } else if (!arguments[i].startsWith('-')) {
+        // First non-flag argument after url is config-atsign
+        configAtSign = arguments[i];
+      }
+    }
+
+    // Set logging level
+    if (!verbose) {
+      AtSignLogger.root_level = 'severe';
+    }
+
+    // Validate URL format
+    try {
+      final uri = Uri.parse(filebinUrl);
+      if (!uri.scheme.startsWith('http') || uri.host.isEmpty) {
+        print('Error: Invalid URL format. Please provide a valid HTTPS URL');
+        print('Example: https://filebin.example.com');
+        exit(1);
+      }
+    } catch (e) {
+      print('Error: Invalid URL format: $e');
+      print('Example: https://filebin.example.com');
+      exit(1);
+    }
+
+    // Ensure atSigns have @ prefix
+    final normalizedMyAtSign = myAtSign.startsWith('@') ? myAtSign : '@$myAtSign';
+    final normalizedConfigAtSign = configAtSign.startsWith('@') ? configAtSign : '@$configAtSign';
+
+    try {
+      // Get atClient for the user
+      print('🔐 Authenticating as $normalizedMyAtSign...');
+      final atClient = await _getAtClient(normalizedMyAtSign, false);
+
+      // Store in private atKey
+      await ConfigManager.setPrivateOverride(atClient, filebinUrl, normalizedConfigAtSign);
+
+      print('✓ Personal filebin URL set: $filebinUrl');
+      print('✓ Stored in: private:filebin_override.furl$normalizedMyAtSign');
+      print('✓ Will check public config from: $normalizedConfigAtSign');
+      print('');
+      print('✓ Configuration saved successfully!');
+      print('All furl operations from $normalizedMyAtSign will now use: $filebinUrl');
+      print('');
+      print('Note: This is your personal override.');
+      print('It takes precedence over public:filebin.furl$normalizedConfigAtSign');
+    } catch (e) {
+      print('Error: Failed to set filebin configuration: $e');
+      exit(1);
+    }
+    exit(0);
+  }
+
+  // Check if this is a publish-filebin command (for org admins)
+  if (arguments.isNotEmpty && arguments[0] == 'publish-filebin') {
+    if (arguments.length < 3) {
+      print('Usage: furl publish-filebin <atsign> <filebin-url> [options]');
+      print('');
+      print('Arguments:');
+      print('  atsign                Your atSign (to publish from)');
+      print('  filebin-url           The filebin server URL for everyone to use');
+      print('');
+      print('Options:');
+      print('  -v, --verbose         Enable verbose logging');
+      print('');
+      print('Example:');
+      print('  furl publish-filebin @mycompany https://filebin.example.com');
+      print('');
+      print('This will:');
+      print('  1. Store the URL in: public:filebin.furl@atsign');
+      print('  2. Make it readable by all furl clients');
+      print('  3. Allow org-wide filebin configuration');
+      print('');
+      print('After publishing, any furl client can automatically use your filebin.');
+      print('Users can also explicitly configure it with:');
+      print('  furl set-filebin @alice <your-url> @mycompany');
+      exit(1);
+    }
+
+    final atSign = arguments[1];
+    final filebinUrl = arguments[2];
+
+    // Parse optional verbose flag
+    bool verbose = false;
+    for (int i = 3; i < arguments.length; i++) {
+      if (arguments[i] == '-v' || arguments[i] == '--verbose') {
+        verbose = true;
+      }
+    }
+
+    // Set logging level
+    if (!verbose) {
+      AtSignLogger.root_level = 'severe';
+    }
+
+    // Validate URL format
+    try {
+      final uri = Uri.parse(filebinUrl);
+      if (!uri.scheme.startsWith('http') || uri.host.isEmpty) {
+        print('Error: Invalid URL format. Please provide a valid HTTPS URL');
+        print('Example: https://filebin.example.com');
+        exit(1);
+      }
+    } catch (e) {
+      print('Error: Invalid URL format: $e');
+      print('Example: https://filebin.example.com');
+      exit(1);
+    }
+
+    // Ensure atSign has @ prefix
+    final normalizedAtSign = atSign.startsWith('@') ? atSign : '@$atSign';
+
+    try {
+      // Get atClient for the admin
+      print('🔐 Authenticating as $normalizedAtSign...');
+      final atClient = await _getAtClient(normalizedAtSign, false);
+
+      // Publish to public atKey
+      await ConfigManager.setPublicConfig(atClient, filebinUrl);
+
+      print('✓ Public filebin URL published: $filebinUrl');
+      print('✓ Stored in: public:filebin.furl$normalizedAtSign');
+      print('');
+      print('✓ Configuration published successfully!');
+      print('');
+      print('All furl clients will now automatically use this filebin server.');
+      print('Users can optionally set it as their default with:');
+      print('  furl set-filebin @theiratsign $filebinUrl $normalizedAtSign');
+    } catch (e) {
+      print('Error: Failed to publish filebin configuration: $e');
+      exit(1);
+    }
+    exit(0);
   }
 
   // Original send file logic
@@ -1148,16 +1369,23 @@ Future<void> main(List<String> arguments) async {
       sha512Hash = await calculateFileSha512(filePath);
     }
 
-    // 4. Upload encrypted file to filebin.net
+    // 4. Get AtClient first (needed for filebin resolution and metadata storage)
+    if (!quiet) print('🔐 Authenticating...');
+    final atClient = await _getAtClient(atSign, verbose);
+
+    // Resolve the filebin URL from configuration (checks atKeys)
+    final filebinBaseUrl = await FilebinResolver.resolveFilebinUrl(atClient);
+
+    // 5. Upload encrypted file to configured filebin server
     String fileUrl;
     File? tempEncryptedFile;
 
     try {
-      // Upload to filebin.net - they require a bin first, then file upload
+      // Upload to filebin - they require a bin first, then file upload
       // Use UUID for bin ID instead of timestamp for better security
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
-      final uploadUrl = 'https://filebin.net/$binId/$fileName.encrypted';
+      final uploadUrl = '$filebinBaseUrl/$binId/$fileName.encrypted';
 
       http.Response uploadResp;
 
@@ -1212,13 +1440,13 @@ Future<void> main(List<String> arguments) async {
         throw Exception('Upload failed: ${uploadResp.statusCode} - ${uploadResp.body}');
       }
     } catch (e) {
-      print('Error uploading to filebin.net: $e');
+      print('Error uploading to filebin server ($filebinBaseUrl): $e');
       // Fallback: simulate upload for testing
       print('Simulating upload...');
       final uuid = Uuid();
-      fileUrl = 'https://filebin.net/simulated/${uuid.v4().replaceAll('-', '')}_$fileName.encrypted';
+      fileUrl = '$filebinBaseUrl/simulated/${uuid.v4().replaceAll('-', '')}_$fileName.encrypted';
       print('File would be uploaded to: $fileUrl');
-      print('Note: Ensure network connectivity for actual filebin.net upload');
+      print('Note: Ensure network connectivity for actual filebin upload');
     } finally {
       // Clean up temporary file if it was created
       if (tempEncryptedFile != null && await tempEncryptedFile.exists()) {
@@ -1260,8 +1488,7 @@ Future<void> main(List<String> arguments) async {
       if (!hideFileSize) 'file_size': fileSize, // File size in bytes (unless hidden)
     });
 
-    // Get AtClient using the correct onboarding pattern from the demos
-    final atClient = await _getAtClient(atSign, verbose);
+    // Store metadata in atKey (atClient was already created earlier)
     final atKey = AtKey()
       ..key = atKeyName
       ..metadata = (Metadata()
