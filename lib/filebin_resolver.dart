@@ -26,7 +26,10 @@ class FilebinResolver {
     try {
       // First, determine which atSign to check for public config
       final configAtSign = await getConfigAtSign(atClient);
-      final publicUrl = await ConfigManager.getPublicConfig(atClient, configAtSign);
+      final publicUrl = await ConfigManager.getPublicConfig(
+        atClient,
+        configAtSign,
+      );
       if (publicUrl != null && publicUrl.isNotEmpty) {
         // Clean the URL: trim whitespace, remove trailing quotes and slashes
         var cleanUrl = publicUrl.trim();

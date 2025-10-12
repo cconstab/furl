@@ -85,7 +85,8 @@ class AtSignManager {
       // Also clear ALL keychain data to ensure clean state
       try {
         final keyChainManager = KeyChainManager.getInstance();
-        final allKeychainAtSigns = await keyChainManager.getAtSignListFromKeychain();
+        final allKeychainAtSigns =
+            await keyChainManager.getAtSignListFromKeychain();
 
         for (final atSign in allKeychainAtSigns) {
           try {
@@ -229,7 +230,8 @@ class AtSignManager {
       final appSupportDir = await getApplicationSupportDirectory();
       final atClientStorageDir = Directory('${appSupportDir.path}/atClient');
 
-      _logger.info('Cleaning up storage for $atSign in: ${atClientStorageDir.path}');
+      _logger.info(
+          'Cleaning up storage for $atSign in: ${atClientStorageDir.path}');
 
       // Use the proper atPlatform KeyChainManager to delete the atSign from keychain/biometric storage
       try {
@@ -239,9 +241,11 @@ class AtSignManager {
         // and cleans up all associated keys in biometric storage (keychain/keystore)
         final deleted = await keyChainManager.deleteAtSignFromKeychain(atSign);
         if (deleted) {
-          _logger.info('Successfully deleted $atSign from keychain/biometric storage');
+          _logger.info(
+              'Successfully deleted $atSign from keychain/biometric storage');
         } else {
-          _logger.warning('Failed to delete $atSign from keychain/biometric storage');
+          _logger.warning(
+              'Failed to delete $atSign from keychain/biometric storage');
         }
 
         // Also try the reset method for thorough cleanup
@@ -252,7 +256,8 @@ class AtSignManager {
           _logger.warning('Failed to reset $atSign in keychain');
         }
       } catch (e) {
-        _logger.warning('Error clearing keychain/biometric storage for $atSign: $e');
+        _logger.warning(
+            'Error clearing keychain/biometric storage for $atSign: $e');
       }
 
       // Clean up atKeys file (if it exists)
@@ -291,7 +296,8 @@ class AtSignManager {
           if (fileName.contains(atSign.replaceAll('@', ''))) {
             try {
               await entity.delete(recursive: true);
-              _logger.info('Deleted atSign-specific file/directory: ${entity.path}');
+              _logger.info(
+                  'Deleted atSign-specific file/directory: ${entity.path}');
             } catch (e) {
               _logger.warning('Could not delete ${entity.path}: $e');
             }

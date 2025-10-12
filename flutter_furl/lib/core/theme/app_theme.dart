@@ -29,7 +29,8 @@ class AppTheme {
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+        titleTextStyle: const TextStyle(
+            color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -40,10 +41,12 @@ class AppTheme {
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
-      textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: primaryColor)),
+      textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: primaryColor)),
       cardTheme: const CardThemeData(
         elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(15))),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(15))),
         shadowColor: Colors.black12,
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -64,9 +67,12 @@ class AppTheme {
         contentPadding: const EdgeInsets.all(15),
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
-        headlineMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
-        headlineSmall: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87),
+        headlineLarge: TextStyle(
+            fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
+        headlineMedium: TextStyle(
+            fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
+        headlineSmall: TextStyle(
+            fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87),
         bodyLarge: TextStyle(fontSize: 16, color: Colors.black87),
         bodyMedium: TextStyle(fontSize: 14, color: Colors.black87),
       ),

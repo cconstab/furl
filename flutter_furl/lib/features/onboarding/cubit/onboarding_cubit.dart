@@ -186,7 +186,8 @@ class OnboardingCubit extends Cubit<OnboardingState> {
       // Remember all current atSigns
       final allCurrentAtSigns = await AtSignManager.getStoredAtSigns();
 
-      _logger.info('Starting fresh onboarding. Current atSign: $currentAtSign, All atSigns: $allCurrentAtSigns');
+      _logger.info(
+          'Starting fresh onboarding. Current atSign: $currentAtSign, All atSigns: $allCurrentAtSigns');
 
       // Just reset the AtClientManager to ensure clean state for new onboarding
       // Don't clear biometric storage - that's what was causing the CRAM secret issue
@@ -237,7 +238,8 @@ class OnboardingCubit extends Cubit<OnboardingState> {
               _logger.info('Switched back to previous atSign: $currentAtSign');
               emit(OnboardingCompleted(currentAtSign));
             } else {
-              _logger.warning('Failed to switch back to previous atSign: $currentAtSign');
+              _logger.warning(
+                  'Failed to switch back to previous atSign: $currentAtSign');
               // If switching back fails, stay with the new one
               await AtSignManager.setCurrentAtSign(newAtSign);
               emit(OnboardingCompleted(newAtSign));

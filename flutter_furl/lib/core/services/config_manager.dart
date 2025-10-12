@@ -21,7 +21,8 @@ class ConfigManager {
 
       // Force remote lookup to get latest value
       final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
-      final result = await atClient.get(atKey, getRequestOptions: getRequestOptions);
+      final result =
+          await atClient.get(atKey, getRequestOptions: getRequestOptions);
 
       if (result.value != null && result.value.toString().isNotEmpty) {
         // Parse the stored config: url|config_atsign
@@ -93,7 +94,8 @@ class ConfigManager {
 
       // Force remote lookup to get latest value (avoid cache staleness)
       final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
-      final result = await atClient.get(atKey, getRequestOptions: getRequestOptions);
+      final result =
+          await atClient.get(atKey, getRequestOptions: getRequestOptions);
 
       if (result.value != null && result.value.toString().isNotEmpty) {
         return result.value.toString();

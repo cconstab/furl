@@ -60,7 +60,8 @@ class FileShareCubit extends Cubit<FileShareState> {
     emit(FileSelected(file));
   }
 
-  Future<void> shareFile(File file, String fileName, {String? ttl, String? message}) async {
+  Future<void> shareFile(File file, String fileName,
+      {String? ttl, String? message}) async {
     try {
       // First select the file, then upload and share it
       emit(FileSelected(file));
@@ -71,7 +72,8 @@ class FileShareCubit extends Cubit<FileShareState> {
     }
   }
 
-  Future<void> uploadAndShareFile(File file, String fileName, {String? ttl, String? message}) async {
+  Future<void> uploadAndShareFile(File file, String fileName,
+      {String? ttl, String? message}) async {
     try {
       emit(FileUploading(0.0, status: 'Preparing encryption...'));
 
@@ -83,8 +85,10 @@ class FileShareCubit extends Cubit<FileShareState> {
       }
 
       // Generate encryption keys (matching CLI exactly)
-      final chaCha20Key = encrypt.Key.fromSecureRandom(32); // 32-byte key for ChaCha20
-      final chaCha20Nonce = encrypt.IV.fromSecureRandom(8); // 8-byte nonce for ChaCha20
+      final chaCha20Key =
+          encrypt.Key.fromSecureRandom(32); // 32-byte key for ChaCha20
+      final chaCha20Nonce =
+          encrypt.IV.fromSecureRandom(8); // 8-byte nonce for ChaCha20
       final pin = FileEncryptionService.generateStrongPin(9);
 
       emit(FileUploading(0.1, status: 'Encrypting file...'));
@@ -105,8 +109,10 @@ class FileShareCubit extends Cubit<FileShareState> {
       emit(FileUploading(0.5, status: 'Uploading to server...'));
 
       // Upload to server
-      final fileUrl = await FileEncryptionService.uploadFileToServer(encryptedBytes, fileName, (progress) {
-        emit(FileUploading(0.5 + (progress * 0.3), status: 'Uploading to server...'));
+      final fileUrl = await FileEncryptionService.uploadFileToServer(
+          encryptedBytes, fileName, (progress) {
+        emit(FileUploading(0.5 + (progress * 0.3),
+            status: 'Uploading to server...'));
       });
 
       emit(FileUploading(0.8, status: 'Storing metadata...'));
@@ -128,13 +134,19 @@ class FileShareCubit extends Cubit<FileShareState> {
       emit(FileUploading(0.9, status: 'Generating share URL...'));
 
       // Generate retrieval URL
-      final shareUrl = FileEncryptionService.generateRetrievalUrl(atSign: currentAtSign, atKeyName: atKeyName);
+      final shareUrl = FileEncryptionService.generateRetrievalUrl(
+          atSign: currentAtSign, atKeyName: atKeyName);
 
       // Calculate expiration time based on TTL
       final ttlSeconds = _parseTtlToSeconds(ttl ?? '1h');
       final expiresAt = DateTime.now().add(Duration(seconds: ttlSeconds));
 
-      emit(FileUploaded(url: shareUrl, pin: pin, fileName: fileName, fileSize: fileSize, expiresAt: expiresAt));
+      emit(FileUploaded(
+          url: shareUrl,
+          pin: pin,
+          fileName: fileName,
+          fileSize: fileSize,
+          expiresAt: expiresAt));
 
       _logger.info('File shared successfully: $shareUrl');
     } catch (e) {

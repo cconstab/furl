@@ -20,7 +20,9 @@ class ConfigManager {
 
   /// Get the user's private filebin override (if set)
   /// Forces remote lookup to ensure latest configuration
-  static Future<Map<String, String>?> getPrivateOverride(AtClient atClient) async {
+  static Future<Map<String, String>?> getPrivateOverride(
+    AtClient atClient,
+  ) async {
     try {
       final atKey = AtKey()
         ..key = 'filebin_override'
@@ -28,7 +30,10 @@ class ConfigManager {
 
       // Force remote lookup to get latest value
       final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
-      final result = await atClient.get(atKey, getRequestOptions: getRequestOptions);
+      final result = await atClient.get(
+        atKey,
+        getRequestOptions: getRequestOptions,
+      );
 
       if (result.value != null && result.value.toString().isNotEmpty) {
         // Parse the stored config: url|config_atsign
@@ -48,7 +53,11 @@ class ConfigManager {
   }
 
   /// Set the user's private filebin override
-  static Future<void> setPrivateOverride(AtClient atClient, String filebinUrl, String configAtSign) async {
+  static Future<void> setPrivateOverride(
+    AtClient atClient,
+    String filebinUrl,
+    String configAtSign,
+  ) async {
     final atKey = AtKey()
       ..key = 'filebin_override'
       ..namespace = 'furl';
@@ -73,7 +82,10 @@ class ConfigManager {
 
   /// Get public filebin URL from a specific atSign
   /// Forces remote lookup to avoid stale cached values
-  static Future<String?> getPublicConfig(AtClient atClient, String fromAtSign) async {
+  static Future<String?> getPublicConfig(
+    AtClient atClient,
+    String fromAtSign,
+  ) async {
     try {
       // For public keys from another atSign, use AtKey.fromString
       // This correctly constructs: public:filebin.furl@fromAtSign
@@ -82,7 +94,10 @@ class ConfigManager {
 
       // Force remote lookup to get latest value (avoid cache staleness)
       final getRequestOptions = GetRequestOptions()..useRemoteAtServer = true;
-      final result = await atClient.get(atKey, getRequestOptions: getRequestOptions);
+      final result = await atClient.get(
+        atKey,
+        getRequestOptions: getRequestOptions,
+      );
 
       if (result.value != null && result.value.toString().isNotEmpty) {
         return result.value.toString();
@@ -95,7 +110,10 @@ class ConfigManager {
   }
 
   /// Set public filebin URL (makes it readable by everyone)
-  static Future<void> setPublicConfig(AtClient atClient, String filebinUrl) async {
+  static Future<void> setPublicConfig(
+    AtClient atClient,
+    String filebinUrl,
+  ) async {
     final atKey = AtKey()
       ..key = 'filebin'
       ..namespace = 'furl'

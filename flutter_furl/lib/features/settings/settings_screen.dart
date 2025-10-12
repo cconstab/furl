@@ -34,8 +34,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final privateConfig = await ConfigManager.getPrivateOverride();
 
     setState(() {
-      _filebinController.text = privateConfig?['url'] ?? ConfigManager.defaultFilebinUrl;
-      _atSignController.text = privateConfig?['config_atsign'] ?? ConfigManager.defaultConfigAtSign;
+      _filebinController.text =
+          privateConfig?['url'] ?? ConfigManager.defaultFilebinUrl;
+      _atSignController.text =
+          privateConfig?['config_atsign'] ?? ConfigManager.defaultConfigAtSign;
       _isLoading = false;
     });
 
@@ -93,7 +95,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Reset to Defaults'),
-        content: const Text('Are you sure you want to reset all settings to default values?'),
+        content: const Text(
+            'Are you sure you want to reset all settings to default values?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
