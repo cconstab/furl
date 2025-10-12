@@ -161,14 +161,14 @@ graph LR
 graph TB
     subgraph PrivateOverride
         A[Private Config User Level]
-        A1[Value format: url pipe config_atsign]
-        A2[Example: custom-filebin.com pipe mycompany]
+        A1[Value format: url vertical-bar config_atsign]
+        A2[Example: filebin.net vertical-bar at-mycompany]
     end
     
     subgraph PublicConfig
         B[Public Config Org Level]
         B1[Value format: url only]
-        B2[Example: ck6agzxiog6kmb.atsign.com]
+        B2[Example: filebin.net]
     end
     
     subgraph DefaultFallback
@@ -180,6 +180,9 @@ graph TB
     B --> E[Priority 2 Medium]
     C --> F[Priority 3 Lowest]
 ```
+
+**Note**: In the Private Config format, "vertical-bar" represents the `|` (pipe) character used as a delimiter.
+The actual stored value is: `https://filebin.net|@mycompany` (URL, pipe, atSign).
 
 ## Encryption Details
 
