@@ -26,43 +26,37 @@ Furl is a secure file sharing system built on the atPlatform that combines end-t
 
 ```mermaid
 graph TB
-    subgraph "Sender Side"
+    subgraph Sender
         A[User] --> B[furl CLI/App]
-        B --> C[File Encryption<br/>ChaCha20]
+        B --> C[File Encryption ChaCha20]
         C --> D[Generate Metadata]
         D --> E[Upload Encrypted File]
         D --> F[Store Metadata]
         E --> G[Filebin Server]
-        F --> H[atPlatform<br/>Secondary Server]
+        F --> H[atPlatform Secondary Server]
     end
     
-    subgraph "Configuration"
+    subgraph Configuration
         I[ConfigManager] --> J{Resolve Filebin URL}
-        J --> K[Private Override<br/>private:filebin_override.furl@user]
-        J --> L[Public Config<br/>public:filebin.furl@furl]
-        J --> M[Default Fallback<br/>https://filebin.net]
+        J --> K[Private Override]
+        J --> L[Public Config]
+        J --> M[Default Fallback]
     end
     
-    subgraph "Receiver Side"
+    subgraph Receiver
         N[Recipient] --> O[furl CLI/App]
         O --> P[Fetch Metadata]
         O --> Q[Download Encrypted File]
         P --> H
         Q --> G
-        P --> R[Decrypt File<br/>ChaCha20]
+        P --> R[Decrypt File ChaCha20]
         Q --> R
-        R --> S[Verify Hash<br/>SHA-512]
+        R --> S[Verify Hash SHA-512]
         S --> T[Save Decrypted File]
     end
     
     B --> I
     O --> I
-    
-    style C fill:#e1f5ff
-    style R fill:#e1f5ff
-    style G fill:#fff4e1
-    style H fill:#f0e1ff
-    style I fill:#e1ffe1
 ```
 
 ## File Upload Flow
@@ -151,48 +145,40 @@ sequenceDiagram
 ```mermaid
 graph LR
     A[Upload Request] --> B{Check Private Override}
-    B -->|Found| C[Use private:filebin_override.furl@user]
+    B -->|Found| C[Use Private Config]
     B -->|Not Found| D{Check Public Config}
-    D -->|Found| E[Use public:filebin.furl@furl or @org]
-    D -->|Not Found| F[Use Default: https://filebin.net]
+    D -->|Found| E[Use Public Config]
+    D -->|Not Found| F[Use Default Filebin]
     
     C --> G[Upload to Resolved URL]
     E --> G
     F --> G
-    
-    style C fill:#e1f5ff
-    style E fill:#f0e1ff
-    style F fill:#fff4e1
 ```
 
 ### Configuration Storage
 
 ```mermaid
 graph TB
-    subgraph "Private Override (User-level)"
-        A[private:filebin_override.furl@alice]
-        A1[Value: url|config_atsign]
-        A2[Example: https://my-filebin.com|@mycompany]
+    subgraph PrivateOverride
+        A[Private Config User Level]
+        A1[Value format: url pipe config_atsign]
+        A2[Example: custom-filebin.com pipe mycompany]
     end
     
-    subgraph "Public Config (Org-level)"
-        B[public:filebin.furl@furl]
-        B1[Value: url]
-        B2[Example: https://ck6agzxiog6kmb.atsign.com]
+    subgraph PublicConfig
+        B[Public Config Org Level]
+        B1[Value format: url only]
+        B2[Example: ck6agzxiog6kmb.atsign.com]
     end
     
-    subgraph "Default Fallback"
+    subgraph DefaultFallback
         C[Hardcoded in Code]
-        C1[Value: https://filebin.net]
+        C1[Value: filebin.net]
     end
     
-    A --> D[Highest Priority]
-    B --> E[Medium Priority]
-    C --> F[Lowest Priority]
-    
-    style A fill:#e1f5ff
-    style B fill:#f0e1ff
-    style C fill:#fff4e1
+    A --> D[Priority 1 Highest]
+    B --> E[Priority 2 Medium]
+    C --> F[Priority 3 Lowest]
 ```
 
 ## Encryption Details
@@ -201,26 +187,26 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Sender Side"
-        A[Generate Random ChaCha20 Key<br/>256 bits] --> B[Generate Random Nonce<br/>96 bits]
-        B --> C[Generate Strong PIN<br/>9 chars with special chars]
-        C --> D[Derive AES Key from PIN<br/>PBKDF2 or similar]
+    subgraph SenderSide
+        A[Generate Random ChaCha20 Key 256 bits] --> B[Generate Random Nonce 96 bits]
+        B --> C[Generate Strong PIN 9 chars]
+        C --> D[Derive AES Key from PIN]
         A --> E[Encrypt File with ChaCha20]
         B --> E
         E --> F[Calculate SHA-512 Hash]
         F --> G[Create Metadata Object]
         D --> G
         G --> H[Encrypt Metadata with PIN-derived Key]
-        H --> I[Store on atPlatform<br/>private:_furl_uuid.metadata@recipient]
+        H --> I[Store on atPlatform]
     end
     
-    subgraph "Metadata Contents"
-        J[file_url: https://filebin.net/xxx]
-        K[chacha20_key: base64]
-        L[chacha20_nonce: base64]
-        M[file_hash: SHA-512 hex]
-        N[original_filename: file.pdf]
-        O[ttl: 7200 seconds]
+    subgraph MetadataContents
+        J[file_url]
+        K[chacha20_key base64]
+        L[chacha20_nonce base64]
+        M[file_hash SHA-512]
+        N[original_filename]
+        O[ttl seconds]
     end
     
     I --> J
@@ -229,9 +215,6 @@ graph TB
     I --> M
     I --> N
     I --> O
-    
-    style E fill:#e1f5ff
-    style H fill:#f0e1ff
 ```
 
 ### Security Properties
