@@ -86,8 +86,14 @@ jobs:
         # Format all Dart files except flutter_furl directory
         find . -name "*.dart" -not -path "./flutter_furl/*" -not -path "./.dart_tool/*" -not -path "./build/*" | xargs dart format --set-exit-if-changed
 
-    - name: Analyze code
-      run: dart analyze --fatal-warnings
+    - name: Analyze code (CLI only, Flutter has separate checks)
+      run: |
+        # Only analyze Dart CLI files, not Flutter app
+        dart analyze --fatal-warnings \
+          bin/ \
+          lib/ \
+          test/ \
+          || exit 1
 
     - name: Check dependencies
       run: dart pub deps
