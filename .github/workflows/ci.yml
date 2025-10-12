@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, autobuild ]
+    branches: [ main, autobuild, 'cc/**' ]
   pull_request:
     branches: [ main ]
 
