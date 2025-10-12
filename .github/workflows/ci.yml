@@ -76,7 +76,7 @@ jobs:
     - name: Setup Dart SDK
       uses: dart-lang/setup-dart@v1
       with:
-        sdk: stable
+        sdk: 3.9.2  # Pin to match local development environment
 
     - name: Install dependencies
       run: dart pub get
