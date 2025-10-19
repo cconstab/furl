@@ -1592,7 +1592,11 @@ Future<void> main(List<String> arguments) async {
       // Use UUID for bin ID instead of timestamp for better security
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
-      final uploadUrl = '$filebinBaseUrl/$binId/$fileName.encrypted';
+      
+      // Generate a UUID for the uploaded filename to avoid issues with special characters
+      // The original filename is preserved in the atKey metadata for reconstruction on download
+      final uploadFileId = uuid.v4().replaceAll('-', '');
+      final uploadUrl = '$filebinBaseUrl/$binId/$uploadFileId.encrypted';
 
       http.Response uploadResp;
 

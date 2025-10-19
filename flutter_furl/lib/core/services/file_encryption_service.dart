@@ -82,25 +82,13 @@ class FileEncryptionService {
       final uuid = Uuid();
       final binId = 'furl${uuid.v4().replaceAll('-', '')}';
 
-      // Sanitize filename for URL - remove or replace problematic characters
-      final sanitizedFileName = fileName
-          .replaceAll(' ', '_')
-          .replaceAll('/', '_')
-          .replaceAll('\\', '_')
-          .replaceAll(':', '_')
-          .replaceAll('*', '_')
-          .replaceAll('?', '_')
-          .replaceAll('"', '_')
-          .replaceAll('<', '_')
-          .replaceAll('>', '_')
-          .replaceAll('|', '_')
-          .replaceAll('&', '_')
-          .replaceAll('=', '_')
-          .replaceAll('%', '_');
+      // Generate a UUID for the uploaded filename to avoid issues with special characters
+      // The original filename is preserved in the atKey metadata for reconstruction on download
+      final uploadFileId = uuid.v4().replaceAll('-', '');
 
       // Resolve the filebin URL from configuration
       final filebinBaseUrl = await FilebinResolver.resolveFilebinUrl();
-      final uploadUrl = '$filebinBaseUrl/$binId/${sanitizedFileName}.encrypted';
+      final uploadUrl = '$filebinBaseUrl/$binId/$uploadFileId.encrypted';
 
       // Upload with progress tracking
       final response = await dio.post(
