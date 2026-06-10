@@ -522,20 +522,34 @@
 
                 let fileDecryptionKey, ivOrNonce;
 
+                // Derive the PIN-wrapping key from the PIN + salt. New shares
+                // set kdf = 'pbkdf2-sha256-600000' and use PBKDF2 (slow, brute-
+                // force resistant); shares created before that field fall back
+                // to the original single SHA-256 so existing links still open.
+                const derivePinKeyBuffer = async (pin, salt) => {
+                    const pinBytes = new TextEncoder().encode(pin);
+                    if (secrets.kdf === 'pbkdf2-sha256-600000') {
+                        const baseKey = await window.crypto.subtle.importKey(
+                            'raw', pinBytes, 'PBKDF2', false, ['deriveBits']);
+                        return await window.crypto.subtle.deriveBits(
+                            { name: 'PBKDF2', hash: 'SHA-256', salt: salt, iterations: 600000 },
+                            baseKey, 256);
+                    }
+                    // Legacy: SHA-256(PIN || salt)
+                    const combined = new Uint8Array(pinBytes.length + salt.byteLength);
+                    combined.set(new Uint8Array(pinBytes));
+                    combined.set(new Uint8Array(salt), pinBytes.length);
+                    return await window.crypto.subtle.digest('SHA-256', combined);
+                };
+
                 if (cipherType === 'chacha20') {
                     setStatus('Decrypting ChaCha20 key with your PIN...');
                     
                     const salt = base64ToArrayBuffer(secrets.key_salt);
-                    const pinBytes = new TextEncoder().encode(pin);
-                    
-                    // Create combined bytes for key derivation (PIN + salt)
-                    const combinedBytes = new Uint8Array(pinBytes.length + salt.byteLength);
-                    combinedBytes.set(new Uint8Array(pinBytes));
-                    combinedBytes.set(new Uint8Array(salt), pinBytes.length);
-                    
-                    // Hash with SHA-256 to match Dart implementation
-                    const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
-                    
+
+                    // Derive the PIN-wrapping key (PBKDF2 for new shares, SHA-256 for old).
+                    const pinKeyArrayBuffer = await derivePinKeyBuffer(pin, salt);
+
                     // Import PIN key for AES-CTR decryption of ChaCha20 key
                     const pinKey = await window.crypto.subtle.importKey(
                         'raw',
@@ -582,16 +596,10 @@
                     setStatus('Decrypting AES key with your PIN...');
                     
                     const salt = base64ToArrayBuffer(secrets.aes_key_salt || secrets.key_salt);
-                    const pinBytes = new TextEncoder().encode(pin);
-                    
-                    // Create combined bytes for key derivation (PIN + salt)
-                    const combinedBytes = new Uint8Array(pinBytes.length + salt.byteLength);
-                    combinedBytes.set(new Uint8Array(pinBytes));
-                    combinedBytes.set(new Uint8Array(salt), pinBytes.length);
-                    
-                    // Hash with SHA-256 to match Dart implementation
-                    const pinKeyArrayBuffer = await window.crypto.subtle.digest('SHA-256', combinedBytes);
-                    
+
+                    // Derive the PIN-wrapping key (PBKDF2 for new shares, SHA-256 for old).
+                    const pinKeyArrayBuffer = await derivePinKeyBuffer(pin, salt);
+
                     // Import PIN key for AES-CTR decryption
                     const pinKey = await window.crypto.subtle.importKey(
                         'raw',
