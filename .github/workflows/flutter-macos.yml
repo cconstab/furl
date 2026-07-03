@@ -79,6 +79,7 @@ jobs:
           flutter test
 
       - name: Import Certificate (Electron CSC approach)
+        if: ${{ secrets.MACOS_CERTIFICATE != '' }}
         env:
           CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -224,6 +225,7 @@ jobs:
           fi
 
       - name: Sign Application (Following Electron patterns)
+        if: ${{ secrets.MACOS_SIGNING_IDENTITY != '' }}
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -307,6 +309,7 @@ jobs:
           fi
 
       - name: Sign DMG
+        if: ${{ secrets.MACOS_SIGNING_IDENTITY != '' }}
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
@@ -326,6 +329,7 @@ jobs:
           codesign --display --verbose=4 "$DMG_PATH"
 
       - name: Notarize Application (Using Electron env var names)
+        if: ${{ secrets.APPLE_ID != '' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASS: ${{ secrets.APPLE_APP_PASSWORD }}
