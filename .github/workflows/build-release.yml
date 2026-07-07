@@ -31,9 +31,9 @@ jobs:
             
           # macOS builds - both architectures supported with native runners
           - platform: macos
-            arch: x64
+            arch: amd64
             os: macos-15-intel  # Intel runner
-            dart-arch: amd64
+            dart-arch: x64
             binary-ext: ''
             
           - platform: macos
