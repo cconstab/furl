@@ -2,229 +2,468 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Furl - Secure File Download</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Furl — Secure file download</title>
+    <meta name="description" content="A file was shared with you. Enter the PIN from the sender to download and decrypt it — entirely in your browser.">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#FF6633" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20256%20256%22%20fill%3D%22none%22%20stroke%3D%22%23FF6633%22%20stroke-width%3D%2220%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%22128%22%20cy%3D%22128%22%20r%3D%2240%22%2F%3E%3Cpath%20d%3D%22M181.07%20208%20A96%2096%200%201%201%20224%20128%20c0%2022.09%20-8%2040%20-28%2040%20s-28%20-17.91%20-28%20-40%20V88%22%2F%3E%3C%2Fsvg%3E">
     <style>
+        :root {
+            color-scheme: light dark;
+            /* Atmosphere Pro V2 palette — brand orange #FF6633 */
+            --bg: #EFEFEF;
+            --text: #252525;
+            --muted: #686868;
+            --faint: #9C9C9C;
+            --label: #626262;
+            --accent: #FF6633;
+            --accent-hover: #F2551F;
+            --accent-ink: #252525;       /* dark label on the orange CTA (AA) */
+            --accent-tint: rgba(255, 102, 51, 0.12);
+            --surface: #FFFFFF;
+            --border: #BABABA;
+            --border-strong: #8A8A8A;
+            --divider: #D9D9D9;
+            --tile-top: #F3F3F4;
+            --tile-bot: #E8E8EA;
+            --tile-border: rgba(255, 255, 255, 0.85);
+            --tile-shadow: rgba(0, 0, 0, 0.05);
+            --success: #1F7A34;
+            --success-bg: #E7F4E9;
+            --success-border: #BFE3C4;
+            --error: #C2362C;
+            --error-bg: #FCECEA;
+            --error-border: #F2C7C1;
+            --info: #686868;
+            --info-bg: #F1F1F1;
+            --info-border: #E2E2E2;
+            --track: #D0D0D0;
+            --focus: #C9410F;
+            --r-tile: 12px;
+            --r-control: 12px;
+            --r-pill: 999px;
+            --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Inter, system-ui, 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', 'Roboto Mono', 'Space Mono', Menlo, Consolas, monospace;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #121212;
+                --text: #F2F2F2;
+                --muted: #A3A3A3;
+                --faint: #8A8A8A;
+                --label: #9C9C9C;
+                --accent: #FF7A4D;
+                --accent-hover: #FF8B63;
+                --accent-ink: #1A1208;
+                --accent-tint: rgba(255, 122, 77, 0.18);
+                --surface: #1C1C1E;
+                --border: #3C3C40;
+                --border-strong: #6E6E74;
+                --divider: #2E2E31;
+                --tile-top: #26262A;
+                --tile-bot: #1F1F22;
+                --tile-border: rgba(255, 255, 255, 0.06);
+                --tile-shadow: rgba(0, 0, 0, 0.45);
+                --success: #5FB96B;
+                --success-bg: #14271A;
+                --success-border: #214A2D;
+                --error: #FF6B6B;
+                --error-bg: #2A1414;
+                --error-border: #5A2A2A;
+                --info: #A3A3A3;
+                --info-bg: #232325;
+                --info-border: #2E2E31;
+                --track: #2E2E31;
+                --focus: #FF9A6B;
+            }
+        }
+
+        * { box-sizing: border-box; }
+        html { -webkit-text-size-adjust: 100%; }
+
+        /* Orange→gray top wash, like the app home screen */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
             min-height: 100vh;
-            box-sizing: border-box;
+            min-height: 100svh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: var(--bg);
+            background-image: linear-gradient(180deg, var(--accent) 0, transparent 116px);
+            background-repeat: no-repeat;
+            color: var(--text);
+            font-family: var(--font-ui);
+            font-size: 16px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+            padding: 20px 20px 40px;
+            padding-top: max(20px, env(safe-area-inset-top));
         }
-        .container {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            backdrop-filter: blur(10px);
+        @media (max-width: 380px) { body { padding-left: 16px; padding-right: 16px; } }
+
+        .fx-wrap {
+            width: 100%;
+            max-width: 432px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
         }
+
+        /* Brand pill (echoes the app's account-switcher pill) */
+        .fx-pill {
+            align-self: center;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 14px 7px 11px;
+            border-radius: var(--r-pill);
+            background: linear-gradient(180deg, var(--tile-top), var(--tile-bot));
+            border: 1px solid var(--tile-border);
+            box-shadow: 0 4px 12px var(--tile-shadow);
+        }
+        .fx-pill .fx-mark { width: 22px; color: var(--accent); display: block; }
+        .fx-pill span {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text);
+        }
+
+        /* Hero (title sits on the wash, like "Send a file") */
+        .fx-hero { text-align: center; margin: 22px 0 24px; }
         h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 10px;
-            font-size: 2.5em;
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.22;
+            letter-spacing: -0.02em;
+            color: var(--text);
+            text-wrap: balance;
         }
         .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1em;
+            margin: 8px auto 0;
+            max-width: 30ch;
+            font-size: 15px;
+            line-height: 1.45;
+            color: var(--muted);
         }
-        .form-group {
-            margin: 25px 0;
+
+        /* Section stack — display:none blocks contribute no gap */
+        .fx-stack { display: flex; flex-direction: column; gap: 18px; }
+
+        /* Space Mono-style section label */
+        .fx-mono {
+            margin: 0 0 8px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--label);
         }
-        label {
+        .fx-mono .opt { color: var(--faint); font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+        /* Raised gray tile (the app's signature panel) */
+        .fx-tile {
+            border-radius: var(--r-tile);
+            background: linear-gradient(180deg, var(--tile-top), var(--tile-bot));
+            border: 1px solid var(--tile-border);
+            box-shadow: 0 4px 12px var(--tile-shadow);
+        }
+        .fx-tile-pad { padding: 14px 16px; }
+        #senderMessage {
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--text);
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        /* File row */
+        .fx-file { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+        .fx-file-icon {
+            flex: 0 0 auto;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: var(--accent-tint);
+            color: var(--accent);
+            display: grid;
+            place-items: center;
+        }
+        .fx-file-icon svg { width: 20px; height: 20px; }
+        .fx-file-meta { min-width: 0; }
+        #fileName {
             display: block;
-            margin-bottom: 8px;
+            font-size: 13px;
             font-weight: 600;
-            color: #333;
-        }
-        input[type="text"], input[type="password"] {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e5e9;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
-            box-sizing: border-box;
-        }
-        input[type="text"]:focus, input[type="password"]:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            width: 100%;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        .error {
-            color: #e74c3c;
-            margin-top: 15px;
-            padding: 15px;
-            background: #ffeaea;
-            border-radius: 8px;
-            border-left: 4px solid #e74c3c;
-        }
-        .success {
-            color: #27ae60;
-            margin-top: 15px;
-            padding: 15px;
-            background: #eafaf1;
-            border-radius: 8px;
-            border-left: 4px solid #27ae60;
-        }
-        .info {
-            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-            border: 1px solid #b3d9ff;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-        }
-        .info strong {
-            color: #1976d2;
-        }
-        .progress {
-            background: #f0f0f0;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-            color: #666;
-        }
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Progress Bar Styles */
-        .progress-container {
-            width: 100%;
-            background-color: #f0f0f0;
-            border-radius: 10px;
+            color: var(--text);
+            white-space: nowrap;
             overflow: hidden;
-            margin: 15px 0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            text-overflow: ellipsis;
         }
-        .progress-bar {
-            height: 25px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 10px;
-            transition: width 0.3s ease;
+        #fileSize {
+            display: block;
+            margin-top: 2px;
+            font-size: 12px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* PIN field */
+        .fx-pinwrap { position: relative; }
+        #pin {
+            width: 100%;
+            height: 54px;
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-control);
+            padding: 0 54px 0 16px;
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 20px;
+            font-weight: 500;
+            letter-spacing: 0.28em;
+            font-variant-numeric: tabular-nums;
+            caret-color: var(--accent);
+            transition: border-color 0.15s ease;
+        }
+        #pin::placeholder { color: var(--faint); font-family: var(--font-ui); font-size: 15px; letter-spacing: normal; }
+        #pin:focus { outline: 2px solid var(--focus); outline-offset: 2px; border-color: var(--accent); }
+        .fx-toggle {
+            position: absolute;
+            inset-inline-end: 7px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px;
+            height: 44px;
+            display: grid;
+            place-items: center;
+            padding: 0;
+            background: transparent;
+            border: 0;
+            border-radius: 9px;
+            color: var(--muted);
+            cursor: pointer;
+        }
+        .fx-toggle:hover { color: var(--accent); }
+        .fx-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; color: var(--accent); }
+        .fx-toggle svg { width: 18px; height: 18px; }
+        .fx-helper { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+
+        /* Primary action — solid orange CTA (app style), dark label for AA contrast */
+        #downloadBtn {
+            width: 100%;
+            height: 54px;
+            border: 0;
+            border-radius: var(--r-control);
+            background: var(--accent);
+            color: var(--accent-ink);
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: 14px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-            min-width: 0;
-            position: relative;
+            gap: 9px;
+            cursor: pointer;
+            transition: background-color 0.15s ease, transform 0.05s ease;
+        }
+        #downloadBtn svg { width: 17px; height: 17px; flex: 0 0 auto; }
+        @media (hover: hover) { #downloadBtn:hover:not(:disabled) { background: var(--accent-hover); } }
+        #downloadBtn:active:not(:disabled) { transform: scale(0.99); }
+        #downloadBtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        #downloadBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Privacy / trust line (subordinate footnote, not a tile) */
+        .fx-privacy { display: flex; align-items: flex-start; gap: 9px; padding: 0 2px; }
+        .fx-privacy svg { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px; color: var(--accent); }
+        .fx-privacy p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+
+        /* ---- Dynamic status states (class names are a hard JS contract) ---- */
+        #status:empty { display: none; }
+        .info, .error, .success {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            border: 1px solid;
+            border-radius: var(--r-control);
+            padding: 12px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+        .info::before, .error::before, .success::before {
+            content: '';
+            flex: 0 0 auto;
+            width: 8px;
+            height: 8px;
+            margin-top: 5px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .info { background: var(--info-bg); border-color: var(--info-border); color: var(--info); }
+        .error { background: var(--error-bg); border-color: var(--error-border); color: var(--error); }
+        .success { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
+
+        /* Progress */
+        .progress {
+            background: var(--info-bg);
+            border: 1px solid var(--info-border);
+            border-radius: var(--r-control);
+            padding: 12px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.4;
+            color: var(--text);
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            vertical-align: -3px;
+            margin-right: 10px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-container {
+            width: 100%;
+            height: 10px;
+            margin-top: 6px;
+            background: var(--track);
+            border-radius: var(--r-pill);
             overflow: hidden;
         }
-        .progress-text {
-            position: relative;
-            z-index: 1;
-            transition: opacity 0.3s ease;
+        .progress-bar {
+            height: 100%;
+            min-width: 0;
+            background: var(--accent);
+            border-radius: var(--r-pill);
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+            transition: width 0.3s ease;
         }
-        .progress-bar::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, 
-                transparent 0%, 
-                rgba(255,255,255,0.2) 50%, 
-                transparent 100%);
-            animation: shimmer 2s infinite;
+        .progress-text { font-size: 0; color: transparent; }
+
+        /* Footer */
+        .fx-foot {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            margin-top: 22px;
+            color: var(--muted);
+            font-size: 12px;
         }
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-        .progress-text {
-            position: relative;
-            z-index: 1;
-        }
-        .params-info {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-family: monospace;
+        .fx-foot .fx-mark { width: 16px; color: var(--accent); display: block; }
+        .fx-foot a { color: var(--muted); text-decoration: none; font-weight: 600; }
+        .fx-foot a:hover { color: var(--accent); }
+
+        .noscript {
+            width: 100%;
+            max-width: 432px;
+            margin: auto;
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error);
+            border-radius: var(--r-control);
+            padding: 16px;
             font-size: 14px;
-            word-break: break-all;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔐 Furl</h1>
-        <p class="subtitle">Secure File Download</p>
+    <noscript>
+        <div class="noscript">This page needs JavaScript to decrypt your file securely in the browser. Please enable JavaScript and reload.</div>
+    </noscript>
 
-        <div id="messageInfo" class="info" style="display: none; background: #f0f8ff; border-left: 4px solid #4CAF50;">
-            <strong id="messageHeader">📝 Message from sender:</strong><br>
-            <span id="senderMessage"></span>
+    <main class="fx-wrap">
+        <!-- Brand pill (outlined "@" + furl), echoing the app's account pill -->
+        <div class="fx-pill">
+            <svg class="fx-mark" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="128" cy="128" r="40"/>
+                <path d="M181.07 208 A96 96 0 1 1 224 128 c0 22.09 -8 40 -28 40 s-28 -17.91 -28 -40 V88"/>
+            </svg>
+            <span>furl</span>
         </div>
 
-        <div id="fileInfo" class="info" style="display: none; background: #f9f9f9; border-left: 4px solid #2196F3;">
-            <strong>📁 File information:</strong><br>
-            <span id="fileName"></span><br>
-            <span id="fileSize"></span>
-        </div>
+        <header class="fx-hero">
+            <h1>Someone shared a file with you</h1>
+            <p class="subtitle">End-to-end encrypted — only you can open it.</p>
+        </header>
 
-        <div class="form-group">
-            <label for="pin">🔑 Strong PIN (9 characters with special chars):</label>
-            <input type="password" id="pin" placeholder="Enter the strong PIN provided by sender" maxlength="9" autocomplete="off">
-        </div>
+        <div class="fx-stack">
+            <div id="messageInfo" style="display: none;">
+                <p class="fx-mono"><span id="messageHeader">A note from the sender</span></p>
+                <div class="fx-tile fx-tile-pad">
+                    <div id="senderMessage"></div>
+                </div>
+            </div>
 
-        <div class="form-group">
+            <div id="fileInfo" style="display: none;">
+                <p class="fx-mono">File</p>
+                <div class="fx-tile fx-file">
+                    <span class="fx-file-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+                    </span>
+                    <div class="fx-file-meta">
+                        <span id="fileName"></span>
+                        <span id="fileSize"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <p class="fx-mono"><label for="pin">Enter your PIN</label></p>
+                <div class="fx-pinwrap">
+                    <input type="password" id="pin" placeholder="• • • • • • • • •" maxlength="9"
+                           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                           inputmode="text" aria-describedby="pinHelper">
+                    <button type="button" id="pinToggle" class="fx-toggle" aria-label="Show PIN" aria-pressed="false">
+                        <svg class="eye-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg class="eye-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" hidden><path d="M9.88 9.88a3 3 0 0 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></svg>
+                    </button>
+                </div>
+                <p class="fx-helper" id="pinHelper">9 characters, case-sensitive — the sender shared this with you separately.</p>
+            </div>
+
             <button id="downloadBtn" onclick="downloadAndDecrypt()">
-                <span id="buttonText">Download & Decrypt File</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                <span id="buttonText">Unlock &amp; download</span>
             </button>
+
+            <div id="privacyInfo" class="fx-privacy">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z"/><path d="m9 12 2 2 4-4"/></svg>
+                <p>Your PIN never leaves this browser. The file is unlocked right here on your device — our servers only ever see scrambled data.</p>
+            </div>
+
+            <div id="status" aria-live="polite"></div>
         </div>
 
-        <div id="privacyInfo" class="info">
-            <strong>Privacy:</strong><br>
-            Your PIN never leaves your browser. <br> 
-            All decryption happens locally.
-        </div>
-
-        <div id="status"></div>
-    </div>
-
+        <footer class="fx-foot">
+            <svg class="fx-mark" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="128" cy="128" r="40"/>
+                <path d="M181.07 208 A96 96 0 1 1 224 128 c0 22.09 -8 40 -28 40 s-28 -17.91 -28 -40 V88"/>
+            </svg>
+            <span>Secured by <a href="https://atsign.com" target="_blank" rel="noopener">atSign</a></span>
+        </footer>
+    </main>
     <!-- WASM Crypto Module -->
     <script type="module" src="wasm-crypto.js"></script>
     
@@ -259,8 +498,7 @@
             document.getElementById('downloadBtn').disabled = true;
             
             if (!atSign || !keyName) {
-                document.getElementById('status').innerHTML = 
-                    '<div class="error">❌ Invalid URL - missing atSign or key parameters</div>';
+                setStatus('Invalid link — this URL is missing its atSign or key.', 'error');
                 return;
             }
 
@@ -288,25 +526,29 @@
                         document.getElementById('downloadBtn').disabled = false;
                     } else {
                         console.warn('⚠️ WASM module failed to initialize, but continuing with fallback');
-                        setStatus('⚠️ Using fallback decryption (may be slower for large files)', 'info');
+                        setStatus('Using a fallback decryption method — large files may take a little longer.', 'info');
                         document.getElementById('downloadBtn').disabled = false;
                     }
                 } else {
                     console.warn('⚠️ WASM module not found, using fallback');
-                    setStatus('⚠️ Using fallback decryption (may be slower for large files)', 'info');
+                    setStatus('Using a fallback decryption method — large files may take a little longer.', 'info');
                     document.getElementById('downloadBtn').disabled = false;
                 }
             } catch (error) {
                 console.error('Failed to initialize WASM:', error);
-                setStatus('⚠️ Using fallback decryption (may be slower for large files)', 'info');
+                setStatus('Using a fallback decryption method — large files may take a little longer.', 'info');
                 document.getElementById('downloadBtn').disabled = false;
             }
         }
 
         function setStatus(message, type = 'progress') {
             const statusDiv = document.getElementById('status');
-            const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : '';
+            const icon = ''; // status icon is rendered via CSS (a colored dot) per .error/.success/.info
             const spinner = type === 'progress' ? '<div class="loading"></div>' : '';
+            // Errors should be announced immediately by screen readers; everything
+            // else stays polite so progress chatter doesn't interrupt.
+            statusDiv.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+            statusDiv.setAttribute('role', type === 'error' ? 'alert' : 'status');
             statusDiv.innerHTML = `<div class="${type}">${spinner}${icon} ${message}</div>`;
         }
 
@@ -315,7 +557,7 @@
             const progressHtml = `
                 <div class="progress">
                     <div style="margin-bottom: 10px;">${message}</div>
-                    <div class="progress-container">
+                    <div class="progress-container" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(progress)}">
                         <div class="progress-bar" style="width: ${progress}%">
                             <span class="progress-text">${progress}%</span>
                         </div>
@@ -334,6 +576,9 @@
             
             if (progressBar) {
                 progressBar.style.width = `${progress}%`;
+                if (progressBar.parentElement) {
+                    progressBar.parentElement.setAttribute('aria-valuenow', Math.round(progress));
+                }
                 if (progressText) {
                     const roundedProgress = Math.round(progress);
                     progressText.textContent = `${roundedProgress}%`;
@@ -425,18 +670,23 @@
                 
                 // Display message and file information if available
                 if (secrets.message) {
-                    document.getElementById('messageHeader').textContent = `📝 Message from ${atSign}:`;
+                    document.getElementById('messageHeader').textContent = `A note from ${atSign}`;
                     document.getElementById('senderMessage').textContent = secrets.message;
                     document.getElementById('messageInfo').style.display = 'block';
                 }
                 
                 if (secrets.file_name) {
-                    let fileInfoText = `Name: ${secrets.file_name}`;
-                    
+                    // Populate the name + size into their own elements with textContent
+                    // (no innerHTML — file_name is server-provided, so this also avoids
+                    // an HTML-injection vector). Reveal as a flex row to match .fx-file.
+                    const fileNameEl = document.getElementById('fileName');
+                    fileNameEl.textContent = secrets.file_name;
+                    fileNameEl.title = secrets.file_name;
+
                     if (secrets.file_size) {
                         const size = secrets.file_size;
                         let sizeText;
-                        
+
                         if (size < 1024) {
                             sizeText = `${size} bytes`;
                         } else if (size < 1024 * 1024) {
@@ -446,11 +696,10 @@
                         } else {
                             sizeText = `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
                         }
-                        
-                        fileInfoText += `\nSize: ${sizeText}`;
+
+                        document.getElementById('fileSize').textContent = sizeText;
                     }
-                    
-                    document.getElementById('fileName').innerHTML = fileInfoText.replace(/\n/g, '<br>');
+
                     document.getElementById('fileInfo').style.display = 'block';
                 }
             } catch (error) {
@@ -475,8 +724,8 @@
 
             // Check crypto availability before proceeding
             if (!window.crypto || !window.crypto.subtle) {
-                setStatus('❌ Web Crypto API not available. This application requires HTTPS or localhost.', 'error');
-                setButtonState(false, 'Download & Decrypt File');
+                setStatus('Your browser can’t decrypt here — this page must be opened over a secure (HTTPS) connection.', 'error');
+                setButtonState(false, 'Unlock & download');
                 return;
             }
 
@@ -648,7 +897,7 @@
                 updateProgress(1, 'Connecting to server...');
                 const fileResponse = await fetch(proxyUrl);
                 if (!fileResponse.ok) {
-                    throw new Error('Could not download encrypted file from: ' + secrets.file_url);
+                    throw new Error('We couldn’t download this file. The link may have expired or already been used — please ask the sender for a new one.');
                 }
                 
                 const fetchTime = Date.now() - fetchStartTime;
@@ -807,7 +1056,7 @@
                             const actionText = isLikelyStreaming ? 'Streaming' : 'Downloading';
                             
                             // DEBUG: Show detailed calculation
-                            console.log(`� PROGRESS DEBUG:`);
+                            console.log('PROGRESS DEBUG:');
                             console.log(`   receivedLength: ${receivedLength} bytes (${mbReceived}MB)`);
                             console.log(`   fileSize: ${fileSize} bytes (${mbTotal}MB)`);
                             console.log(`   downloadPercent: ${downloadPercent.toFixed(2)}%`);
@@ -959,15 +1208,17 @@
 
             } catch (error) {
                 console.error('Download error:', error);
-                setStatus(`Error: ${error.message}`, 'error');
+                setStatus(error.message, 'error');
                 
-                // Show the button again on error so user can retry
+                // Show the button again on error so user can retry. Clear the
+                // inline display (set to 'none' on submit) so it falls back to
+                // the stylesheet's flex layout — keeping the icon + label aligned.
                 const downloadBtn = document.getElementById('downloadBtn');
                 if (downloadBtn) {
-                    downloadBtn.style.display = 'block';
+                    downloadBtn.style.display = '';
                 }
             } finally {
-                setButtonState(false, 'Download & Decrypt File');
+                setButtonState(false, 'Unlock & download');
             }
         }
 
@@ -980,13 +1231,23 @@
 
         // Auto-format PIN input (optional - show progress)
         document.getElementById('pin').addEventListener('input', function(e) {
-            const pin = e.target.value;
-            if (pin.length === 9) {
-                e.target.style.borderColor = '#27ae60';
-            } else {
-                e.target.style.borderColor = '#e1e5e9';
-            }
+            e.target.classList.toggle('is-complete', e.target.value.length === 9);
         });
+
+        // Show / hide PIN toggle (presentation only — never touches #pin id or value).
+        const pinToggle = document.getElementById('pinToggle');
+        if (pinToggle) {
+            pinToggle.addEventListener('click', function () {
+                const pinInput = document.getElementById('pin');
+                const reveal = pinInput.type === 'password';
+                pinInput.type = reveal ? 'text' : 'password';
+                pinToggle.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+                pinToggle.setAttribute('aria-label', reveal ? 'Hide PIN' : 'Show PIN');
+                pinToggle.querySelector('.eye-show').hidden = reveal;
+                pinToggle.querySelector('.eye-hide').hidden = !reveal;
+                pinInput.focus();
+            });
+        }
     </script>
 </body>
 </html>
