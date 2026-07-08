@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_furl/core/theme/app_theme.dart';
 import 'package:flutter_furl/features/file_share/cubit/file_share_cubit.dart';
 import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
 import 'package:flutter_furl/widgets/atsign_manager_dialog.dart';
@@ -29,23 +30,13 @@ class _FileSharePageState extends State<FileSharePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Switching to ${state.atSign}...'),
-              backgroundColor: const Color(0xFF667eea),
             ),
           );
         }
       },
       child: Scaffold(
         body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF667eea), // Purple blue
-                Color(0xFF764ba2), // Purple
-              ],
-            ),
-          ),
+          decoration: AppTheme.pageBackground,
           child: SafeArea(
             child: Column(
               children: [
@@ -62,7 +53,7 @@ class _FileSharePageState extends State<FileSharePage> {
                           style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white),
+                              color: AppTheme.accentInk),
                         ),
                       ),
                       BlocBuilder<OnboardingCubit, OnboardingState>(
@@ -96,7 +87,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                             CircleAvatar(
                                               radius: 12,
                                               backgroundColor: isCurrentAtSign
-                                                  ? const Color(0xFF667eea)
+                                                  ? AppTheme.accentColor
                                                   : Colors.grey.shade300,
                                               child: Text(
                                                 atSign
@@ -105,7 +96,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                                 style: TextStyle(
                                                   fontSize: 10,
                                                   color: isCurrentAtSign
-                                                      ? Colors.white
+                                                      ? AppTheme.accentInk
                                                       : Colors.grey.shade600,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -119,7 +110,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                                     ? FontWeight.bold
                                                     : FontWeight.normal,
                                                 color: isCurrentAtSign
-                                                    ? const Color(0xFF667eea)
+                                                    ? AppTheme.accentColor
                                                     : Colors.black87,
                                               ),
                                             ),
@@ -127,7 +118,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                               const Spacer(),
                                               const Icon(Icons.check,
                                                   size: 16,
-                                                  color: Color(0xFF667eea)),
+                                                  color: AppTheme.accentColor),
                                             ],
                                           ],
                                         ),
@@ -137,11 +128,10 @@ class _FileSharePageState extends State<FileSharePage> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 12, vertical: 6),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.2),
+                                        color: AppTheme.surfaceColor,
                                         borderRadius: BorderRadius.circular(15),
                                         border: Border.all(
-                                            color:
-                                                Colors.white.withOpacity(0.3),
+                                            color: AppTheme.dividerColor,
                                             width: 1),
                                       ),
                                       child: Row(
@@ -152,14 +142,13 @@ class _FileSharePageState extends State<FileSharePage> {
                                             style: const TextStyle(
                                                 fontSize: 14,
                                                 fontWeight: FontWeight.w500,
-                                                color: Colors.white),
+                                                color: AppTheme.textColor),
                                           ),
                                           const SizedBox(width: 4),
-                                          Icon(
+                                          const Icon(
                                             Icons.keyboard_arrow_down,
                                             size: 16,
-                                            color:
-                                                Colors.white.withOpacity(0.8),
+                                            color: AppTheme.mutedColor,
                                           ),
                                         ],
                                       ),
@@ -171,15 +160,18 @@ class _FileSharePageState extends State<FileSharePage> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
+                                      color: AppTheme.surfaceColor,
                                       borderRadius: BorderRadius.circular(15),
+                                      border: Border.all(
+                                          color: AppTheme.dividerColor,
+                                          width: 1),
                                     ),
                                     child: Text(
                                       state.atSign,
                                       style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
-                                          color: Colors.white),
+                                          color: AppTheme.textColor),
                                     ),
                                   );
                                 }
@@ -191,7 +183,8 @@ class _FileSharePageState extends State<FileSharePage> {
                       ),
                       const SizedBox(width: 12),
                       PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert, color: Colors.white),
+                        icon: const Icon(Icons.more_vert,
+                            color: AppTheme.accentInk),
                         onSelected: (value) {
                           if (value == 'logout') {
                             context.read<OnboardingCubit>().logout();
@@ -253,13 +246,15 @@ class _FileSharePageState extends State<FileSharePage> {
                   child: Container(
                     margin: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
+                      color: AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: AppTheme.dividerColor, width: 1),
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 40,
-                            offset: const Offset(0, 20)),
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8)),
                       ],
                     ),
                     child: BlocConsumer<FileShareCubit, FileShareState>(
@@ -275,7 +270,7 @@ class _FileSharePageState extends State<FileSharePage> {
                                   Expanded(child: Text(state.message)),
                                 ],
                               ),
-                              backgroundColor: Colors.red,
+                              backgroundColor: AppTheme.errorColor,
                             ),
                           );
                         }
@@ -342,12 +337,13 @@ class _FileSharePageState extends State<FileSharePage> {
                                         );
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF667eea),
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: AppTheme.accentColor,
+                                    foregroundColor: AppTheme.accentInk,
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 30, vertical: 15),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8)),
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
                                   ),
                                   child: const Text(
                                     '🔐 Encrypt and Share',
@@ -402,15 +398,15 @@ class _FileSharePageState extends State<FileSharePage> {
         decoration: BoxDecoration(
           border: Border.all(
             color: state is FileSelected
-                ? const Color(0xFF667eea)
-                : const Color(0xFFe1e5e9),
-            width: 2,
+                ? AppTheme.accentColor
+                : AppTheme.borderColor,
+            width: state is FileSelected ? 2 : 1,
             style: BorderStyle.solid,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           color: state is FileSelected
-              ? const Color(0xFF667eea).withOpacity(0.1)
-              : const Color(0xFFf0f0f0),
+              ? AppTheme.accentTint
+              : AppTheme.tileColor,
         ),
         child: InkWell(
           onTap: () => _selectFile(context),
@@ -427,7 +423,7 @@ class _FileSharePageState extends State<FileSharePage> {
                     path.basename(state.file.path),
                     style: const TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF667eea),
+                        color: AppTheme.accentHover,
                         fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
@@ -475,7 +471,9 @@ Widget _buildUploadProgress(BuildContext context, FileUploading state) {
   return Container(
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
-        color: const Color(0xFFf0f0f0), borderRadius: BorderRadius.circular(8)),
+        color: AppTheme.tileColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.tileBorderColor, width: 1)),
     child: Column(
       children: [
         Row(
@@ -500,24 +498,22 @@ Widget _buildUploadProgress(BuildContext context, FileUploading state) {
           width: double.infinity,
           height: 25,
           decoration: BoxDecoration(
-            color: const Color(0xFFf0f0f0),
+            color: AppTheme.trackColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade300),
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
             widthFactor: state.progress,
             child: Container(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                    colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
+                color: AppTheme.accentColor,
                 borderRadius: BorderRadius.all(Radius.circular(10)),
               ),
               child: Center(
                 child: Text(
                   '${(state.progress * 100).toInt()}%',
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.accentInk,
                       fontWeight: FontWeight.w600,
                       fontSize: 14),
                 ),
@@ -534,9 +530,9 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
   return Container(
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
-      color: const Color(0xFFeafaf1),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: const Color(0xFF27ae60), width: 4),
+      color: AppTheme.successBg,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppTheme.successBorder, width: 1),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -551,7 +547,7 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                 style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF27ae60)),
+                    color: AppTheme.successColor),
               ),
             ),
           ],
@@ -572,8 +568,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(color: const Color(0xFFe1e5e9), width: 2),
-            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.borderColor, width: 1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
@@ -618,8 +614,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(color: const Color(0xFFe1e5e9), width: 2),
-            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.borderColor, width: 1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
@@ -659,9 +655,9 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
         Container(
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            color: const Color(0xFFf8f9fa),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFe9ecef), width: 1),
+            color: AppTheme.tileColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.tileBorderColor, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,7 +678,8 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                   style: const TextStyle(fontSize: 13)),
               Text(
                 'Expires: ${_formatExpiration(state.expiresAt)}',
-                style: const TextStyle(fontSize: 13, color: Colors.orange),
+                style:
+                    const TextStyle(fontSize: 13, color: AppTheme.accentHover),
               ),
             ],
           ),
@@ -711,12 +708,12 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF667eea),
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.accentColor,
+                  foregroundColor: AppTheme.accentInk,
                   padding:
                       const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -743,11 +740,11 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                   context.read<FileShareCubit>().reset();
                 },
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF667eea), width: 2),
+                  side: const BorderSide(color: AppTheme.accentColor, width: 2),
                   padding:
                       const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -759,7 +756,7 @@ Widget _buildUploadResult(BuildContext context, FileUploaded state) {
                       child: Text(
                         'Send File',
                         style: TextStyle(
-                            color: Color(0xFF667eea),
+                            color: AppTheme.accentHover,
                             fontWeight: FontWeight.w600,
                             fontSize: 14),
                         overflow: TextOverflow.ellipsis,
@@ -850,7 +847,7 @@ void _showAboutDialog(BuildContext context) {
       return AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.info_outline, color: Color(0xFF667eea)),
+            Icon(Icons.info_outline, color: AppTheme.accentColor),
             SizedBox(width: 8),
             Text('About Furl'),
           ],
@@ -883,7 +880,8 @@ void _showAboutDialog(BuildContext context) {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child:
-                const Text('Close', style: TextStyle(color: Color(0xFF667eea))),
+                const Text('Close',
+                    style: TextStyle(color: AppTheme.accentHover)),
           ),
         ],
       );
@@ -898,7 +896,7 @@ void _showHelpDialog(BuildContext context) {
       return AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.help_outline, color: Color(0xFF667eea)),
+            Icon(Icons.help_outline, color: AppTheme.accentColor),
             SizedBox(width: 8),
             Text('How to Share Files'),
           ],
@@ -934,7 +932,7 @@ void _showHelpDialog(BuildContext context) {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Got it!',
-                style: TextStyle(color: Color(0xFF667eea))),
+                style: TextStyle(color: AppTheme.accentHover)),
           ),
         ],
       );
@@ -1021,7 +1019,7 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF667eea)),
+              borderSide: const BorderSide(color: AppTheme.accentColor),
             ),
           ),
           items: _ttlOptions.map((option) {
@@ -1054,7 +1052,7 @@ class _ShareOptionsWidgetState extends State<ShareOptionsWidget> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF667eea)),
+              borderSide: const BorderSide(color: AppTheme.accentColor),
             ),
             suffixText: '${_messageController.text.length}/140',
           ),

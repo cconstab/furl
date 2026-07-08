@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_furl/core/theme/app_theme.dart';
 import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
 import 'package:flutter_furl/widgets/atsign_manager_dialog.dart';
 
@@ -15,23 +16,15 @@ class OnboardingPage extends StatelessWidget {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(
-                content: Text(state.message), backgroundColor: Colors.red));
+                content: Text(state.message),
+                backgroundColor: AppTheme.errorColor));
           }
         },
         builder: (context, state) {
           return Container(
             width: double.infinity,
             height: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF667eea), // Purple blue
-                  Color(0xFF764ba2), // Purple
-                ],
-              ),
-            ),
+            decoration: AppTheme.pageBackground,
             child: SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -65,7 +58,7 @@ class OnboardingPage extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                          color: AppTheme.textColor),
                     ),
                     const SizedBox(height: 16),
                     const Padding(
@@ -74,7 +67,9 @@ class OnboardingPage extends StatelessWidget {
                         'Secure File Sharing with atSign authentication.\nShare files privately and securely.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            fontSize: 18, color: Colors.white, height: 1.5),
+                            fontSize: 18,
+                            color: AppTheme.mutedColor,
+                            height: 1.5),
                       ),
                     ),
                     const SizedBox(height: 60),
@@ -159,11 +154,11 @@ class OnboardingPage extends StatelessWidget {
                                       .startOnboarding(context);
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF667eea),
-                                  foregroundColor: Colors.white,
+                                  backgroundColor: AppTheme.accentColor,
+                                  foregroundColor: AppTheme.accentInk,
                                   minimumSize: const Size(double.infinity, 56),
                                   shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                                      borderRadius: BorderRadius.circular(12)),
                                   elevation: 2,
                                 ),
                                 child: const Text(
@@ -189,12 +184,12 @@ class OnboardingPage extends StatelessWidget {
                                 );
                               },
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF667eea),
-                                side:
-                                    const BorderSide(color: Color(0xFF667eea)),
+                                foregroundColor: AppTheme.accentHover,
+                                side: const BorderSide(
+                                    color: AppTheme.accentColor),
                                 minimumSize: const Size(double.infinity, 48),
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                               child: const Text(
                                 'Manage Existing atSigns',

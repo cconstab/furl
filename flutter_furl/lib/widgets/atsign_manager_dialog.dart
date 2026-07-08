@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_furl/core/theme/app_theme.dart';
 import 'package:flutter_furl/features/onboarding/cubit/onboarding_cubit.dart';
 
 class AtSignManagerDialog extends StatefulWidget {
@@ -142,7 +143,7 @@ class _AtSignManagerDialogState extends State<AtSignManagerDialog> {
     return AlertDialog(
       title: const Row(
         children: [
-          Icon(Icons.account_circle, color: Color(0xFF667eea)),
+          Icon(Icons.account_circle, color: AppTheme.accentColor),
           SizedBox(width: 8),
           Text('Manage atSigns'),
         ],
@@ -176,13 +177,13 @@ class _AtSignManagerDialogState extends State<AtSignManagerDialog> {
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: isCurrentAtSign
-                              ? const Color(0xFF667eea)
+                              ? AppTheme.accentColor
                               : Colors.grey[300],
                           child: Text(
                             atSign.substring(1, 2).toUpperCase(),
                             style: TextStyle(
                               color: isCurrentAtSign
-                                  ? Colors.white
+                                  ? AppTheme.accentInk
                                   : Colors.grey[600],
                               fontWeight: FontWeight.bold,
                             ),
@@ -205,7 +206,7 @@ class _AtSignManagerDialogState extends State<AtSignManagerDialog> {
                             if (!isCurrentAtSign)
                               IconButton(
                                 icon: const Icon(Icons.switch_account,
-                                    color: Color(0xFF667eea)),
+                                    color: AppTheme.accentColor),
                                 onPressed: () => _switchToAtSign(atSign),
                                 tooltip: 'Switch to this atSign',
                               ),
@@ -238,8 +239,8 @@ class _AtSignManagerDialogState extends State<AtSignManagerDialog> {
         ElevatedButton(
           onPressed: _addNewAtSign,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF667eea),
-            foregroundColor: Colors.white,
+            backgroundColor: AppTheme.accentColor,
+            foregroundColor: AppTheme.accentInk,
           ),
           child: const Text('Add New atSign'),
         ),
