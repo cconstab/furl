@@ -64,9 +64,9 @@ jobs:
         if (Test-Path $buildPath) {
           Write-Host "Creating Windows installer archive..."
           Compress-Archive -Path "$buildPath\*" -DestinationPath $zipPath -Force
-          Write-Host "✓ Windows installer archive created: $zipPath"
+          Write-Host "[OK] Windows installer archive created: $zipPath"
         } else {
-          Write-Host "✗ Windows build directory not found: $buildPath"
+          Write-Host "[X] Windows build directory not found: $buildPath"
           exit 1
         }
 
@@ -94,23 +94,23 @@ jobs:
         $executablePath = "$releasePath\flutter_furl.exe"
         
         if (Test-Path $releasePath) {
-          Write-Host "✓ Release Windows app directory created successfully"
+          Write-Host "[OK] Release Windows app directory created successfully"
           Get-ChildItem $releasePath
           
           if (Test-Path $executablePath) {
-            Write-Host "✓ Executable found: $executablePath"
+            Write-Host "[OK] Executable found: $executablePath"
             
             # Try to get file info
             $fileInfo = Get-Item $executablePath
-            Write-Host "✓ Executable size: $($fileInfo.Length) bytes"
+            Write-Host "[OK] Executable size: $($fileInfo.Length) bytes"
           } else {
-            Write-Host "✗ Executable not found: $executablePath"
+            Write-Host "[X] Executable not found: $executablePath"
             Write-Host "Contents of release directory:"
             Get-ChildItem $releasePath -Recurse
             exit 1
           }
         } else {
-          Write-Host "✗ Release Windows app directory not found: $releasePath"
+          Write-Host "[X] Release Windows app directory not found: $releasePath"
           Write-Host "Contents of build directory:"
           Get-ChildItem "build" -Recurse -ErrorAction SilentlyContinue
           exit 1

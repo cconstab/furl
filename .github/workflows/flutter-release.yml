@@ -230,7 +230,9 @@ jobs:
 
   build-windows:
     name: Build Windows
-    runs-on: windows-latest
+    # Pin to windows-2022: windows-latest ships VS 2026, which Flutter 3.32.x
+    # does not recognize (falls back to the missing "Visual Studio 16 2019" generator)
+    runs-on: windows-2022
     if: ${{ github.event.inputs.build_windows != 'false' || startsWith(github.ref, 'refs/tags/v') }}
     
     defaults:
